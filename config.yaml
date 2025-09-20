@@ -1,0 +1,50 @@
+# Pipeline-Konfiguration (siehe docs/emoji-odt-kontext.md)
+# Pfade
+cache_dir: cache/emoji
+messages_dir: data/messages
+assets_file: data/assets.json
+emoji_sets_file: data/emoji_sets.json
+runs_original_dir: data/runs.original
+plain_dir: data/plain
+translated_dir: data/translated
+runs_translated_dir: data/runs.translated
+out_original_dir: out/original
+out_translated_dir: out/translated
+report_file: out/report.json
+
+# ODT Stil-IDs (Namen)
+odt_styles:
+  paragraph:
+    base: P.Base
+    emoji_line: P.EmojiLine
+  text:
+    base: T.Base
+    bold: T.Bold
+    italic: T.Italic
+    link: T.Link
+  graphic:
+    inline_emoji: G.InlineEmoji
+  page:
+    default: Page.Default
+
+# Standardwerte
+emoji_height_em: 1.1
+lettermap_case_mode: upper
+lettermap_fallback: text
+lettermap_in_original: false
+lettermap_open_ui_on_missing: true
+lettermap_continue_without_mapping: false
+debug_dump_entities: true
+
+# Telegram-Client (optional)
+telegram_client:
+  timeout: 20            # Sekunden für RPC-Timeout
+  request_retries: 0     # Telethon-interne Request-Retries (wir nutzen eigenen Wrapper)
+  auto_reconnect: true   # Verbindungen automatisch wiederherstellen
+
+# Retry-/Backoff-Einstellungen (optional)
+retry:
+  retries: 5             # Anzahl Versuche pro Operation
+  backoff: 1.6           # Exponentieller Backoff-Faktor
+  initial_delay: 0.8     # Startwartezeit (Sekunden)
+  jitter: 0.3            # Zufallsanteil (Sekunden)

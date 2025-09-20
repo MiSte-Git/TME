@@ -1,0 +1,26 @@
+# Agent guide for this repository
+
+- Language/runtime: Python 3.11+ (tested up to 3.13). Single-folder utility scripts; no package/module layout.
+- Entry points:
+  - tg_by_date_to_odt_modes.py → builds ODT by date blocks from schedule files; optional OCR and Telegram inline translations.
+  - TelegramNachrichtenKopieren.py → builds ODT from grouped message links with per-group translations.
+- Dependencies (install before running): python3 -m pip install telethon odfpy pillow pytesseract easyocr
+- Build/run:
+  - Syntax check (no deps): python3 -m compileall -q .
+  - Run by-date mode: python3 tg_by_date_to_odt_modes.py [inline|end|separate]
+  - Run grouped-links mode: python3 TelegramNachrichtenKopieren.py
+- Tests/lint:
+  - No tests configured in repo. If adding pytest: run all → pytest -q; single test → pytest -q path/to/test_file.py -k test_name
+  - No linter/formatter configured. Prefer PEP 8; if adding tools, use ruff/black with default settings.
+- Structure & data:
+  - Input schedules: links_*.txt; outputs: *.odt; media files saved under media/ and embedded into ODT.
+  - Telegram session persists in tg_session.session (created on first run).
+  - Custom emoji mapping in custom_emoji_user_map.json; archive experiments in _archive/ (not part of runtime).
+- External APIs:
+  - Telethon (Telegram): messages.TranslateTextRequest for translations; GetCustomEmojiDocumentsRequest; optional channels.JoinChannelRequest.
+  - ODT generation via odfpy (styles, TOC, images); optional OCR via Tesseract/EasyOCR.
+- Code style:
+  - PEP 8 naming (snake_case funcs; UPPER_CASE constants); stdlib imports first, then third-party.
+  - Prefer small, local changes; keep German user-facing messages as-is; handle timezones with zoneinfo.
+  - Error handling follows current pattern: catch-and-continue with print diagnostics; avoid raising unless input is invalid.
+- Tooling rules: No Cursor/Claude/Windsurf/Cline/Goose/Copilot instruction files present in repo.
