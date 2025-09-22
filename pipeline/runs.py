@@ -101,13 +101,17 @@ def build_runs_from_twe(twe: types.TextWithEntities, custom_emoji_map: Dict[int,
 
         # Normale Texte mit \n in TextRun/LineBreak zerlegen
         parts = seg.split("\n")
+        pending_break = False
         for idx, part in enumerate(parts):
             if part:
                 runs.append(TextRun(kind="TextRun", text=part, href=href,
                                     bold=flags["bold"], italic=flags["italic"], underline=flags["underline"],
                                     strike=flags["strike"], code=flags["code"], spoiler=flags["spoiler"]))
+                pending_break = False
             if idx < len(parts) - 1:
-                runs.append(LineBreak(kind="LineBreak"))
+                if not pending_break:
+                    runs.append(LineBreak(kind="LineBreak"))
+                    pending_break = True
 
     return runs
 

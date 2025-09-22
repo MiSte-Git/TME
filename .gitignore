@@ -218,4 +218,7 @@ _archive/
 cache/
 .git
 .gitignore
+
+output/
+data/debug/
 >>>>>>> 9aaf594 (Initial commit für den Telegram Message Extractor)

@@ -12,7 +12,8 @@ Beispiel:
 from __future__ import annotations
 import argparse
 from pathlib import Path
-from pipeline.adapters.existing_scripts import run_by_date, run_grouped_links
+from typing import Tuple
+from pipeline.adapters.existing_scripts import run_by_date
 
 # Optional: YAML-Konfiguration (falls PyYAML nicht installiert ist, wird ohne Config gearbeitet)
 try:
@@ -84,11 +85,9 @@ def main() -> None:
             local_tz=cfg.get("local_tz"),
         )
     elif args.cmd == "grouped-links":
-        run_grouped_links(
-            links_file=args.links,
-            out_odt_basename=args.links.stem,
-            media_dir=Path("media"),
-            target_lang=args.lang or "de",
+        raise SystemExit(
+            "Der Modus 'grouped-links' wird nicht mehr unterstützt. Bitte wandle die Daten in eine "
+            "Schedule-Datei um (siehe convert_schedule.py) und nutze schedule_to_odt.py."
         )
     elif args.cmd == "by-ids":
         from pipeline.runner_by_ids import run_by_ids
@@ -108,9 +107,8 @@ def main() -> None:
     elif args.cmd == "collect-letters":
         from pipeline.collect_letters import collect_letters_from_links
         import asyncio
-        # API-Creds aus bestehendem Skript beziehen
-        from tg_by_date_to_odt_modes import API_ID, API_HASH
-        n_all, n_new = asyncio.run(collect_letters_from_links(API_ID, API_HASH, args.links, args.export_dir))
+        api_id, api_hash = _require_api_credentials()
+        n_all, n_new = asyncio.run(collect_letters_from_links(api_id, api_hash, args.links, args.export_dir))
         print(f"Custom-Emoji gesammelt: {n_all} gefunden, {n_new} neu exportiert nach {args.export_dir}")
     elif args.cmd == "lettermap-suggest":
         from pipeline.lettermap_tools import suggest_lettermap_csv
@@ -122,9 +120,9 @@ def main() -> None:
         print(f"letter_map.json geschrieben: {p}")
     elif args.cmd == "extract-plain":
         from pipeline.plaintext import extract_plain_from_links
-        from tg_by_date_to_odt_modes import API_ID, API_HASH
         import asyncio
-        n = asyncio.run(extract_plain_from_links(API_ID, API_HASH, args.links))
+        api_id, api_hash = _require_api_credentials()
+        n = asyncio.run(extract_plain_from_links(api_id, api_hash, args.links))
         print(f"Plaintext erzeugt: {n} Dateien unter data/plain/")
     elif args.cmd == "recompose":
         from pipeline.recompose import recompose_to_odt
@@ -133,3 +131,15 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+def _require_api_credentials() -> Tuple[int, str]:
+    from tg_by_date_to_odt_modes import API_ID, API_HASH
+
+    try:
+        api_id = int(API_ID)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise SystemExit(
+            "TELEGRAM_API_ID (Environment-Variable) fehlt oder ist keine Ganzzahl."
+        )
+    if not API_HASH or not str(API_HASH).strip():
+        raise SystemExit("TELEGRAM_API_HASH (Environment-Variable) fehlt.")
+    return api_id, str(API_HASH)

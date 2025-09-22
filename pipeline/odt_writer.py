@@ -46,6 +46,24 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
     t_code = Style(name="T.Code", family="text"); t_code.addElement(TextProperties(fontname="Courier New")); doc.styles.addElement(t_code)
     t_spoiler = Style(name="T.Spoiler", family="text"); t_spoiler.addElement(TextProperties(color="#ffffff", backgroundcolor="#000000")); doc.styles.addElement(t_spoiler)
 
+    h1 = Style(name="H.Base", family="paragraph")
+    h1.addElement(ParagraphProperties(marginbottom="0.2cm"))
+    h1.addElement(TextProperties(fontsize="14pt", fontweight="bold"))
+    doc.styles.addElement(h1)
+    out["H.Base"] = "H.Base"
+
+    h1_break = Style(name="H.Break", family="paragraph")
+    h1_break.addElement(ParagraphProperties(marginbottom="0.2cm", breakbefore="page"))
+    h1_break.addElement(TextProperties(fontsize="14pt", fontweight="bold"))
+    doc.styles.addElement(h1_break)
+    out["H.Break"] = "H.Break"
+
+    h2 = Style(name="H.Sub", family="paragraph")
+    h2.addElement(ParagraphProperties(marginbottom="0.15cm"))
+    h2.addElement(TextProperties(fontsize="12pt", fontweight="bold"))
+    doc.styles.addElement(h2)
+    out["H.Sub"] = "H.Sub"
+
     g = Style(name=out["G.InlineEmoji"], family="graphic")
     # Minimaler Grafikstil ohne weitere Properties für maximale Kompatibilität
     doc.automaticstyles.addElement(g)
@@ -56,6 +74,16 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
 
     # Namen der Textstile mappen
     out["T.Bold"] = "T.Bold"; out["T.Italic"] = "T.Italic"; out["T.Underline"] = "T.Underline"; out["T.Strike"] = "T.Strike"; out["T.Code"] = "T.Code"; out["T.Spoiler"] = "T.Spoiler"
+
+    link_para = Style(name="P.MessageLink", family="paragraph")
+    link_para.addElement(ParagraphProperties(marginbottom="0.2cm"))
+    doc.styles.addElement(link_para)
+    out["P.MessageLink"] = "P.MessageLink"
+
+    pb = Style(name="P.PageBreak", family="paragraph")
+    pb.addElement(ParagraphProperties(breakbefore="page"))
+    doc.automaticstyles.addElement(pb)
+    out["P.PageBreak"] = "P.PageBreak"
 
     return out
 
@@ -153,12 +181,15 @@ def _add_footer(doc, styles_map):
     f.addElement(p); mp.addElement(f); doc.masterstyles.addElement(mp)
 
 
-def _add_toc(doc):
+def _add_toc(doc, styles_map):
     toc = TableOfContent(name="ToC", protected="true")
     src = TableOfContentSource(outlinelevel=10, indexscope="document")
     toc.addElement(src)
     body = IndexBody(); it = IndexTitle(name="ToCTitle"); it.addElement(P(text="Inhaltsverzeichnis")); body.addElement(it)
     toc.addElement(body); doc.text.addElement(toc)
+    pb_name = styles_map.get("P.PageBreak")
+    if pb_name:
+        doc.text.addElement(P(stylename=pb_name))
 
 
 def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dict[str, Any], doc_title: str | None = None) -> Path:
@@ -176,21 +207,37 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
         tp.addElement(Span(text=str(doc_title), stylename=tstyle_text))
         doc.text.addElement(tp)
     # TOC + Footer wie im Originalskript
-    _add_toc(doc)
+    _add_toc(doc, style_names)
     _add_footer(doc, style_names)
 
     # Einfache Struktur: H1 für Gruppe/Chat, danach Runs je Nachricht als Absätze
     current_chat = None
+    seen_subheading: Dict[str, bool] = {}
     for rec in records:
         if rec.chat != current_chat:
+            heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
+            doc.text.addElement(H(outlinelevel=1, text=_sanitize_text(str(rec.chat)), stylename=heading_style))
             current_chat = rec.chat
-            doc.text.addElement(H(outlinelevel=1, text=_sanitize_text(str(current_chat))))
+            if rec.meta and rec.meta.get("subheading") and not seen_subheading.get(rec.chat):
+                doc.text.addElement(H(outlinelevel=2, text=_sanitize_text(str(rec.meta["subheading"])), stylename=style_names.get("H.Sub")))
+                seen_subheading[rec.chat] = True
+        link_text = rec.meta.get("link") if rec.meta else None
+        if link_text:
+            p_link = P(stylename=style_names.get("P.MessageLink", style_names.get("P.Base")))
+            a = A(href=link_text)
+            p_link.addElement(a)
+            container = Span(stylename=style_names.get("T.Bold"))
+            a.addElement(container)
+            underline_span = Span(stylename=style_names.get("T.Underline"))
+            container.addElement(underline_span)
+            underline_span.addElement(Span(text=_sanitize_text(link_text)))
+            doc.text.addElement(p_link)
         # Jede Nachricht als Absatzblock (nutze Defaultstil)
-        p = P()
+        p = P(stylename=style_names.get("P.Base"))
         for r in rec.runs:
             if isinstance(r, ImageRun):
                 # Bild in eigenem Absatz (ohne zusätzliche Leerzeilen)
-                p_img = P()
+                p_img = P(stylename=style_names.get("P.Base"))
                 _add_image_block(doc, Path(r.path), p_img, style_names["G.InlineEmojiObj"], width_cm=r.width_cm)
                 doc.text.addElement(p_img)
             elif isinstance(r, TextRun):
@@ -223,4 +270,3 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
     return out_path
-

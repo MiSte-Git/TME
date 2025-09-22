@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Callable, Dict, Any, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QSize, QUrl
 from PySide6.QtGui import QPixmap, QDesktopServices
@@ -19,6 +19,36 @@ CACHE_DIR = Path("cache/emoji")
 LETTERMAP_FILE = Path("data/letter_map.json")
 MISSING_DOCS_FILE = Path("data/missing_lettermap_docs.json")
 IGNORE_FILE = Path("data/lettermap_ignore.json")
+CONFIG_FILE = Path("config.yaml")
+_PLACEHOLDER_ALT_VALUES = {"\U0001F520"}  # Telegram nutzt 🔠 als Platzhalter ohne echten Alt-Text.
+_CASE_VALUES = {"upper", "lower", "none"}
+
+
+def _load_case_mode() -> str:
+    """Ermittelt die gewünschte Groß-/Kleinschreibung für Mappings aus config.yaml."""
+    if not CONFIG_FILE.exists():
+        return "upper"
+    try:
+        text = CONFIG_FILE.read_text(encoding="utf-8")
+    except Exception:
+        return "upper"
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        if key.strip() != "lettermap_case_mode":
+            continue
+        clean = value.split("#", 1)[0].strip().strip("'\"").lower()
+        return clean if clean in _CASE_VALUES else "upper"
+    return "upper"
+
+
+def _clean_alt_text(value: str | None) -> str:
+    alt = (value or "").strip()
+    if alt in _PLACEHOLDER_ALT_VALUES:
+        return ""
+    return alt
 
 
 def _collect_entries() -> List[Dict[str, Any]]:
@@ -28,8 +58,8 @@ def _collect_entries() -> List[Dict[str, Any]]:
     # 1) Aus assets.json
     for doc_id, rec in assets.items():
         file = rec.get("file") or ""
-        alt = rec.get("alt") or ""
-        hint = rec.get("letter_hint") or ""
+        alt = _clean_alt_text(rec.get("alt"))
+        hint = (rec.get("letter_hint") or "").strip()
         # bevorzugte Reihenfolge: export → cache → assets.file
         exp = EXPORT_DIR / f"{doc_id}.png"
         cache = CACHE_DIR / f"{doc_id}.png"
@@ -90,12 +120,14 @@ def _invert_lettermap(lettermap: Dict[str, Any]) -> Dict[str, str]:
 
 
 class LettermapTab(QWidget):
-    def __init__(self) -> None:
+    def __init__(self, continue_cb: Optional[Callable[[], None]] = None) -> None:
         super().__init__()
         self.entries: List[Dict[str, Any]] = []
         self.lettermap: Dict[str, Any] = {}
         self.missing_doc_ids: set[str] = set()
         self.ignored_doc_ids: set[str] = set()
+        self.case_mode: str = _load_case_mode()
+        self._continue_cb: Optional[Callable[[], None]] = continue_cb
 
         lay = QVBoxLayout(self)
 
@@ -139,10 +171,12 @@ class LettermapTab(QWidget):
 
         # Bottom actions
         bottom = QHBoxLayout()
-        btn_close = QPushButton("Fertig – schließen")
-        btn_close.clicked.connect(lambda: self.window().close())
         bottom.addStretch(1)
-        bottom.addWidget(btn_close)
+        self.btn_continue = QPushButton("Fortsetzen")
+        self.btn_continue.setVisible(False)
+        self.btn_continue.setEnabled(False)
+        self.btn_continue.clicked.connect(self._on_continue_clicked)
+        bottom.addWidget(self.btn_continue)
         lay.addLayout(bottom)
 
         self.reload_data()
@@ -172,6 +206,7 @@ class LettermapTab(QWidget):
     # Data loading ---------------------------------------------------------
     def reload_data(self) -> None:
         try:
+            self.case_mode = _load_case_mode()
             self._load_missing_ids()
             self._load_ignore()
             self.entries = _collect_entries()
@@ -215,8 +250,26 @@ class LettermapTab(QWidget):
             self.table.setCellWidget(row, 4, le)
             # ignorieren (Checkbox)
             cb = QCheckBox()
-            cb.setChecked(doc_id in self.ignored_doc_ids)
+            cb.setChecked(self._should_ignore_by_default(rec, doc_id, inv_map))
             self.table.setCellWidget(row, 5, cb)
+
+    def set_continue_handler(self, handler: Optional[Callable[[], None]]) -> None:
+        self._continue_cb = handler
+        if handler is None:
+            self.on_mapping_finished()
+
+    def on_waiting_for_mapping(self) -> None:
+        self.btn_continue.setEnabled(True)
+        self.btn_continue.setVisible(True)
+
+    def on_mapping_finished(self) -> None:
+        self.btn_continue.setVisible(False)
+        self.btn_continue.setEnabled(False)
+
+    def _on_continue_clicked(self) -> None:
+        self.btn_continue.setEnabled(False)
+        if self._continue_cb:
+            self._continue_cb()
 
     # Filtering ------------------------------------------------------------
     def _apply_filter(self) -> None:
@@ -244,7 +297,13 @@ class LettermapTab(QWidget):
         w = self.table.cellWidget(row, 4)
         if isinstance(w, QLineEdit):
             t = w.text()
-            nt = t.strip().upper()
+            trimmed = t.strip()
+            if self.case_mode == "upper":
+                nt = trimmed.upper()
+            elif self.case_mode == "lower":
+                nt = trimmed.lower()
+            else:
+                nt = trimmed
             if nt != t:
                 w.blockSignals(True)
                 w.setText(nt)
@@ -320,3 +379,16 @@ class LettermapTab(QWidget):
             QMessageBox.information(self, "Gespeichert", f"Mapping gespeichert nach {LETTERMAP_FILE}\nIgnorieren gespeichert nach {IGNORE_FILE}.")
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
+
+    def _should_ignore_by_default(self, rec: Dict[str, Any], doc_id: str, inv_map: Dict[str, str]) -> bool:
+        if doc_id in self.ignored_doc_ids:
+            return True
+        if doc_id in inv_map:
+            return False
+        alt = str(rec.get("alt", "")).strip().replace("\uFE0F", "")
+        if len(alt) == 1:
+            return not alt.isalpha()
+        hint = str(rec.get("hint", "")).strip().replace("\uFE0F", "")
+        if len(hint) == 1:
+            return not hint.isalpha()
+        return False
