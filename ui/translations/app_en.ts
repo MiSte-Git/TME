@@ -40,6 +40,7 @@
     <message><source>Bilder einbetten</source><translation>Embed images</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Embed custom emojis</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Create ODT from schedule</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Enable letter mapping</translation></message>
     <message><source>Schedule auswählen</source><translation>Select schedule</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Error</translation></message>
@@ -53,6 +54,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>Created ODT: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>Created ODT: {path}</translation></message>
     <message><source>Fertig.</source><translation>Done.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Open folder</translation></message>
     <message><source>Fertig</source><translation>Done</translation></message>
   </context>
   <context>
@@ -76,5 +78,55 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Mapping saved to {file}\nIgnore list saved to {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Error</translation></message>
     <message><source>Fortsetzen</source><translation>Continue</translation></message>
+    <message><source>Ausgabeordner öffnen</source><translation>Open output folder</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>New</translation></message>
+    <message><source>Laden</source><translation>Load</translation></message>
+    <message><source>Speichern</source><translation>Save</translation></message>
+    <message><source>Speichern unter…</source><translation>Save As…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Document title (optional)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Default channel (@name or link, optional)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Date (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Title</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Subtitle (optional)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Links (separate with ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Fetch by date</translation></message>
+    <message><source>Kanal (optional)</source><translation>Channel (optional)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Add section</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Remove selected section</translation></message>
+    <message><source>Übersetzen</source><translation>Translate</translation></message>
+    <message><source>Modus:</source><translation>Mode:</translation></message>
+    <message><source>Sprache:</source><translation>Language:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Run schedule now</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Note: Date format YYYY-MM-DD. Either specify links (then uncheck 'Fetch by date') or set a default channel to fetch by date.</translation></message>
+    <message><source>Schedule laden</source><translation>Load schedule</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Schedule saved: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Save schedule</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Invalid date in row {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Title missing in row {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Schedule editor</translation></message>
+    <message><source>Telegram-Export</source><translation>Telegram export</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Lettermap (Experimental)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Telegram export:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Create ODT from Telegram export</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Select Telegram export</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Telegram export (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Load Telegram export</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Save Telegram export</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Create ODT from Telegram export</translation></message>
   </context>
 </TS>

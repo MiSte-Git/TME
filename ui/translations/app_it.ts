@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Incorpora immagini</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Incorpora emoji personalizzati</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Crea ODT da schedule</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Attiva letter mapping</translation></message>
     <message><source>Schedule auswählen</source><translation>Seleziona schedule</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schedule (*.json *.txt);;JSON (*.json);;Testo (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Errore</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>ODT creato: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>ODT creato: {path}</translation></message>
     <message><source>Fertig.</source><translation>Fatto.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Apri cartella</translation></message>
     <message><source>Fertig</source><translation>Fatto</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Mapping salvato in {file}\nLista di ignore salvata in {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Errore</translation></message>
     <message><source>Fortsetzen</source><translation>Continua</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Nuovo</translation></message>
+    <message><source>Laden</source><translation>Carica</translation></message>
+    <message><source>Speichern</source><translation>Salva</translation></message>
+    <message><source>Speichern unter…</source><translation>Salva con nome…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Titolo del documento (opzionale)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Canale predefinito (@nome o link, opzionale)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Data (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Titolo</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Sottotitolo (opzionale)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Link (separa con ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Recupera per data</translation></message>
+    <message><source>Kanal (optional)</source><translation>Canale (opzionale)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Aggiungi sezione</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Rimuovi sezione selezionata</translation></message>
+    <message><source>Übersetzen</source><translation>Traduci</translation></message>
+    <message><source>Modus:</source><translation>Modalità:</translation></message>
+    <message><source>Sprache:</source><translation>Lingua:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Esegui lo schedule ora</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Nota: formato data YYYY-MM-DD. Specifica i link (quindi deseleziona "Recupera per data") oppure imposta un canale predefinito per recuperare per data.</translation></message>
+    <message><source>Schedule laden</source><translation>Carica schedule</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Schedule salvato: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Salva schedule</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Data non valida alla riga {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Titolo mancante alla riga {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Editor schedule</translation></message>
+    <message><source>Telegram-Export</source><translation>Esportazione Telegram</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Lettermap (Sperimentale)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Esportazione Telegram:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Crea ODT dall’esportazione Telegram</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Seleziona esportazione Telegram</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Esportazione Telegram (*.json *.txt);;JSON (*.json);;Testo (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Carica esportazione Telegram</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Salva esportazione Telegram</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Crea ODT dall’esportazione Telegram</translation></message>
   </context>
 </TS>

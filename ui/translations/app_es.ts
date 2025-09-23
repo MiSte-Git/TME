@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Incrustar imágenes</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Incrustar emojis personalizados</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Crear ODT desde el horario</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Activar mapeo de letras</translation></message>
     <message><source>Schedule auswählen</source><translation>Seleccionar horario</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schedule (*.json *.txt);;JSON (*.json);;Texto (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Error</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>ODT creado: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>ODT creado: {path}</translation></message>
     <message><source>Fertig.</source><translation>Listo.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Abrir carpeta</translation></message>
     <message><source>Fertig</source><translation>Listo</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Mapeo guardado en {file}\nLista de ignorados guardada en {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Error</translation></message>
     <message><source>Fortsetzen</source><translation>Continuar</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Nuevo</translation></message>
+    <message><source>Laden</source><translation>Cargar</translation></message>
+    <message><source>Speichern</source><translation>Guardar</translation></message>
+    <message><source>Speichern unter…</source><translation>Guardar como…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Título del documento (opcional)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Canal por defecto (@nombre o enlace, opcional)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Fecha (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Título</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Subtítulo (opcional)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Enlaces (separar con ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Obtener por fecha</translation></message>
+    <message><source>Kanal (optional)</source><translation>Canal (opcional)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Añadir sección</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Eliminar sección seleccionada</translation></message>
+    <message><source>Übersetzen</source><translation>Traducir</translation></message>
+    <message><source>Modus:</source><translation>Modo:</translation></message>
+    <message><source>Sprache:</source><translation>Idioma:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Ejecutar horario ahora</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Nota: formato de fecha YYYY-MM-DD. Indique enlaces (luego desmarque «Obtener por fecha») o establezca un canal por defecto para obtener por fecha.</translation></message>
+    <message><source>Schedule laden</source><translation>Cargar horario</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Horario guardado: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Guardar horario</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Fecha no válida en la fila {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Falta el título en la fila {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Editor de horario</translation></message>
+    <message><source>Telegram-Export</source><translation>Exportación de Telegram</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Mapa de letras (experimental)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Exportación de Telegram:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Crear ODT desde la exportación de Telegram</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Seleccionar exportación de Telegram</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Exportación de Telegram (*.json *.txt);;JSON (*.json);;Texto (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Cargar exportación de Telegram</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Guardar exportación de Telegram</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Crear ODT desde la exportación de Telegram</translation></message>
   </context>
 </TS>

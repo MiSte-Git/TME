@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Afbeeldingen insluiten</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Aangepaste emoji's insluiten</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Maak ODT van schema</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Lettermapping inschakelen</translation></message>
     <message><source>Schedule auswählen</source><translation>Schema selecteren</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schema (*.json *.txt);;JSON (*.json);;Tekst (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Fout</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>ODT gemaakt: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>ODT gemaakt: {path}</translation></message>
     <message><source>Fertig.</source><translation>Klaar.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Map openen</translation></message>
     <message><source>Fertig</source><translation>Klaar</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Koppeling opgeslagen in {file}\nNegeren opgeslagen in {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Fout</translation></message>
     <message><source>Fortsetzen</source><translation>Doorgaan</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Nieuw</translation></message>
+    <message><source>Laden</source><translation>Laden</translation></message>
+    <message><source>Speichern</source><translation>Opslaan</translation></message>
+    <message><source>Speichern unter…</source><translation>Opslaan als…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Documenttitel (optioneel)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Standaardkanaal (@naam of link, optioneel)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Datum (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Titel</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Ondertitel (optioneel)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Links (scheiden met ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Op datum ophalen</translation></message>
+    <message><source>Kanal (optional)</source><translation>Kanaal (optioneel)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Sectie toevoegen</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Geselecteerde sectie verwijderen</translation></message>
+    <message><source>Übersetzen</source><translation>Vertalen</translation></message>
+    <message><source>Modus:</source><translation>Modus:</translation></message>
+    <message><source>Sprache:</source><translation>Taal:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Schema nu uitvoeren</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Opmerking: datumformaat YYYY-MM-DD. Geef links op (vink daarna ‘Op datum ophalen’ uit) of stel een standaardkanaal in om op datum op te halen.</translation></message>
+    <message><source>Schedule laden</source><translation>Schema laden</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Schema opgeslagen: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Schema opslaan</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Ongeldige datum in rij {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Titel ontbreekt in rij {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Schema-editor</translation></message>
+    <message><source>Telegram-Export</source><translation>Telegram-export</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Lettermap (Experimenteel)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Telegram-export:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Maak ODT van Telegram-export</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Selecteer Telegram-export</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Telegram-export (*.json *.txt);;JSON (*.json);;Tekst (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Telegram-export laden</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Telegram-export opslaan</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Maak ODT van Telegram-export</translation></message>
   </context>
 </TS>

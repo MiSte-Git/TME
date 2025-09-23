@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Upota kuvat</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Upota mukautetut emojit</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Luo ODT aikataulusta</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Ota kirjainkartoitus käyttöön</translation></message>
     <message><source>Schedule auswählen</source><translation>Valitse aikataulu</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Aikataulu (*.json *.txt);;JSON (*.json);;Teksti (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Virhe</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>Luotu ODT: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>Luotu ODT: {path}</translation></message>
     <message><source>Fertig.</source><translation>Valmis.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Avaa kansio</translation></message>
     <message><source>Fertig</source><translation>Valmis</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Kartoitus tallennettu kohteeseen {file}\nOhituslista tallennettu kohteeseen {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Virhe</translation></message>
     <message><source>Fortsetzen</source><translation>Jatka</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Uusi</translation></message>
+    <message><source>Laden</source><translation>Lataa</translation></message>
+    <message><source>Speichern</source><translation>Tallenna</translation></message>
+    <message><source>Speichern unter…</source><translation>Tallenna nimellä…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Asiakirjan otsikko (valinnainen)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Oletuskanava (@nimi tai linkki, valinnainen)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Päivämäärä (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Otsikko</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Alaotsikko (valinnainen)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Linkit (erottele ; -merkillä)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Hae päivämäärän mukaan</translation></message>
+    <message><source>Kanal (optional)</source><translation>Kanava (valinnainen)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Lisää osio</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Poista valittu osio</translation></message>
+    <message><source>Übersetzen</source><translation>Käännä</translation></message>
+    <message><source>Modus:</source><translation>Tila:</translation></message>
+    <message><source>Sprache:</source><translation>Kieli:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Suorita aikataulu nyt</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Huomautus: päivämäärämuoto YYYY-MM-DD. Anna linkit (poista sitten valinta 'Hae päivämäärän mukaan') tai aseta oletuskanava hakua varten.</translation></message>
+    <message><source>Schedule laden</source><translation>Lataa aikataulu</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Aikataulu tallennettu: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Tallenna aikataulu</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Virheellinen päivämäärä rivillä {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Otsikko puuttuu riviltä {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Aikataulun muokkain</translation></message>
+    <message><source>Telegram-Export</source><translation>Telegram-vienti</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Kirjainkartta (kokeellinen)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Telegram-vienti:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Luo ODT Telegram-viennistä</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Valitse Telegram-vienti</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Telegram-vienti (*.json *.txt);;JSON (*.json);;Teksti (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Lataa Telegram-vienti</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Tallenna Telegram-vienti</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Luo ODT Telegram-viennistä</translation></message>
   </context>
 </TS>

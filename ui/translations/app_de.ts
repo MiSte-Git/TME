@@ -40,6 +40,7 @@
     <message><source>Bilder einbetten</source><translation>Bilder einbetten</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Custom Emojis einbetten</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Schedule → ODT erzeugen</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Lettermapping aktivieren</translation></message>
     <message><source>Schedule auswählen</source><translation>Schedule auswählen</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Fehler</translation></message>
@@ -53,6 +54,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>ODT erzeugt: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>ODT erzeugt: {path}</translation></message>
     <message><source>Fertig.</source><translation>Fertig.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Ordner öffnen</translation></message>
     <message><source>Fertig</source><translation>Fertig</translation></message>
   </context>
   <context>
@@ -76,5 +78,55 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Fehler</translation></message>
     <message><source>Fortsetzen</source><translation>Fortsetzen</translation></message>
+    <message><source>Ausgabeordner öffnen</source><translation>Ausgabeordner öffnen</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Neu</translation></message>
+    <message><source>Laden</source><translation>Laden</translation></message>
+    <message><source>Speichern</source><translation>Speichern</translation></message>
+    <message><source>Speichern unter…</source><translation>Speichern unter…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Dokumenttitel (optional)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Default-Channel (@name oder Link, optional)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Datum (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Titel</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Untertitel (optional)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Links (mit ; trennen)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Nach Datum holen</translation></message>
+    <message><source>Kanal (optional)</source><translation>Kanal (optional)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Abschnitt hinzufügen</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Ausgewählten Abschnitt entfernen</translation></message>
+    <message><source>Übersetzen</source><translation>Übersetzen</translation></message>
+    <message><source>Modus:</source><translation>Modus:</translation></message>
+    <message><source>Sprache:</source><translation>Sprache:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Schedule jetzt ausführen</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</translation></message>
+    <message><source>Schedule laden</source><translation>Schedule laden</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Schedule gespeichert: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Schedule speichern</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Ungültiges Datum in Zeile {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Titel fehlt in Zeile {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Schedule-Editor</translation></message>
+    <message><source>Telegram-Export</source><translation>Telegram-Export</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Lettermap (Experimentell)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Telegram-Export:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Telegram-Export → ODT erzeugen</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Telegram-Export auswählen</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Telegram-Export laden</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Telegram-Export speichern</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Telegram-Export → ODT erzeugen</translation></message>
   </context>
 </TS>

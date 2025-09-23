@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Intégrer les images</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Intégrer les emojis personnalisés</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Créer ODT à partir du schedule</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Activer le letter mapping</translation></message>
     <message><source>Schedule auswählen</source><translation>Sélectionner un schedule</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schedule (*.json *.txt);;JSON (*.json);;Texte (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Erreur</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>ODT créé : {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>ODT créé : {path}</translation></message>
     <message><source>Fertig.</source><translation>Terminé.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Ouvrir le dossier</translation></message>
     <message><source>Fertig</source><translation>Terminé</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Mapping enregistré dans {file}\nListe d’ignore enregistrée dans {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Erreur</translation></message>
     <message><source>Fortsetzen</source><translation>Continuer</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Nouveau</translation></message>
+    <message><source>Laden</source><translation>Charger</translation></message>
+    <message><source>Speichern</source><translation>Enregistrer</translation></message>
+    <message><source>Speichern unter…</source><translation>Enregistrer sous…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Titre du document (optionnel)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Canal par défaut (@nom ou lien, optionnel)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Date (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Titre</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Sous-titre (optionnel)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Liens (séparés par ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Récupérer par date</translation></message>
+    <message><source>Kanal (optional)</source><translation>Canal (optionnel)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Ajouter une section</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Supprimer la section sélectionnée</translation></message>
+    <message><source>Übersetzen</source><translation>Traduire</translation></message>
+    <message><source>Modus:</source><translation>Mode :</translation></message>
+    <message><source>Sprache:</source><translation>Langue :</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Exécuter le schedule maintenant</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Remarque : format de date YYYY-MM-DD. Indiquez des liens (puis décochez « Récupérer par date ») ou définissez un canal par défaut pour récupérer par date.</translation></message>
+    <message><source>Schedule laden</source><translation>Charger un schedule</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Schedule enregistré : {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Enregistrer le schedule</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Date invalide à la ligne {row} : {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Titre manquant à la ligne {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Éditeur de schedule</translation></message>
+    <message><source>Telegram-Export</source><translation>Export Telegram</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Lettermap (Expérimental)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Export Telegram :</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Créer un ODT depuis l’export Telegram</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Sélectionner un export Telegram</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Export Telegram (*.json *.txt);;JSON (*.json);;Texte (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Charger un export Telegram</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Enregistrer l’export Telegram</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Créer un ODT depuis l’export Telegram</translation></message>
   </context>
 </TS>

@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Встраивать изображения</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Встраивать пользовательские эмодзи</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Создать ODT из расписания</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Включить сопоставление букв</translation></message>
     <message><source>Schedule auswählen</source><translation>Выбрать расписание</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Schedule (*.json *.txt);;JSON (*.json);;Текст (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Ошибка</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>Создан ODT: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>Создан ODT: {path}</translation></message>
     <message><source>Fertig.</source><translation>Готово.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Открыть папку</translation></message>
     <message><source>Fertig</source><translation>Готово</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Сопоставление сохранено в {file}\nСписок игнорирования сохранён в {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Ошибка</translation></message>
     <message><source>Fortsetzen</source><translation>Продолжить</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Новый</translation></message>
+    <message><source>Laden</source><translation>Загрузить</translation></message>
+    <message><source>Speichern</source><translation>Сохранить</translation></message>
+    <message><source>Speichern unter…</source><translation>Сохранить как…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Заголовок документа (необязательно)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Канал по умолчанию (@имя или ссылка, необязательно)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Дата (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Заголовок</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Подзаголовок (необязательно)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Ссылки (разделяйте ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Получать по дате</translation></message>
+    <message><source>Kanal (optional)</source><translation>Канал (необязательно)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Добавить раздел</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Удалить выбранный раздел</translation></message>
+    <message><source>Übersetzen</source><translation>Переводить</translation></message>
+    <message><source>Modus:</source><translation>Режим:</translation></message>
+    <message><source>Sprache:</source><translation>Язык:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Запустить расписание сейчас</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Примечание: формат даты YYYY-MM-DD. Укажите ссылки (затем снимите «Получать по дате») или задайте канал по умолчанию для получения по дате.</translation></message>
+    <message><source>Schedule laden</source><translation>Загрузить расписание</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Расписание сохранено: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Сохранить расписание</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Неверная дата в строке {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Отсутствует заголовок в строке {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Редактор расписания</translation></message>
+    <message><source>Telegram-Export</source><translation>Экспорт Telegram</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Карта букв (экспериментально)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Экспорт Telegram:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Создать ODT из экспорта Telegram</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Выбрать экспорт Telegram</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Экспорт Telegram (*.json *.txt);;JSON (*.json);;Текст (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Загрузить экспорт Telegram</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Сохранить экспорт Telegram</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Создать ODT из экспорта Telegram</translation></message>
   </context>
 </TS>

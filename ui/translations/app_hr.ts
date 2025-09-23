@@ -42,6 +42,7 @@
     <message><source>Bilder einbetten</source><translation>Ugradi slike</translation></message>
     <message><source>Custom Emojis einbetten</source><translation>Ugradi prilagođene emojije</translation></message>
     <message><source>Schedule → ODT erzeugen</source><translation>Stvori ODT iz rasporeda</translation></message>
+    <message><source>Lettermapping aktivieren</source><translation>Aktiviraj mapiranje slova</translation></message>
     <message><source>Schedule auswählen</source><translation>Odaberi raspored</translation></message>
     <message><source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Raspored (*.json *.txt);;JSON (*.json);;Tekst (*.txt)</translation></message>
     <message><source>Fehler</source><translation>Greška</translation></message>
@@ -55,6 +56,7 @@
     <message><source>ODT erzeugt: {main}</source><translation>Stvoren ODT: {main}</translation></message>
     <message><source>ODT erzeugt: {path}</source><translation>Stvoren ODT: {path}</translation></message>
     <message><source>Fertig.</source><translation>Gotovo.</translation></message>
+    <message><source>Ordner öffnen</source><translation>Otvori mapu</translation></message>
     <message><source>Fertig</source><translation>Gotovo</translation></message>
   </context>
   <context>
@@ -78,5 +80,54 @@
     <message><source>Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.</source><translation>Mapiranje spremljeno u {file}\nPopis zanemarenih spremljen u {ignore}.</translation></message>
     <message><source>Fehler</source><translation>Greška</translation></message>
     <message><source>Fortsetzen</source><translation>Nastavi</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Neu</source><translation>Novo</translation></message>
+    <message><source>Laden</source><translation>Učitaj</translation></message>
+    <message><source>Speichern</source><translation>Spremi</translation></message>
+    <message><source>Speichern unter…</source><translation>Spremi kao…</translation></message>
+    <message><source>Dokumenttitel (optional)</source><translation>Naslov dokumenta (neobavezno)</translation></message>
+    <message><source>Default-Channel (@name oder Link, optional)</source><translation>Zadani kanal (@naziv ili poveznica, neobavezno)</translation></message>
+    <message><source>Datum (YYYY-MM-DD)</source><translation>Datum (YYYY-MM-DD)</translation></message>
+    <message><source>Titel</source><translation>Naslov</translation></message>
+    <message><source>Untertitel (optional)</source><translation>Podnaslov (neobavezno)</translation></message>
+    <message><source>Links (mit ; trennen)</source><translation>Poveznice (odvojite ;)</translation></message>
+    <message><source>Nach Datum holen</source><translation>Dohvati po datumu</translation></message>
+    <message><source>Kanal (optional)</source><translation>Kanal (neobavezno)</translation></message>
+    <message><source>Abschnitt hinzufügen</source><translation>Dodaj odjeljak</translation></message>
+    <message><source>Ausgewählten Abschnitt entfernen</source><translation>Ukloni odabrani odjeljak</translation></message>
+    <message><source>Übersetzen</source><translation>Prevedi</translation></message>
+    <message><source>Modus:</source><translation>Način:</translation></message>
+    <message><source>Sprache:</source><translation>Jezik:</translation></message>
+    <message><source>Schedule jetzt ausführen</source><translation>Pokreni raspored sada</translation></message>
+    <message><source>Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</source><translation>Napomena: format datuma YYYY-MM-DD. Navedite poveznice (zatim odznačite „Dohvati po datumu”) ili postavite zadani kanal za dohvat po datumu.</translation></message>
+    <message><source>Schedule laden</source><translation>Učitaj raspored</translation></message>
+    <message><source>Schedule gespeichert: {p}</source><translation>Raspored spremljen: {p}</translation></message>
+    <message><source>Schedule speichern</source><translation>Spremi raspored</translation></message>
+    <message><source>Ungültiges Datum in Zeile {row}: {err}</source><translation>Neispravan datum u retku {row}: {err}</translation></message>
+    <message><source>Titel fehlt in Zeile {row}</source><translation>Nedostaje naslov u retku {row}</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Schedule-Editor</source><translation>Uređivač rasporeda</translation></message>
+    <message><source>Telegram-Export</source><translation>Izvoz Telegrama</translation></message>
+  </context>
+  <context>
+    <name>MainWindow</name>
+    <message><source>Lettermap (Experimentell)</source><translation>Karta slova (eksperimentalno)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleTab</name>
+    <message><source>Telegram-Export:</source><translation>Izvoz Telegrama:</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Stvori ODT iz izvoza Telegrama</translation></message>
+    <message><source>Telegram-Export auswählen</source><translation>Odaberi izvoz Telegrama</translation></message>
+    <message><source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source><translation>Izvoz Telegrama (*.json *.txt);;JSON (*.json);;Tekst (*.txt)</translation></message>
+  </context>
+  <context>
+    <name>ScheduleEditorTab</name>
+    <message><source>Telegram-Export laden</source><translation>Učitaj izvoz Telegrama</translation></message>
+    <message><source>Telegram-Export speichern</source><translation>Spremi izvoz Telegrama</translation></message>
+    <message><source>Telegram-Export → ODT erzeugen</source><translation>Stvori ODT iz izvoza Telegrama</translation></message>
   </context>
 </TS>

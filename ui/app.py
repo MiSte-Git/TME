@@ -15,8 +15,8 @@ except Exception:
 
 import threading
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent
-from PySide6.QtGui import QAction, QActionGroup, QIcon
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
 from functools import partial
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFileDialog,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from pipeline.runner_schedule import run_schedule
 from ui.lettermap_tab import LettermapTab
+from ui.schedule_editor_tab import ScheduleEditorTab
 
 UI_STATE_FILE = Path("data/ui_state.json")
 THEME_STATE_FILE = Path("data/ui_theme.json")
@@ -49,6 +50,7 @@ class ScheduleWorker(QObject):
         include_images: bool,
         include_emojis: bool,
         mapping_event: threading.Event,
+        lettermap_enabled: bool = False,
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -58,6 +60,7 @@ class ScheduleWorker(QObject):
         self.include_images = include_images
         self.include_emojis = include_emojis
         self._mapping_event = mapping_event
+        self.lettermap_enabled = lettermap_enabled
 
     def run(self) -> None:
         try:
@@ -70,6 +73,14 @@ class ScheduleWorker(QObject):
                 self._mapping_event.wait()
                 self.status.emit(self.tr("Fortsetze nach Mapping…"))
 
+            # Lettermap toggling via runner_by_ids globals (no config merge needed)
+            try:
+                import pipeline.runner_by_ids as _rbi_cfg
+                _rbi_cfg._LM_IN_ORIGINAL = bool(self.lettermap_enabled)
+                _rbi_cfg._LM_SCOPE = "all" if self.lettermap_enabled else "none"
+                _rbi_cfg._LM_OPEN_UI_ON_MISSING = False
+            except Exception:
+                pass
             kwargs = dict(
                 schedule_path=self.schedule_path,
                 out_basename=self.schedule_path.stem,
@@ -82,8 +93,9 @@ class ScheduleWorker(QObject):
                 config_path=Path("config.yaml"),
                 progress_cb=_cb,
                 skip_lettermap_ui=True,
-                wait_for_mapping_cb=_wait_for_mapping,
             )
+            if self.lettermap_enabled:
+                kwargs["wait_for_mapping_cb"] = _wait_for_mapping
             try:
                 result = asyncio.run(run_schedule(**kwargs))
             except TypeError as exc:
@@ -115,7 +127,7 @@ class ScheduleTab(QWidget):
         self.schedule_edit = QLineEdit()
         self.btn_pick = QPushButton(self.tr("Datei wählen…"))
         self.btn_pick.clicked.connect(self.pick_schedule)
-        self.lbl_schedule = QLabel(self.tr("Schedule:"))
+        self.lbl_schedule = QLabel(self.tr("Telegram-Export:"))
         pick_lay.addWidget(self.lbl_schedule)
         pick_lay.addWidget(self.schedule_edit)
         pick_lay.addWidget(self.btn_pick)
@@ -128,6 +140,7 @@ class ScheduleTab(QWidget):
         self.lang_edit = QLineEdit(); self.lang_edit.setPlaceholderText("de")
         self.cb_images = QCheckBox(self.tr("Bilder einbetten")); self.cb_images.setChecked(True)
         self.cb_emojis = QCheckBox(self.tr("Custom Emojis einbetten")); self.cb_emojis.setChecked(True)
+        self.cb_lettermap = QCheckBox(self.tr("Lettermapping aktivieren")); self.cb_lettermap.setChecked(False)
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
         opt_lay.addWidget(self.cb_translate)
@@ -137,6 +150,7 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.lang_edit)
         opt_lay.addWidget(self.cb_images)
         opt_lay.addWidget(self.cb_emojis)
+        opt_lay.addWidget(self.cb_lettermap)
         lay.addLayout(opt_lay)
 
         run_lay = QHBoxLayout()
@@ -162,14 +176,21 @@ class ScheduleTab(QWidget):
         self.btn_continue.clicked.connect(self._on_continue_clicked)
         lay.addWidget(self.btn_continue)
 
+        # Open output folder button (shown after finish)
+        self.btn_open_output = QPushButton(self.tr("Ausgabeordner öffnen"))
+        self.btn_open_output.setVisible(False)
+        self.btn_open_output.clicked.connect(self._open_output_folder)
+        lay.addWidget(self.btn_open_output)
+        
         self.worker_thread: QThread | None = None
         self.worker: ScheduleWorker | None = None
         self._mapping_event = threading.Event()
         self.lettermap_tab: LettermapTab | None = None
         self._loading_state = False
-
+        self._last_output_path: Path | None = None
+ 
         lay.addStretch()
-
+ 
         self._load_state()
         self._install_state_handlers()
 
@@ -230,13 +251,15 @@ class ScheduleTab(QWidget):
 
     def retranslate(self) -> None:
         self.btn_pick.setText(self.tr("Datei wählen…"))
-        self.lbl_schedule.setText(self.tr("Schedule:"))
+        self.lbl_schedule.setText(self.tr("Telegram-Export:"))
         self.cb_translate.setText(self.tr("Übersetzen"))
         self.lbl_mode.setText(self.tr("Modus:"))
         self.lbl_lang.setText(self.tr("Sprache:"))
         self.cb_images.setText(self.tr("Bilder einbetten"))
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
-        self.btn_run.setText(self.tr("Schedule → ODT erzeugen"))
+        self.cb_lettermap.setText(self.tr("Lettermapping aktivieren"))
+        self.btn_run.setText(self.tr("Telegram-Export → ODT erzeugen"))
+        self.btn_open_output.setText(self.tr("Ausgabeordner öffnen"))
         self.btn_continue.setText(self.tr("Fortsetzen"))
         # placeholders
         self.lang_edit.setPlaceholderText("de")
@@ -249,9 +272,9 @@ class ScheduleTab(QWidget):
     def pick_schedule(self) -> None:
         p, _ = QFileDialog.getOpenFileName(
             self,
-            self.tr("Schedule auswählen"),
+            self.tr("Telegram-Export auswählen"),
             str(Path.cwd() / "input"),
-            self.tr("Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)")
+            self.tr("Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)")
         )
         if p:
             self.schedule_edit.setText(p)
@@ -288,6 +311,7 @@ class ScheduleTab(QWidget):
             include_images=self.cb_images.isChecked(),
             include_emojis=self.cb_emojis.isChecked(),
             mapping_event=self._mapping_event,
+            lettermap_enabled=self.cb_lettermap.isChecked(),
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -337,15 +361,28 @@ class ScheduleTab(QWidget):
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
         msg: str
+        main_out: Path | None = None
         if isinstance(result, tuple):
             main_path, extra_path = result
+            try:
+                main_out = Path(str(main_path)) if main_path else None
+            except Exception:
+                main_out = None
             if extra_path:
                 msg = self.tr("ODTs erzeugt: {main}\n{extra}").format(main=main_path, extra=extra_path)
             else:
                 msg = self.tr("ODT erzeugt: {main}").format(main=main_path)
         else:
+            try:
+                main_out = Path(str(result)) if result else None
+            except Exception:
+                main_out = None
             msg = self.tr("ODT erzeugt: {path}").format(path=result)
         self.status_label.setText(self.tr("Fertig."))
+        # Merke Ausgabe-Pfad und zeige Button
+        self._last_output_path = main_out
+        self.btn_open_output.setVisible(True)
+        self.btn_open_output.setEnabled(True)
         QMessageBox.information(self, self.tr("Fertig"), msg)
         self.progress.setVisible(False)
 
@@ -372,6 +409,33 @@ class ScheduleTab(QWidget):
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
 
+    def _open_output_folder(self) -> None:
+        try:
+            target: Path
+            if getattr(self, "_last_output_path", None) and Path(str(self._last_output_path)).exists():
+                target = Path(str(self._last_output_path)).parent
+            else:
+                target = Path.cwd() / "output"
+            target.mkdir(parents=True, exist_ok=True)
+            url = QUrl.fromLocalFile(str(target))
+            try:
+                QDesktopServices.openUrl(url)
+            except Exception:
+                pass
+            # Always also try system opener for robustness
+            import subprocess, sys
+            try:
+                if sys.platform.startswith("linux"):
+                    subprocess.Popen(["xdg-open", str(target)])
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(target)])
+                elif sys.platform.startswith("win"):
+                    subprocess.Popen(["explorer", str(target)])
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     def _install_state_handlers(self) -> None:
         self.schedule_edit.editingFinished.connect(self._save_state)
         self.cb_translate.toggled.connect(lambda _checked: self._save_state())
@@ -379,6 +443,7 @@ class ScheduleTab(QWidget):
         self.lang_edit.editingFinished.connect(self._save_state)
         self.cb_images.toggled.connect(lambda _checked: self._save_state())
         self.cb_emojis.toggled.connect(lambda _checked: self._save_state())
+        self.cb_lettermap.toggled.connect(lambda _checked: self._save_state())
 
     def _load_state(self) -> None:
         self._loading_state = True
@@ -410,6 +475,9 @@ class ScheduleTab(QWidget):
             include_emojis = data.get("include_emojis")
             if isinstance(include_emojis, bool):
                 self.cb_emojis.setChecked(include_emojis)
+            lm_en = data.get("lettermap_enabled")
+            if isinstance(lm_en, bool):
+                self.cb_lettermap.setChecked(lm_en)
         except Exception:
             pass
         finally:
@@ -425,6 +493,7 @@ class ScheduleTab(QWidget):
             "lang": self.lang_edit.text().strip(),
             "include_images": self.cb_images.isChecked(),
             "include_emojis": self.cb_emojis.isChecked(),
+            "lettermap_enabled": self.cb_lettermap.isChecked(),
         }
         try:
             UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -444,15 +513,137 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon_path)))
         self.tabs = QTabWidget()
         self.schedule_tab = ScheduleTab()
+        self.editor_tab = ScheduleEditorTab()
         self.lettermap_tab = LettermapTab()
         self.schedule_tab.set_lettermap_tab(self.lettermap_tab)
-        self.tabs.addTab(self.schedule_tab, self.tr("Schedule"))
-        self.tabs.addTab(self.lettermap_tab, self.tr("Lettermap"))
-        self.setCentralWidget(self.tabs)
+        # Reorder: Schedule, Schedule-Editor, Lettermap (Experimentell)
+        self.tabs.addTab(self.schedule_tab, self.tr("Telegram-Export"))
+        self.tabs.addTab(self.editor_tab, self.tr("Schedule-Editor"))
+        self.tabs.addTab(self.lettermap_tab, self.tr("Lettermap (Experimentell)"))
+        # Wrap central with a top language bar
+        from PySide6.QtWidgets import QWidget as _QW, QVBoxLayout as _QVL
+        central = _QW()
+        vlay = _QVL(central)
+        vlay.setContentsMargins(0, 0, 0, 0)
+        vlay.setSpacing(0)
+        self._init_lang_bar(vlay)
+        vlay.addWidget(self.tabs)
+        self.setCentralWidget(central)
 
         # Menü: Ansicht → Theme und Sprache
         self._init_menus()
         
+    def _init_lang_bar(self, parent_layout) -> None:
+        from PySide6.QtWidgets import QWidget, QHBoxLayout, QToolButton
+        bar = QWidget()
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(8, 4, 8, 4)
+        lay.setSpacing(6)
+        # Flag buttons (endonyms used as tooltip)
+        self.lang_flag_buttons: dict[str, QToolButton] = {}
+        langs = [
+            ("de", "🇩🇪", "Deutsch"),
+            ("en", "🇬🇧", "English"),
+            ("fr", "🇫🇷", "Français"),
+            ("it", "🇮🇹", "Italiano"),
+            ("ru", "🇷🇺", "Русский"),
+            ("pl", "🇵🇱", "Polski"),
+            ("es", "🇪🇸", "Español"),
+            ("hr", "🇭🇷", "Hrvatski"),
+            ("nl", "🇳🇱", "Nederlands"),
+            ("fi", "🇫🇮", "Suomi"),
+        ]
+        lay.addStretch(1)
+        for code, flag, tip in langs:
+            btn = QToolButton()
+            btn.setText(flag)
+            btn.setToolTip(tip)
+            btn.setCheckable(True)
+            btn.setProperty("base_flag", flag)
+            btn.setStyleSheet("font-size: 22px; padding: 2px 6px;")
+            btn.clicked.connect(lambda _=False, c=code: self._on_lang_clicked(c))
+            lay.addWidget(btn)
+            self.lang_flag_buttons[code] = btn
+        lay.addStretch(1)
+        parent_layout.addWidget(bar)
+        # highlight current
+        self.update_lang_flag_highlight(_load_language_preference())
+
+    def update_lang_flag_highlight(self, cur: str) -> None:
+        try:
+            for code, btn in (self.lang_flag_buttons or {}).items():
+                is_cur = (code == cur)
+                btn.setChecked(is_cur)
+                base = btn.property("base_flag") or btn.text().replace("★", "").strip()
+                btn.setText(f"{base} ★" if is_cur else str(base))
+                btn.setStyleSheet("font-size: 22px; padding: 2px 6px;" + (" font-weight: bold;" if is_cur else ""))
+        except Exception:
+            pass
+
+    def _on_lang_clicked(self, code: str) -> None:
+        try:
+            _set_language(code)
+            self.update_lang_flag_highlight(code)
+        except Exception:
+            pass
+
+    def _open_doc(self, rel_path: str) -> None:
+        try:
+            root = Path(__file__).resolve().parents[1]
+            p = root / rel_path
+            if p.exists():
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
+            else:
+                QMessageBox.information(self, self.tr("Hinweis"), self.tr("Datei nicht gefunden: ") + str(p))
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("Fehler"), str(e))
+
+    def _open_output_folder(self) -> None:
+        # Prefer last output path; else default output dir
+        try:
+            target: Path
+            if self._last_output_path and Path(str(self._last_output_path)).exists():
+                target = Path(str(self._last_output_path)).parent
+            else:
+                target = Path.cwd() / "output"
+            target.mkdir(parents=True, exist_ok=True)
+            url = QUrl.fromLocalFile(str(target))
+            try:
+                QDesktopServices.openUrl(url)
+            except Exception:
+                pass
+            # Always also try system opener for robustness
+            import subprocess, sys
+            try:
+                if sys.platform.startswith("linux"):
+                    subprocess.Popen(["xdg-open", str(target)])
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(target)])
+                elif sys.platform.startswith("win"):
+                    subprocess.Popen(["explorer", str(target)])
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _show_api_help(self) -> None:
+        xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        cred_path = str(Path(xdg) / "telegram-odt" / "credentials.json")
+        title = self.tr("Hinweis: Telegram API-Schlüssel")
+        h3 = self.tr("<h3>Telegram API-Schlüssel</h3>")
+        p1 = self.tr("<p>Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:</p>")
+        li1 = self.tr("<li>Öffne <a href='https://my.telegram.org'>my.telegram.org</a> und melde dich an.</li>")
+        li2 = self.tr("<li>Gehe zu <b>API development tools</b> und erstelle eine Anwendung.</li>")
+        li3 = self.tr("<li>Kopiere <b>API ID</b> und <b>API Hash</b>.</li>")
+        p2 = self.tr("<p>Ablage (ohne Repo-Leak):</p>")
+        li4 = self.tr("<li>Empfohlen: <code>{path}</code> (wird beim ersten Start automatisch angelegt)</li>").format(path=cred_path)
+        li5 = self.tr("<li>Oder als Umgebungsvariablen: <code>TELEGRAM_API_ID</code> und <code>TELEGRAM_API_HASH</code></li>")
+        li6 = self.tr("<li>Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.</li>")
+        html = (
+            h3 + p1 + "<ol>" + li1 + li2 + li3 + "</ol>" + p2 + "<ul>" + li4 + li5 + li6 + "</ul>"
+        )
+        QMessageBox.about(self, title, html)
+
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.LanguageChange:
             self.retranslate()
@@ -462,20 +653,34 @@ class MainWindow(QMainWindow):
         # Window title
         self.setWindowTitle(self.tr("Telegram → ODT mit Emoji & Übersetzung"))
         # Tabs
-        self.tabs.setTabText(0, self.tr("Schedule"))
-        self.tabs.setTabText(1, self.tr("Lettermap"))
+        self.tabs.setTabText(0, self.tr("Telegram-Export"))
+        if self.tabs.count() >= 2:
+            self.tabs.setTabText(1, self.tr("Schedule-Editor"))
+        if self.tabs.count() >= 3:
+            self.tabs.setTabText(2, self.tr("Lettermap (Experimentell)"))
         # Menüs
         self.view_menu.setTitle(self.tr("Ansicht"))
+        if hasattr(self, "help_menu"):
+            self.help_menu.setTitle(self.tr("Hilfe"))
+            if hasattr(self, "action_api_help"):
+                self.action_api_help.setText(self.tr("Hinweis: Telegram API-Schlüssel"))
+            if hasattr(self, "action_readme"):
+                self.action_readme.setText(self.tr("README öffnen"))
+            if hasattr(self, "action_deploy"):
+                self.action_deploy.setText(self.tr("Deployment-Anleitung öffnen"))
+            if hasattr(self, "action_spec"):
+                self.action_spec.setText(self.tr("PyInstaller-Spezifikation öffnen"))
         self.lang_menu.setTitle(self.tr("Sprache"))
         self.action_light.setText(self.tr("Hell"))
         self.action_dark.setText(self.tr("Dunkel"))
-        self.action_lang_de.setText(self.tr("Deutsch"))
-        self.action_lang_en.setText(self.tr("Englisch"))
+        # Sprachaktionen werden dynamisch in _init_menus erstellt
         # Weiterreichen an Tabs
         if hasattr(self.schedule_tab, "retranslate"):
             self.schedule_tab.retranslate()
         if hasattr(self.lettermap_tab, "retranslate"):
             self.lettermap_tab.retranslate()
+        if hasattr(self, "editor_tab") and hasattr(self.editor_tab, "retranslate"):
+            self.editor_tab.retranslate()
 
     def _init_menus(self) -> None:
         menubar = self.menuBar()
@@ -496,32 +701,21 @@ class MainWindow(QMainWindow):
             self.action_dark.setChecked(True)
         self.action_light.triggered.connect(lambda: _set_theme("light"))
         self.action_dark.triggered.connect(lambda: _set_theme("dark"))
-        # Sprache
-        self.lang_menu = menubar.addMenu(self.tr("Sprache"))
-        group_lang = QActionGroup(self)
-        group_lang.setExclusive(True)
-        # Endonyme Labels
-        languages = [
-            ("de", "Deutsch"),
-            ("en", "English"),
-            ("fr", "Français"),
-            ("it", "Italiano"),
-            ("ru", "Русский"),
-            ("pl", "Polski"),
-            ("es", "Español"),
-            ("hr", "Hrvatski"),
-            ("nl", "Nederlands"),
-            ("fi", "Suomi"),
-        ]
-        self.lang_actions: dict[str, QAction] = {}
-        for code, label in languages:
-            act = QAction(label, self, checkable=True)
-            group_lang.addAction(act)
-            self.lang_menu.addAction(act)
-            act.triggered.connect(partial(_set_language, code))
-            self.lang_actions[code] = act
-        cur_lang = _load_language_preference()
-        self.lang_actions.get(cur_lang, self.lang_actions["de"]).setChecked(True)
+        # Hilfe / Doku (ganz rechts)
+        self.help_menu = menubar.addMenu(self.tr("Hilfe"))
+        self.action_api_help = QAction(self.tr("Hinweis: Telegram API-Schlüssel"), self)
+        self.action_readme = QAction(self.tr("README öffnen"), self)
+        self.action_deploy = QAction(self.tr("Deployment-Anleitung öffnen"), self)
+        self.action_spec = QAction(self.tr("PyInstaller-Spezifikation öffnen"), self)
+        self.action_api_help.triggered.connect(self._show_api_help)
+        self.action_readme.triggered.connect(lambda: self._open_doc("README.md"))
+        self.action_deploy.triggered.connect(lambda: self._open_doc("docs/DEPLOY.md"))
+        self.action_spec.triggered.connect(lambda: self._open_doc("telegram_odt.spec"))
+        self.help_menu.addAction(self.action_api_help)
+        self.help_menu.addAction(self.action_readme)
+        self.help_menu.addAction(self.action_deploy)
+        self.help_menu.addAction(self.action_spec)
+        # Sprache: Flaggenleiste statt Menü (siehe _init_lang_bar)
 
 
 def _apply_theme(app: QApplication, theme: str) -> None:
@@ -644,6 +838,10 @@ def _set_language(lang: str) -> None:
         try:
             if isinstance(w, MainWindow):
                 w.retranslate()
+                try:
+                    w.update_lang_flag_highlight(lang)
+                except Exception:
+                    pass
         except Exception:
             pass
 
