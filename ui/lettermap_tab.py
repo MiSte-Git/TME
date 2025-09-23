@@ -130,33 +130,39 @@ class LettermapTab(QWidget):
         self._continue_cb: Optional[Callable[[], None]] = continue_cb
 
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(12)
 
         # Toolbar
         top = QHBoxLayout()
-        self.search_edit = QLineEdit(); self.search_edit.setPlaceholderText("Suchen (doc_id, alt, hint)…")
+        top.setSpacing(8)
+        self.search_edit = QLineEdit(); self.search_edit.setPlaceholderText(self.tr("Suchen (doc_id, alt, hint)…"))
         self.search_edit.textChanged.connect(self._apply_filter)
-        btn_reload = QPushButton("Neu laden")
-        btn_reload.clicked.connect(self.reload_data)
-        btn_save = QPushButton("Speichern")
-        btn_save.clicked.connect(self.save_mapping)
-        self.cb_only_unmapped = QCheckBox("Nur ungemappte")
+        self.btn_reload = QPushButton(self.tr("Neu laden"))
+        self.btn_reload.clicked.connect(self.reload_data)
+        self.btn_save = QPushButton(self.tr("Speichern"))
+        self.btn_save.clicked.connect(self.save_mapping)
+        self.cb_only_unmapped = QCheckBox(self.tr("Nur ungemappte"))
         self.cb_only_unmapped.toggled.connect(self._apply_filter)
-        self.cb_only_missing = QCheckBox("Nur fehlende doc_ids")
+        self.cb_only_missing = QCheckBox(self.tr("Nur fehlende doc_ids"))
         self.cb_only_missing.toggled.connect(self._apply_filter)
         top.addWidget(self.search_edit)
         top.addWidget(self.cb_only_unmapped)
         top.addWidget(self.cb_only_missing)
-        top.addWidget(btn_reload)
-        top.addWidget(btn_save)
+        top.addWidget(self.btn_reload)
+        top.addWidget(self.btn_save)
         lay.addLayout(top)
 
         # Tabelle
-        info = QLabel("Hinweis: Nach dem Speichern kannst du dieses Fenster schließen. Der laufende Prozess macht automatisch weiter.")
-        info.setWordWrap(True)
-        lay.addWidget(info)
+        self.info_label = QLabel(self.tr("Hinweis: Nach dem Speichern kannst du dieses Fenster schließen. Der laufende Prozess macht automatisch weiter."))
+        self.info_label.setWordWrap(True)
+        lay.addWidget(self.info_label)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["Vorschau", "doc_id", "alt", "hint", "Mapping (Buchstabe)", "Ignorieren"])
+        self.table.setHorizontalHeaderLabels([
+            self.tr("Vorschau"), self.tr("doc_id"), self.tr("alt"), self.tr("hint"),
+            self.tr("Mapping (Buchstabe)"), self.tr("Ignorieren")
+        ])
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(110)
         hh = self.table.horizontalHeader()
@@ -171,8 +177,9 @@ class LettermapTab(QWidget):
 
         # Bottom actions
         bottom = QHBoxLayout()
+        bottom.setSpacing(8)
         bottom.addStretch(1)
-        self.btn_continue = QPushButton("Fortsetzen")
+        self.btn_continue = QPushButton(self.tr("Fortsetzen"))
         self.btn_continue.setVisible(False)
         self.btn_continue.setEnabled(False)
         self.btn_continue.clicked.connect(self._on_continue_clicked)
@@ -180,6 +187,29 @@ class LettermapTab(QWidget):
         lay.addLayout(bottom)
 
         self.reload_data()
+
+    def changeEvent(self, event) -> None:
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.LanguageChange:
+            self.retranslate()
+        super().changeEvent(event)
+
+    def retranslate(self) -> None:
+        # Toolbar texts
+        self.search_edit.setPlaceholderText(self.tr("Suchen (doc_id, alt, hint)…"))
+        self.btn_reload.setText(self.tr("Neu laden"))
+        self.btn_save.setText(self.tr("Speichern"))
+        self.cb_only_unmapped.setText(self.tr("Nur ungemappte"))
+        self.cb_only_missing.setText(self.tr("Nur fehlende doc_ids"))
+        # Info label
+        self.info_label.setText(self.tr("Hinweis: Nach dem Speichern kannst du dieses Fenster schließen. Der laufende Prozess macht automatisch weiter."))
+        # Table headers
+        self.table.setHorizontalHeaderLabels([
+            self.tr("Vorschau"), self.tr("doc_id"), self.tr("alt"), self.tr("hint"),
+            self.tr("Mapping (Buchstabe)"), self.tr("Ignorieren")
+        ])
+        # Bottom button
+        self.btn_continue.setText(self.tr("Fortsetzen"))
 
     def _load_missing_ids(self) -> None:
         self.missing_doc_ids = set()
@@ -215,7 +245,7 @@ class LettermapTab(QWidget):
             self._populate_table(inv)
             self._apply_filter()
         except Exception as e:
-            QMessageBox.critical(self, "Fehler", str(e))
+            QMessageBox.critical(self, self.tr("Fehler"), str(e))
 
     def _populate_table(self, inv_map: Dict[str, str]) -> None:
         self.table.setRowCount(0)
@@ -232,9 +262,9 @@ class LettermapTab(QWidget):
                     lab.setPixmap(pm.scaled(96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                     lab.setToolTip(str(p))
                 else:
-                    lab.setText("[kein Bild]")
+                    lab.setText(self.tr("[kein Bild]"))
             else:
-                lab.setText("[kein Bild]")
+                lab.setText(self.tr("[kein Bild]"))
             self.table.setCellWidget(row, 0, lab)
             # doc_id
             doc_id = str(rec.get("doc_id", ""))
@@ -321,7 +351,7 @@ class LettermapTab(QWidget):
             if f.exists() and f.is_file():
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(f)))
                 return
-        QMessageBox.information(self, "Hinweis", "Kein Bild gefunden (export/cache).")
+        QMessageBox.information(self, self.tr("Hinweis"), self.tr("Kein Bild gefunden (export/cache)."))
 
     # Save -----------------------------------------------------------------
     def save_mapping(self) -> None:
@@ -376,9 +406,9 @@ class LettermapTab(QWidget):
             LETTERMAP_FILE.write_text(json.dumps(merged, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
             IGNORE_FILE.parent.mkdir(parents=True, exist_ok=True)
             IGNORE_FILE.write_text(json.dumps(sorted(set(ignore_ids)), ensure_ascii=False, indent=2), encoding="utf-8")
-            QMessageBox.information(self, "Gespeichert", f"Mapping gespeichert nach {LETTERMAP_FILE}\nIgnorieren gespeichert nach {IGNORE_FILE}.")
+            QMessageBox.information(self, self.tr("Gespeichert"), self.tr("Mapping gespeichert nach {file}\nIgnorieren gespeichert nach {ignore}.").format(file=str(LETTERMAP_FILE), ignore=str(IGNORE_FILE)))
         except Exception as e:
-            QMessageBox.critical(self, "Fehler", str(e))
+            QMessageBox.critical(self, self.tr("Fehler"), str(e))
 
     def _should_ignore_by_default(self, rec: Dict[str, Any], doc_id: str, inv_map: Dict[str, str]) -> bool:
         if doc_id in self.ignored_doc_ids:

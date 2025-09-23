@@ -4,6 +4,7 @@ import sys
 import asyncio
 from pathlib import Path
 import json
+import os
 # Ensure project root on sys.path when running from ui/ directly
 try:
     ROOT = Path(__file__).resolve().parents[1]
@@ -14,17 +15,23 @@ except Exception:
 
 import threading
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent
+from PySide6.QtGui import QAction, QActionGroup
+from functools import partial
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFileDialog,
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
-    QTabWidget, QCheckBox, QMessageBox, QComboBox, QProgressBar
+    QTabWidget, QCheckBox, QMessageBox, QComboBox, QProgressBar,
+    QInputDialog
 )
 
 from pipeline.runner_schedule import run_schedule
 from ui.lettermap_tab import LettermapTab
 
 UI_STATE_FILE = Path("data/ui_state.json")
+THEME_STATE_FILE = Path("data/ui_theme.json")
+LANG_STATE_FILE = Path("data/ui_lang.json")
+TRANSLATIONS_DIR = Path(__file__).parent / "translations"
 
 
 class ScheduleWorker(QObject):
@@ -61,7 +68,7 @@ class ScheduleWorker(QObject):
                 self.waiting_for_mapping.emit()
                 self._mapping_event.clear()
                 self._mapping_event.wait()
-                self.status.emit("Fortsetze nach Mapping…")
+                self.status.emit(self.tr("Fortsetze nach Mapping…"))
 
             kwargs = dict(
                 schedule_path=self.schedule_path,
@@ -83,7 +90,7 @@ class ScheduleWorker(QObject):
                 if "wait_for_mapping_cb" in str(exc):
                     kwargs.pop("wait_for_mapping_cb", None)
                     kwargs["skip_lettermap_ui"] = False
-                    self.status.emit("Warnung: run_schedule unterstützt keinen Fortsetzen-Callback – fahre ohne UI-Verknüpfung fort.")
+                    self.status.emit(self.tr("Warnung: run_schedule unterstützt keinen Fortsetzen-Callback – fahre ohne UI-Verknüpfung fort."))
                     result = asyncio.run(run_schedule(**kwargs))
                 else:
                     raise
@@ -96,33 +103,45 @@ class ScheduleTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(12)
+        self._build_ui(lay)
 
+    def _build_ui(self, lay: QVBoxLayout) -> None:
+        # split out so we can retranslate incrementally
+        
         pick_lay = QHBoxLayout()
+        pick_lay.setSpacing(8)
         self.schedule_edit = QLineEdit()
-        btn_pick = QPushButton("Schedule wählen…")
-        btn_pick.clicked.connect(self.pick_schedule)
-        pick_lay.addWidget(QLabel("Schedule:"))
+        self.btn_pick = QPushButton(self.tr("Datei wählen…"))
+        self.btn_pick.clicked.connect(self.pick_schedule)
+        self.lbl_schedule = QLabel(self.tr("Schedule:"))
+        pick_lay.addWidget(self.lbl_schedule)
         pick_lay.addWidget(self.schedule_edit)
-        pick_lay.addWidget(btn_pick)
+        pick_lay.addWidget(self.btn_pick)
         lay.addLayout(pick_lay)
 
         opt_lay = QHBoxLayout()
-        self.cb_translate = QCheckBox("Übersetzen")
+        opt_lay.setSpacing(8)
+        self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
         self.lang_edit = QLineEdit(); self.lang_edit.setPlaceholderText("de")
-        self.cb_images = QCheckBox("Bilder einbetten"); self.cb_images.setChecked(True)
-        self.cb_emojis = QCheckBox("Custom Emojis einbetten"); self.cb_emojis.setChecked(True)
+        self.cb_images = QCheckBox(self.tr("Bilder einbetten")); self.cb_images.setChecked(True)
+        self.cb_emojis = QCheckBox(self.tr("Custom Emojis einbetten")); self.cb_emojis.setChecked(True)
+        self.lbl_mode = QLabel(self.tr("Modus:"))
+        self.lbl_lang = QLabel(self.tr("Sprache:"))
         opt_lay.addWidget(self.cb_translate)
-        opt_lay.addWidget(QLabel("Modus:"))
+        opt_lay.addWidget(self.lbl_mode)
         opt_lay.addWidget(self.mode_combo)
-        opt_lay.addWidget(QLabel("Sprache:"))
+        opt_lay.addWidget(self.lbl_lang)
         opt_lay.addWidget(self.lang_edit)
         opt_lay.addWidget(self.cb_images)
         opt_lay.addWidget(self.cb_emojis)
         lay.addLayout(opt_lay)
 
         run_lay = QHBoxLayout()
-        self.btn_run = QPushButton("Schedule → ODT erzeugen")
+        run_lay.setSpacing(8)
+        self.btn_run = QPushButton(self.tr("Schedule → ODT erzeugen"))
         self.btn_run.clicked.connect(self.run_schedule_file)
         run_lay.addWidget(self.btn_run)
         lay.addLayout(run_lay)
@@ -138,7 +157,7 @@ class ScheduleTab(QWidget):
         self.status_label.setVisible(False)
         lay.addWidget(self.status_label)
 
-        self.btn_continue = QPushButton("Fortsetzen")
+        self.btn_continue = QPushButton(self.tr("Fortsetzen"))
         self.btn_continue.setVisible(False)
         self.btn_continue.clicked.connect(self._on_continue_clicked)
         lay.addWidget(self.btn_continue)
@@ -154,6 +173,74 @@ class ScheduleTab(QWidget):
         self._load_state()
         self._install_state_handlers()
 
+    def _credentials_present(self) -> bool:
+        if os.environ.get("TELEGRAM_API_ID") and os.environ.get("TELEGRAM_API_HASH"):
+            return True
+        xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        cand = [
+            Path(xdg) / "telegram-odt" / "credentials.json",
+            Path(xdg) / "telegram-odt" / "credentials.yaml",
+            Path(xdg) / "telegram-odt" / "credentials.yml",
+            Path(xdg) / "telegram-odt" / "credentials.env",
+            Path(xdg) / "telegram-odt.env",
+        ]
+        return any(p.exists() for p in cand)
+
+    def _prompt_store_credentials(self) -> bool:
+        api_id, ok1 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API ID (my.telegram.org):"))
+        if not ok1 or not api_id.strip():
+            return False
+        api_hash, ok2 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API Hash (my.telegram.org):"))
+        if not ok2 or not api_hash.strip():
+            return False
+        try:
+            xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+            cred_dir = Path(xdg) / "telegram-odt"
+            cred_dir.mkdir(parents=True, exist_ok=True)
+            cred_file = cred_dir / "credentials.json"
+            cred_file.write_text(json.dumps({"api_id": api_id.strip(), "api_hash": api_hash.strip()}, ensure_ascii=False, indent=2), encoding="utf-8")
+            try:
+                if os.name == "posix":
+                    os.chmod(cred_file, 0o600)
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            QMessageBox.critical(self, self.tr("Fehler"), str(e))
+            return False
+
+    def _ensure_credentials(self) -> bool:
+        if self._credentials_present():
+            return True
+        ans = QMessageBox.question(
+            self,
+            self.tr("Telegram API"),
+            self.tr("Telegram API-Zugangsdaten fehlen. Jetzt eintragen und lokal speichern?"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if ans != QMessageBox.Yes:
+            return False
+        return self._prompt_store_credentials()
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.LanguageChange:
+            self.retranslate()
+        super().changeEvent(event)
+
+    def retranslate(self) -> None:
+        self.btn_pick.setText(self.tr("Datei wählen…"))
+        self.lbl_schedule.setText(self.tr("Schedule:"))
+        self.cb_translate.setText(self.tr("Übersetzen"))
+        self.lbl_mode.setText(self.tr("Modus:"))
+        self.lbl_lang.setText(self.tr("Sprache:"))
+        self.cb_images.setText(self.tr("Bilder einbetten"))
+        self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
+        self.btn_run.setText(self.tr("Schedule → ODT erzeugen"))
+        self.btn_continue.setText(self.tr("Fortsetzen"))
+        # placeholders
+        self.lang_edit.setPlaceholderText("de")
+
     def set_lettermap_tab(self, tab: LettermapTab) -> None:
         self.lettermap_tab = tab
         tab.set_continue_handler(self._on_continue_clicked)
@@ -162,9 +249,9 @@ class ScheduleTab(QWidget):
     def pick_schedule(self) -> None:
         p, _ = QFileDialog.getOpenFileName(
             self,
-            "Schedule auswählen",
+            self.tr("Schedule auswählen"),
             str(Path.cwd() / "input"),
-            "Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)"
+            self.tr("Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)")
         )
         if p:
             self.schedule_edit.setText(p)
@@ -173,10 +260,13 @@ class ScheduleTab(QWidget):
     def run_schedule_file(self) -> None:
         path = Path(self.schedule_edit.text())
         if not path.exists():
-            QMessageBox.warning(self, "Fehler", "Bitte eine gültige Schedule-Datei wählen.")
+            QMessageBox.warning(self, self.tr("Fehler"), self.tr("Bitte eine gültige Schedule-Datei wählen."))
             return
         if self.worker_thread is not None:
-            QMessageBox.information(self, "Läuft", "Ein Durchlauf ist bereits aktiv. Bitte warten.")
+            QMessageBox.information(self, self.tr("Läuft"), self.tr("Ein Durchlauf ist bereits aktiv. Bitte warten."))
+            return
+        # Ensure Telegram credentials before starting
+        if not self._ensure_credentials():
             return
         translate = self.cb_translate.isChecked()
         target_lang = self.lang_edit.text().strip() or ("de" if translate else "de")
@@ -184,7 +274,7 @@ class ScheduleTab(QWidget):
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
         self.status_label.setVisible(True)
-        self.status_label.setText("Starte…")
+        self.status_label.setText(self.tr("Starte…"))
         self.btn_continue.setVisible(False)
         self._mapping_event.clear()
         if self.lettermap_tab:
@@ -223,7 +313,7 @@ class ScheduleTab(QWidget):
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self.status_label.setVisible(True)
-        self.status_label.setText("Bitte Lettermap im Tab anpassen und anschließend 'Fortsetzen' klicken.")
+        self.status_label.setText(self.tr("Bitte Lettermap im Tab anpassen und anschließend 'Fortsetzen' klicken."))
         self.btn_continue.setVisible(True)
         self.btn_continue.setEnabled(True)
         if self.lettermap_tab:
@@ -232,7 +322,7 @@ class ScheduleTab(QWidget):
     def _on_continue_clicked(self) -> None:
         self.btn_continue.setEnabled(False)
         self.btn_continue.setVisible(False)
-        self.status_label.setText("Prüfe Mapping…")
+        self.status_label.setText(self.tr("Prüfe Mapping…"))
         self.progress.setRange(0, 0)
         self._mapping_event.set()
         if self.lettermap_tab:
@@ -250,13 +340,13 @@ class ScheduleTab(QWidget):
         if isinstance(result, tuple):
             main_path, extra_path = result
             if extra_path:
-                msg = f"ODTs erzeugt: {main_path}\n{extra_path}"
+                msg = self.tr("ODTs erzeugt: {main}\n{extra}").format(main=main_path, extra=extra_path)
             else:
-                msg = f"ODT erzeugt: {main_path}"
+                msg = self.tr("ODT erzeugt: {main}").format(main=main_path)
         else:
-            msg = f"ODT erzeugt: {result}"
-        self.status_label.setText("Fertig.")
-        QMessageBox.information(self, "Fertig", msg)
+            msg = self.tr("ODT erzeugt: {path}").format(path=result)
+        self.status_label.setText(self.tr("Fertig."))
+        QMessageBox.information(self, self.tr("Fertig"), msg)
         self.progress.setVisible(False)
 
     def _on_worker_error(self, message: str) -> None:
@@ -265,8 +355,8 @@ class ScheduleTab(QWidget):
         self.progress.setVisible(False)
         self.btn_run.setEnabled(True)
         self.status_label.setVisible(True)
-        self.status_label.setText("Fehler: " + message)
-        QMessageBox.critical(self, "Fehler", message)
+        self.status_label.setText(self.tr("Fehler: ") + message)
+        QMessageBox.critical(self, self.tr("Fehler"), message)
         self.btn_continue.setVisible(False)
         self._mapping_event.set()
         if self.lettermap_tab:
@@ -346,18 +436,226 @@ class ScheduleTab(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Emoji-ODT Pipeline")
-        tabs = QTabWidget()
+        self.setWindowTitle("Telegram → ODT mit Emoji & Übersetzung")
+        self.tabs = QTabWidget()
         self.schedule_tab = ScheduleTab()
         self.lettermap_tab = LettermapTab()
         self.schedule_tab.set_lettermap_tab(self.lettermap_tab)
-        tabs.addTab(self.schedule_tab, "Schedule")
-        tabs.addTab(self.lettermap_tab, "Lettermap")
-        self.setCentralWidget(tabs)
+        self.tabs.addTab(self.schedule_tab, self.tr("Schedule"))
+        self.tabs.addTab(self.lettermap_tab, self.tr("Lettermap"))
+        self.setCentralWidget(self.tabs)
+
+        # Menü: Ansicht → Theme und Sprache
+        self._init_menus()
+        
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.LanguageChange:
+            self.retranslate()
+        super().changeEvent(event)
+
+    def retranslate(self) -> None:
+        # Window title
+        self.setWindowTitle(self.tr("Telegram → ODT mit Emoji & Übersetzung"))
+        # Tabs
+        self.tabs.setTabText(0, self.tr("Schedule"))
+        self.tabs.setTabText(1, self.tr("Lettermap"))
+        # Menüs
+        self.view_menu.setTitle(self.tr("Ansicht"))
+        self.lang_menu.setTitle(self.tr("Sprache"))
+        self.action_light.setText(self.tr("Hell"))
+        self.action_dark.setText(self.tr("Dunkel"))
+        self.action_lang_de.setText(self.tr("Deutsch"))
+        self.action_lang_en.setText(self.tr("Englisch"))
+        # Weiterreichen an Tabs
+        if hasattr(self.schedule_tab, "retranslate"):
+            self.schedule_tab.retranslate()
+        if hasattr(self.lettermap_tab, "retranslate"):
+            self.lettermap_tab.retranslate()
+
+    def _init_menus(self) -> None:
+        menubar = self.menuBar()
+        self.view_menu = menubar.addMenu(self.tr("Ansicht"))
+        # Theme
+        group_theme = QActionGroup(self)
+        group_theme.setExclusive(True)
+        self.action_light = QAction(self.tr("Hell"), self, checkable=True)
+        self.action_dark = QAction(self.tr("Dunkel"), self, checkable=True)
+        group_theme.addAction(self.action_light)
+        group_theme.addAction(self.action_dark)
+        self.view_menu.addAction(self.action_light)
+        self.view_menu.addAction(self.action_dark)
+        theme = _load_theme_preference()
+        if theme == "light":
+            self.action_light.setChecked(True)
+        else:
+            self.action_dark.setChecked(True)
+        self.action_light.triggered.connect(lambda: _set_theme("light"))
+        self.action_dark.triggered.connect(lambda: _set_theme("dark"))
+        # Sprache
+        self.lang_menu = menubar.addMenu(self.tr("Sprache"))
+        group_lang = QActionGroup(self)
+        group_lang.setExclusive(True)
+        # Endonyme Labels
+        languages = [
+            ("de", "Deutsch"),
+            ("en", "English"),
+            ("fr", "Français"),
+            ("it", "Italiano"),
+            ("ru", "Русский"),
+            ("pl", "Polski"),
+            ("es", "Español"),
+            ("hr", "Hrvatski"),
+            ("nl", "Nederlands"),
+            ("fi", "Suomi"),
+        ]
+        self.lang_actions: dict[str, QAction] = {}
+        for code, label in languages:
+            act = QAction(label, self, checkable=True)
+            group_lang.addAction(act)
+            self.lang_menu.addAction(act)
+            act.triggered.connect(partial(_set_language, code))
+            self.lang_actions[code] = act
+        cur_lang = _load_language_preference()
+        self.lang_actions.get(cur_lang, self.lang_actions["de"]).setChecked(True)
+
+
+def _apply_theme(app: QApplication, theme: str) -> None:
+    """Apply QSS theme based on name ('light' or 'dark'). Fallbacks gracefully."""
+    base = Path(__file__).parent
+    files = {
+        "light": base / "theme_light.qss",
+        "dark": base / "theme_dark.qss",
+    }
+    qss = ""
+    p = files.get(theme)
+    if p and p.exists():
+        try:
+            qss = p.read_text(encoding="utf-8")
+        except Exception:
+            qss = ""
+    # Backward-compat: old theme.qss (assume dark)
+    if not qss:
+        legacy = base / "theme.qss"
+        if legacy.exists():
+            try:
+                qss = legacy.read_text(encoding="utf-8")
+            except Exception:
+                qss = ""
+    app.setStyleSheet(qss)
+
+
+def _load_theme_preference() -> str:
+    try:
+        if THEME_STATE_FILE.exists():
+            data = json.loads(THEME_STATE_FILE.read_text(encoding="utf-8"))
+            t = str(data.get("theme", "dark")).lower()
+            return "light" if t == "light" else "dark"
+    except Exception:
+        pass
+    return "dark"
+
+
+def _save_theme_preference(theme: str) -> None:
+    try:
+        data = {}
+        if THEME_STATE_FILE.exists():
+            data = json.loads(THEME_STATE_FILE.read_text(encoding="utf-8")) or {}
+        data["theme"] = theme
+        THEME_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        THEME_STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _set_theme(theme: str) -> None:
+    app = QApplication.instance()
+    if app is None:
+        return
+    _apply_theme(app, theme)
+    _save_theme_preference(theme)
+
+
+_translator: QTranslator | None = None
+
+def _apply_language(app: QApplication, lang: str) -> None:
+    global _translator
+    # Remove old translator
+    if _translator is not None:
+        app.removeTranslator(_translator)
+        _translator = None
+    # Load new translator (requires compiled .qm)
+    tr = QTranslator(app)
+    # try ui/translations/app_LANG.qm
+    base_name = f"app_{lang}"
+    ok = False
+    for p in (
+        TRANSLATIONS_DIR / f"{base_name}.qm",
+        Path.cwd() / "ui" / "translations" / f"{base_name}.qm",
+    ):
+        if p.exists():
+            ok = tr.load(str(p))
+            if ok:
+                break
+    if ok:
+        app.installTranslator(tr)
+        _translator = tr
+
+
+_SUPPORTED_LANGS = {"de","en","fr","it","ru","pl","es","hr","nl","fi"}
+
+def _load_language_preference() -> str:
+    try:
+        if LANG_STATE_FILE.exists():
+            data = json.loads(LANG_STATE_FILE.read_text(encoding="utf-8"))
+            l = str(data.get("lang", "de")).lower()
+            return l if l in _SUPPORTED_LANGS else "de"
+    except Exception:
+        pass
+    # Default: system locale → choose best match by prefix
+    sys_lang = QLocale.system().name().lower()  # e.g., de_de
+    for cand in _SUPPORTED_LANGS:
+        if sys_lang.startswith(cand):
+            return cand
+    return "de"
+
+
+def _save_language_preference(lang: str) -> None:
+    try:
+        data = {"lang": lang}
+        LANG_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        LANG_STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _set_language(lang: str) -> None:
+    app = QApplication.instance()
+    if app is None:
+        return
+    _save_language_preference(lang)
+    _apply_language(app, lang)
+    # Retranslate top-level MainWindow(s)
+    for w in app.topLevelWidgets():
+        try:
+            if isinstance(w, MainWindow):
+                w.retranslate()
+        except Exception:
+            pass
 
 
 def main() -> None:
     app = QApplication(sys.argv)
+    # Use a modern, consistent style across platforms
+    try:
+        from PySide6.QtWidgets import QStyleFactory
+        app.setStyle(QStyleFactory.create("Fusion"))
+    except Exception:
+        pass
+    # Apply theme
+    _apply_theme(app, _load_theme_preference())
+    # Apply language (requires compiled translations)
+    _apply_language(app, _load_language_preference())
+
     w = MainWindow()
     w.resize(900, 420)
     w.show()

@@ -11,8 +11,7 @@ import re
 import shutil
 
 from telethon import TelegramClient, types
-
-from tg_by_date_to_odt_modes import API_ID, API_HASH  # type: ignore
+import os
 
 from . import runner_by_ids as _rbi
 from .assets import get_custom_emoji_cache, load_custom_emoji_alts, load_assets
@@ -275,6 +274,78 @@ async def run_schedule(
     _apply_config_overrides(config_path)
     cfg = _load_config(config_path)
 
+    # Determine language codes for filenames
+    source_lang = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "EN").strip()
+    source_up = (source_lang or "EN").upper()
+    lang_up = target_lang.upper() if isinstance(target_lang, str) and target_lang else "DE"
+
+    # Resolve Telegram API credentials (env → config)
+    api_id = os.environ.get("TELEGRAM_API_ID") or str(
+        (cfg.get("telegram_api_id") if isinstance(cfg, dict) else "")
+        or (cfg.get("api_id") if isinstance(cfg, dict) else "")
+        or ((cfg.get("telegram") or {}).get("api_id") if isinstance(cfg.get("telegram"), dict) else "")
+        or ""
+    ).strip()
+    api_hash = os.environ.get("TELEGRAM_API_HASH") or str(
+        (cfg.get("telegram_api_hash") if isinstance(cfg, dict) else "")
+        or (cfg.get("api_hash") if isinstance(cfg, dict) else "")
+        or ((cfg.get("telegram") or {}).get("api_hash") if isinstance(cfg.get("telegram"), dict) else "")
+        or ""
+    ).strip()
+    # XDG config (~/.config/telegram-odt/credentials.{json,yaml}) or env file
+    if (not api_id or not api_hash):
+        try:
+            xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+            candidates = [
+                Path(xdg) / "telegram-odt" / "credentials.json",
+                Path(xdg) / "telegram-odt" / "credentials.yaml",
+                Path(xdg) / "telegram-odt" / "credentials.yml",
+                Path(xdg) / "telegram-odt" / "credentials.env",
+                Path(xdg) / "telegram-odt.env",
+            ]
+            for p in candidates:
+                if not p.exists():
+                    continue
+                if p.suffix.lower() == ".json":
+                    try:
+                        data = json.loads(p.read_text(encoding="utf-8"))
+                        if isinstance(data, dict):
+                            api_id = api_id or str(data.get("api_id") or data.get("TELEGRAM_API_ID") or "").strip()
+                            api_hash = api_hash or str(data.get("api_hash") or data.get("TELEGRAM_API_HASH") or "").strip()
+                    except Exception:
+                        pass
+                elif p.suffix.lower() in {".yaml", ".yml"} and yaml is not None:
+                    try:
+                        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+                        if isinstance(data, dict):
+                            api_id = api_id or str(data.get("api_id") or data.get("TELEGRAM_API_ID") or "").strip()
+                            api_hash = api_hash or str(data.get("api_hash") or data.get("TELEGRAM_API_HASH") or "").strip()
+                    except Exception:
+                        pass
+                else:
+                    # .env style
+                    try:
+                        for line in p.read_text(encoding="utf-8").splitlines():
+                            if "=" not in line:
+                                continue
+                            k, v = line.split("=", 1)
+                            k = k.strip(); v = v.strip().strip("'\"")
+                            if k == "TELEGRAM_API_ID" and not api_id:
+                                api_id = v
+                            elif k == "TELEGRAM_API_HASH" and not api_hash:
+                                api_hash = v
+                    except Exception:
+                        pass
+                if api_id and api_hash:
+                    break
+        except Exception:
+            pass
+    if not api_id or not api_hash:
+        raise RuntimeError(
+            "TELEGRAM_API_ID/TELEGRAM_API_HASH fehlen. Setze sie als Umgebungsvariablen ODER lege ~/.config/telegram-odt/credentials.json "
+            "mit {\"api_id\":123456, \"api_hash\":\"...\"} an."
+        )
+
     _notify("Schedule wird geladen…")
     if schedule_path.suffix.lower() == ".json":
         schedule = load_schedule_document(schedule_path)
@@ -349,7 +420,7 @@ async def run_schedule(
         return set()
 
     async with TelegramClient(
-        "tg_session", API_ID, API_HASH,
+        "tg_session", api_id, api_hash,
         request_retries=_rbi._CLIENT_REQUEST_RETRIES,
         timeout=_rbi._CLIENT_TIMEOUT,
         auto_reconnect=_rbi._CLIENT_AUTO_RECONNECT,
@@ -378,7 +449,16 @@ async def run_schedule(
         out_dir = output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        out_path = out_dir / f"{out_basename}_{ts}.odt"
+        # Add language code suffix to filename:
+        # - separate mode (main file has only source language): _{SRC}
+        # - other modes with translate=True: _{SRC}-{TGT}
+        # - no translation: _{SRC}
+        mode_here = (translation_mode or "inline").strip().lower()
+        if mode_here == "separate":
+            code_suffix = f"_{source_up}"
+        else:
+            code_suffix = f"_{source_up}-{lang_up}" if translate else f"_{source_up}"
+        out_path = out_dir / f"{out_basename}_{ts}{code_suffix}.odt"
 
         safe_img_dir = Path("media/odt_safe"); safe_img_dir.mkdir(parents=True, exist_ok=True)
         img_idx = 1
