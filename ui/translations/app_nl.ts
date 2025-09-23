@@ -5,6 +5,21 @@
     <message><source>Schedule</source><translation>Schema</translation></message>
     <message><source>Lettermap</source><translation>Lettermap</translation></message>
     <message><source>Ansicht</source><translation>Weergave</translation></message>
+    <message><source>Hilfe</source><translation>Help</translation></message>
+    <message><source>README öffnen</source><translation>README openen</translation></message>
+    <message><source>Deployment-Anleitung öffnen</source><translation>Implementatiehandleiding openen</translation></message>
+    <message><source>PyInstaller-Spezifikation öffnen</source><translation>PyInstaller-specificatie openen</translation></message>
+    <message><source>Hinweis: Telegram API-Schlüssel</source><translation>Opmerking: Telegram API-sleutels</translation></message>
+    <message><source>Datei nicht gefunden: </source><translation>Bestand niet gevonden: </translation></message>
+    <message><source>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</source><translation>&lt;h3&gt;Telegram API-sleutels&lt;/h3&gt;</translation></message>
+    <message><source>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</source><translation>&lt;p&gt;De app heeft de Telegram API ID en API Hash nodig. Zo verkrijg je ze:&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</source><translation>&lt;li&gt;Open &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; en meld je aan.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</source><translation>&lt;li&gt;Ga naar &lt;b&gt;API development tools&lt;/b&gt; en maak een applicatie.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</source><translation>&lt;li&gt;Kopieer &lt;b&gt;API ID&lt;/b&gt; en &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</translation></message>
+    <message><source>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</source><translation>&lt;p&gt;Opslag (zonder in het repo te lekken):&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</source><translation>&lt;li&gt;Aanbevolen: &lt;code&gt;{path}&lt;/code&gt; (wordt automatisch aangemaakt bij de eerste start)&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</source><translation>&lt;li&gt;Of als omgevingsvariabelen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; en &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</source><translation>&lt;li&gt;Meer details: zie de implementatiehandleiding in het Help-menu.&lt;/li&gt;</translation></message>
     <message><source>Hell</source><translation>Licht</translation></message>
     <message><source>Dunkel</source><translation>Donker</translation></message>
     <message><source>Sprache</source><translation>Taal</translation></message>

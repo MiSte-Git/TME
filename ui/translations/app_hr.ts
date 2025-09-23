@@ -5,6 +5,21 @@
     <message><source>Schedule</source><translation>Raspored</translation></message>
     <message><source>Lettermap</source><translation>Karta slova</translation></message>
     <message><source>Ansicht</source><translation>Pogled</translation></message>
+    <message><source>Hilfe</source><translation>Pomoć</translation></message>
+    <message><source>README öffnen</source><translation>Otvori README</translation></message>
+    <message><source>Deployment-Anleitung öffnen</source><translation>Otvori upute za implementaciju</translation></message>
+    <message><source>PyInstaller-Spezifikation öffnen</source><translation>Otvori PyInstaller specifikaciju</translation></message>
+    <message><source>Hinweis: Telegram API-Schlüssel</source><translation>Napomena: Telegram API ključevi</translation></message>
+    <message><source>Datei nicht gefunden: </source><translation>Datoteka nije pronađena: </translation></message>
+    <message><source>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</source><translation>&lt;h3&gt;Telegram API ključevi&lt;/h3&gt;</translation></message>
+    <message><source>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</source><translation>&lt;p&gt;Aplikacija treba Telegram API ID i API Hash. Kako ih dobiti:&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</source><translation>&lt;li&gt;Otvorite &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; i prijavite se.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</source><translation>&lt;li&gt;Idite na &lt;b&gt;API development tools&lt;/b&gt; i izradite aplikaciju.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</source><translation>&lt;li&gt;Kopirajte &lt;b&gt;API ID&lt;/b&gt; i &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</translation></message>
+    <message><source>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</source><translation>&lt;p&gt;Pohrana (bez curenja u repozitorij):&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</source><translation>&lt;li&gt;Preporučeno: &lt;code&gt;{path}&lt;/code&gt; (automatski se stvara pri prvom pokretanju)&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</source><translation>&lt;li&gt;Ili kao varijable okruženja: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; i &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</source><translation>&lt;li&gt;Više detalja: pogledajte upute za implementaciju u izborniku Pomoć.&lt;/li&gt;</translation></message>
     <message><source>Hell</source><translation>Svijetlo</translation></message>
     <message><source>Dunkel</source><translation>Tamno</translation></message>
     <message><source>Sprache</source><translation>Jezik</translation></message>

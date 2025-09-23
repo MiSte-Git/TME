@@ -16,7 +16,7 @@ except Exception:
 import threading
 
 from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent
-from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtGui import QAction, QActionGroup, QIcon
 from functools import partial
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFileDialog,
@@ -437,6 +437,11 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Telegram → ODT mit Emoji & Übersetzung")
+        # App/Icon setzen, wenn vorhanden
+        root = Path(__file__).resolve().parents[1]
+        icon_path = root / "Telegram-LibreOffice.png"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.tabs = QTabWidget()
         self.schedule_tab = ScheduleTab()
         self.lettermap_tab = LettermapTab()

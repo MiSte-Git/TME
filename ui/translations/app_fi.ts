@@ -5,6 +5,21 @@
     <message><source>Schedule</source><translation>Aikataulu</translation></message>
     <message><source>Lettermap</source><translation>Kirjainkartta</translation></message>
     <message><source>Ansicht</source><translation>Näkymä</translation></message>
+    <message><source>Hilfe</source><translation>Ohje</translation></message>
+    <message><source>README öffnen</source><translation>Avaa README</translation></message>
+    <message><source>Deployment-Anleitung öffnen</source><translation>Avaa käyttöönotto-ohje</translation></message>
+    <message><source>PyInstaller-Spezifikation öffnen</source><translation>Avaa PyInstaller-määrittely</translation></message>
+    <message><source>Hinweis: Telegram API-Schlüssel</source><translation>Huomautus: Telegramin API-avaimet</translation></message>
+    <message><source>Datei nicht gefunden: </source><translation>Tiedostoa ei löytynyt: </translation></message>
+    <message><source>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</source><translation>&lt;h3&gt;Telegramin API-avaimet&lt;/h3&gt;</translation></message>
+    <message><source>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</source><translation>&lt;p&gt;Sovellus tarvitsee Telegramin API ID:n ja API Hashin. Näin saat ne:&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</source><translation>&lt;li&gt;Avaa &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; ja kirjaudu sisään.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</source><translation>&lt;li&gt;Siirry kohtaan &lt;b&gt;API development tools&lt;/b&gt; ja luo sovellus.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</source><translation>&lt;li&gt;Kopioi &lt;b&gt;API ID&lt;/b&gt; ja &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</translation></message>
+    <message><source>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</source><translation>&lt;p&gt;Tallennus (ilman vuotoa repositorioon):&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</source><translation>&lt;li&gt;Suositus: &lt;code&gt;{path}&lt;/code&gt; (luodaan automaattisesti ensimmäisellä käynnistyskerralla)&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</source><translation>&lt;li&gt;Tai ympäristömuuttujina: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; ja &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</source><translation>&lt;li&gt;Lisätietoja: katso käyttöönotto-ohje Ohje-valikosta.&lt;/li&gt;</translation></message>
     <message><source>Hell</source><translation>Vaalea</translation></message>
     <message><source>Dunkel</source><translation>Tumma</translation></message>
     <message><source>Sprache</source><translation>Kieli</translation></message>

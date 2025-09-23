@@ -5,6 +5,21 @@
     <message><source>Schedule</source><translation>Horario</translation></message>
     <message><source>Lettermap</source><translation>Mapa de letras</translation></message>
     <message><source>Ansicht</source><translation>Vista</translation></message>
+    <message><source>Hilfe</source><translation>Ayuda</translation></message>
+    <message><source>README öffnen</source><translation>Abrir README</translation></message>
+    <message><source>Deployment-Anleitung öffnen</source><translation>Abrir guía de despliegue</translation></message>
+    <message><source>PyInstaller-Spezifikation öffnen</source><translation>Abrir especificación de PyInstaller</translation></message>
+    <message><source>Hinweis: Telegram API-Schlüssel</source><translation>Nota: claves API de Telegram</translation></message>
+    <message><source>Datei nicht gefunden: </source><translation>Archivo no encontrado: </translation></message>
+    <message><source>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</source><translation>&lt;h3&gt;Claves API de Telegram&lt;/h3&gt;</translation></message>
+    <message><source>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</source><translation>&lt;p&gt;La aplicación necesita el API ID y el API Hash de Telegram. Cómo obtenerlos:&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</source><translation>&lt;li&gt;Abra &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; e inicie sesión.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</source><translation>&lt;li&gt;Vaya a &lt;b&gt;API development tools&lt;/b&gt; y cree una aplicación.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</source><translation>&lt;li&gt;Copie &lt;b&gt;API ID&lt;/b&gt; y &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</translation></message>
+    <message><source>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</source><translation>&lt;p&gt;Almacenamiento (sin filtrarse al repositorio):&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</source><translation>&lt;li&gt;Recomendado: &lt;code&gt;{path}&lt;/code&gt; (se crea automáticamente en el primer inicio)&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</source><translation>&lt;li&gt;O como variables de entorno: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; y &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</source><translation>&lt;li&gt;Más detalles: consulte la guía de despliegue en el menú Ayuda.&lt;/li&gt;</translation></message>
     <message><source>Hell</source><translation>Claro</translation></message>
     <message><source>Dunkel</source><translation>Oscuro</translation></message>
     <message><source>Sprache</source><translation>Idioma</translation></message>

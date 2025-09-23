@@ -5,11 +5,24 @@
     <message><source>Schedule</source><translation>Schedule</translation></message>
     <message><source>Lettermap</source><translation>Lettermap</translation></message>
     <message><source>Ansicht</source><translation>View</translation></message>
+    <message><source>Hilfe</source><translation>Help</translation></message>
+    <message><source>README öffnen</source><translation>Open README</translation></message>
+    <message><source>Deployment-Anleitung öffnen</source><translation>Open Deployment Guide</translation></message>
+    <message><source>PyInstaller-Spezifikation öffnen</source><translation>Open PyInstaller spec</translation></message>
+    <message><source>Hinweis: Telegram API-Schlüssel</source><translation>Note: Telegram API keys</translation></message>
+    <message><source>Datei nicht gefunden: </source><translation>File not found: </translation></message>
+    <message><source>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</source><translation>&lt;h3&gt;Telegram API keys&lt;/h3&gt;</translation></message>
+    <message><source>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</source><translation>&lt;p&gt;The app needs Telegram API ID and API Hash. How to get them:&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</source><translation>&lt;li&gt;Open &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; and sign in.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</source><translation>&lt;li&gt;Go to &lt;b&gt;API development tools&lt;/b&gt; and create an application.&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</source><translation>&lt;li&gt;Copy &lt;b&gt;API ID&lt;/b&gt; and &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</translation></message>
+    <message><source>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</source><translation>&lt;p&gt;Storage (without repo leak):&lt;/p&gt;</translation></message>
+    <message><source>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</source><translation>&lt;li&gt;Recommended: &lt;code&gt;{path}&lt;/code&gt; (created automatically on first run)&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</source><translation>&lt;li&gt;Or as environment variables: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; and &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</translation></message>
+    <message><source>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</source><translation>&lt;li&gt;More details: see Deployment Guide in Help menu.&lt;/li&gt;</translation></message>
     <message><source>Hell</source><translation>Light</translation></message>
     <message><source>Dunkel</source><translation>Dark</translation></message>
     <message><source>Sprache</source><translation>Language</translation></message>
-    <message><source>Deutsch</source><translation>German</translation></message>
-    <message><source>Englisch</source><translation>English</translation></message>
     <message><source>Bitte Anwendung neu starten, um die Sprache zu übernehmen.</source><translation>Please restart the application to apply the language.</translation></message>
   </context>
   <context>
