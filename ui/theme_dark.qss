@@ -48,7 +48,31 @@ QPushButton:disabled {
 }
 
 /* Checkboxes */
-QCheckBox { spacing: 8px; }
+QCheckBox { spacing: 8px; color: #e6e6e6; }
+QCheckBox::indicator {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #ffffff;
+  border-radius: 4px;
+  background: #2f343a;
+}
+QCheckBox::indicator:hover {
+  border-color: #4e9cff;
+  background: #3a3f44;
+}
+QCheckBox::indicator:checked {
+  background: #4e9cff;
+  border-color: #4e9cff;
+  image: url(ui/checkbox-check.svg);
+}
+QCheckBox::indicator:checked:hover {
+  background: #5fa8ff;
+  border-color: #5fa8ff;
+}
+QCheckBox::indicator:checked:disabled { 
+  background: #607a9a; 
+  border-color: #607a9a; 
+}
 
 /* Tabs */
 QTabWidget::pane {
