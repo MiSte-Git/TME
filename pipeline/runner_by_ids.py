@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Tuple, Dict, Callable, Awaitable
 from datetime import datetime
+from dataclasses import dataclass
 import asyncio
 import random
 import json
@@ -15,6 +16,7 @@ from .assets import load_custom_emoji_alts, get_custom_emoji_cache
 from .runs import RunsRecord, build_runs_from_twe, ImageRun, EmojiRun, TextRun, LineBreak
 from .odt_writer import write_odt_for_records
 from .recompose import _text_to_runs as lettermap_text_to_runs
+from .docx_convert import convert_odt_to_docx, DocxConversionError
 
 # YAML optional laden (keine neue Abhängigkeit erforderlich)
 try:
@@ -33,6 +35,24 @@ _JITTER = 0.3
 _CLIENT_TIMEOUT = 20
 _CLIENT_REQUEST_RETRIES = 0
 _CLIENT_AUTO_RECONNECT = True
+
+# --- DOCX Export Defaults ---
+_DOCX_OPTIONS: Dict[str, object] = {
+    "make_docx": False,
+    "converter": None,
+    "out_dir": None,
+    "pandoc_reference_docx": None,
+}
+
+
+@dataclass
+class RunByIdsResult:
+    """Return value for run_by_ids to expose generated artifacts."""
+    odt: Path
+    docx: Path | None = None
+
+    def __str__(self) -> str:  # pragma: no cover - convenience
+        return str(self.odt)
 
 # --- Lettermap Defaults ---
 _LM_CASE_MODE = "upper"   # upper|lower|none
@@ -89,6 +109,24 @@ def _apply_config_overrides(cfg_path: Path = Path("config.yaml")) -> None:
     except Exception:
         # Still defaults
         return
+    try:
+        out_cfg = data.get("output") if isinstance(data, dict) else {}
+        if isinstance(out_cfg, dict):
+            _DOCX_OPTIONS["make_docx"] = bool(out_cfg.get("make_docx", _DOCX_OPTIONS["make_docx"]))
+            conv = out_cfg.get("converter")
+            _DOCX_OPTIONS["converter"] = str(conv).strip() if isinstance(conv, str) and conv.strip() else None
+            out_dir_val = out_cfg.get("out_dir")
+            if isinstance(out_dir_val, str) and out_dir_val.strip():
+                _DOCX_OPTIONS["out_dir"] = out_dir_val.strip()
+            elif out_dir_val is None:
+                _DOCX_OPTIONS["out_dir"] = None
+            ref_doc = out_cfg.get("pandoc_reference_docx")
+            if isinstance(ref_doc, str) and ref_doc.strip():
+                _DOCX_OPTIONS["pandoc_reference_docx"] = ref_doc.strip()
+            elif ref_doc is None:
+                _DOCX_OPTIONS["pandoc_reference_docx"] = None
+    except Exception:
+        pass
 
 
 # Konfigurationswerte (falls vorhanden) anwenden
@@ -191,7 +229,7 @@ async def run_by_ids(
     target_lang: str = "de",
     include_images: bool = True,
     include_emojis: bool = True,
-) -> Path:
+) -> RunByIdsResult:
     """
     Baut pro #Gruppe erst Originale und – falls translate=True – danach die Übersetzungen als eigenen Block ("Titel - DE").
     translation_mode wird aktuell nicht differenziert (inline/end/separate → inline-artiger Block je Gruppe).
@@ -657,6 +695,28 @@ async def run_by_ids(
 
     write_odt_for_records(records, out_path, styles, doc_title=doc_title)
 
+    docx_path: Path | None = None
+    if _DOCX_OPTIONS.get("make_docx"):
+        prefer = _DOCX_OPTIONS.get("converter")
+        out_dir_cfg = _DOCX_OPTIONS.get("out_dir")
+        ref_doc_cfg = _DOCX_OPTIONS.get("pandoc_reference_docx")
+        try:
+            docx_outdir = Path(out_dir_cfg).expanduser() if isinstance(out_dir_cfg, str) else Path(out_path).parent
+            ref_doc = Path(ref_doc_cfg).expanduser() if isinstance(ref_doc_cfg, str) else None
+            docx_path = convert_odt_to_docx(
+                out_path,
+                outdir=docx_outdir,
+                prefer=str(prefer) if isinstance(prefer, str) else None,
+                reference_docx=ref_doc,
+            )
+            print(f"[docx] Export gespeichert: {docx_path}")
+        except DocxConversionError as exc:
+            print(f"[docx] Konvertierung übersprungen: {exc}")
+        except FileNotFoundError as exc:
+            print(f"[docx] Referenzdatei nicht gefunden: {exc}")
+        except Exception as exc:
+            print(f"[docx] Unerwarteter Fehler bei der Konvertierung: {exc}")
+
     # Report für fehlende Zuordnungen (nur schreiben, kein UI nachträglich öffnen)
     try:
         if missing_letters:
@@ -667,4 +727,4 @@ async def run_by_ids(
     except Exception:
         pass
 
-    return out_path
+    return RunByIdsResult(odt=out_path, docx=docx_path)

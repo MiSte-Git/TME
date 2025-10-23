@@ -48,3 +48,9 @@ retry:
   backoff: 1.6           # Exponentieller Backoff-Faktor
   initial_delay: 0.8     # Startwartezeit (Sekunden)
   jitter: 0.3            # Zufallsanteil (Sekunden)
+
+output:
+  make_docx: true                # true = nach ODT automatisch DOCX erzeugen
+  converter: libreoffice         # libreoffice | pandoc | null (Auto-Auswahl)
+  out_dir: null                  # null = gleiche wie ODT, sonst Zielverzeichnis
+  pandoc_reference_docx: null    # optional; nur für pandoc (z.B. ./tmpl/reference.docx)
