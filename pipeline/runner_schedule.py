@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 
@@ -137,6 +137,42 @@ async def _collect_messages_for_schedule(
     schedule: ScheduleDocument,
     local_tz: Optional[str],
 ) -> tuple[List[CollectedMessage], set[str]]:
+    from zoneinfo import ZoneInfo
+
+    tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
+    try:
+        tzinfo = ZoneInfo(tz_name)
+    except Exception:
+        tzinfo = timezone.utc
+
+    from .fetch import parse_topic_from_link
+
+    def _extract_topic_from_section(section) -> tuple[Optional[int], Optional[Any]]:
+        """Ermittelt Topic-bezogene Informationen für eine Section.
+
+        Rückgabe:
+            (topic_id, source):
+                - topic_id: Telegram-Thread-ID (top_msg_id) oder None
+                - source: der Link/Channel-String, aus dem das Topic ermittelt wurde
+        """
+        # 1) Section-spezifischer Channel kann ein Topic-Link sein
+        if section.channel:
+            tid, _ = parse_topic_from_link(str(section.channel))
+            if tid is not None:
+                return tid, section.channel
+        # 2) Default-Channel aus dem Schedule kann ein Topic-Link sein
+        if schedule.default_channel:
+            tid, _ = parse_topic_from_link(str(schedule.default_channel))
+            if tid is not None:
+                return tid, schedule.default_channel
+        # 3) Falls genau ein Link in der Section vorhanden ist, der ein Topic referenziert,
+        #    verwenden wir diesen als Quelle für das Topic, ignorieren aber seine konkrete msg_id
+        links = [lnk for lnk in (section.links or []) if lnk]
+        if len(links) == 1:
+            tid, _ = parse_topic_from_link(str(links[0]))
+            if tid is not None:
+                return tid, links[0]
+        return None, None
     collected: List[CollectedMessage] = []
     used_doc_ids: set[str] = set()
     debug_dir = Path("data/debug")
@@ -170,6 +206,26 @@ async def _collect_messages_for_schedule(
                     msg = await _with_retries("get_messages", lambda: client.get_messages(entity, ids=msg_id))
                     if not msg:
                         continue
+                    # DEBUG: Topic- und Datumsstruktur dieser Nachricht ausgeben
+                    try:
+                        rto = getattr(msg, "reply_to", None)
+                        debug_msg = {
+                            "id": int(getattr(msg, "id", 0)),
+                            "date": str(getattr(msg, "date", "")),
+                            "date_type": str(type(getattr(msg, "date", None)).__name__),
+                            "reply_to": {
+                                "type": type(rto).__name__ if rto is not None else None,
+                                "forum_topic": getattr(rto, "forum_topic", None),
+                                "top_msg_id": getattr(rto, "top_msg_id", None),
+                                "reply_to_msg_id": getattr(rto, "reply_to_msg_id", None),
+                            },
+                            "forum_topic_id": getattr(msg, "forum_topic_id", None),
+                            "peer_type": type(getattr(msg, "peer_id", None)).__name__,
+                            "peer_data": str(getattr(msg, "peer_id", None)),
+                        }
+                        print("DEBUG_TOPIC_MSG:", json.dumps(debug_msg, ensure_ascii=False))
+                    except Exception:
+                        pass
                     link_url = _build_message_link(entity, msg, original_link=link)
                     collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url))
                     twe_tmp = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
@@ -209,14 +265,19 @@ async def _collect_messages_for_schedule(
 
         # fetch by date
         default_channel = section.channel or schedule.default_channel
+
+        # Prüfen, ob für diese Section ein Topic (Thread) abgeleitet werden kann
+        topic_id, topic_source = _extract_topic_from_section(section)
         key = _get_default_entity_key(default_channel)
         if key is None:
             continue
         if key not in default_entity_cache:
+            # Wenn der Default-Channel selbst ein Topic-Link ist, extrahieren wir nur den Basis-Channel
+            # (parse_topic_from_link liefert in diesem Fall die Peer-ID bereits korrekt)
             raw = parse_channel(default_channel)
             entity = await _ensure_entity(raw)
             if not entity:
-                _notify(f"Hinweis: Kanal '{default_channel}' konnte nicht geladen werden.")
+                print(f"Hinweis: Kanal '{default_channel}' konnte nicht geladen werden.")
                 default_entity_cache[key] = None
             else:
                 default_entity_cache[key] = entity
@@ -230,6 +291,7 @@ async def _collect_messages_for_schedule(
         start_dt, end_dt = _build_day_time_range(section.date, section.start_time, section.end_time)
         start_time_str = section.start_time or start_dt.strftime("%H:%M:%S")
         end_time_str = section.end_time or end_dt.strftime("%H:%M:%S")
+        # Wenn ein Topic erkannt wurde, filtern wir nachträglich auf Nachrichten, die zu diesem Topic gehören.
         msgs = await fetch_messages_for_day(
             client,
             entity,
@@ -238,8 +300,26 @@ async def _collect_messages_for_schedule(
             start_time=start_time_str,
             end_time=end_time_str,
         )  # type: ignore[arg-type]
+
+        if topic_id is not None:
+            filtered = []
+            for msg in msgs or []:
+                try:
+                    # Bei Foren-Topics ist reply_to.forum_topic True und reply_to.reply_to_msg_id == top_msg_id des Topics
+                    rto = getattr(msg, "reply_to", None)
+                    if rto is None:
+                        continue
+                    is_forum = bool(getattr(rto, "forum_topic", False))
+                    base_id = getattr(rto, "top_msg_id", None)
+                    if base_id is None:
+                        base_id = getattr(rto, "reply_to_msg_id", None)
+                    if is_forum and base_id is not None and int(base_id) == int(topic_id):
+                        filtered.append(msg)
+                except Exception:
+                    continue
+            msgs = filtered
         if not msgs:
-            _notify(f"Hinweis: Keine Nachrichten für {heading} gefunden.")
+            print(f"Hinweis: Keine Nachrichten für {heading} gefunden.")
             continue
         for msg in msgs:
             link_url = _build_message_link(entity, msg)
@@ -288,6 +368,7 @@ async def run_schedule(
     target_lang: str = "de",
     include_images: bool = True,
     include_emojis: bool = True,
+    source_lang: str | None = None,
     config_path: Path = Path("config.yaml"),
     local_tz_override: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
@@ -307,8 +388,9 @@ async def run_schedule(
     cfg = _load_config(config_path)
 
     # Determine language codes for filenames
-    source_lang = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "EN").strip()
-    source_up = (source_lang or "EN").upper()
+    cfg_source = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "").strip()
+    eff_source = (source_lang or cfg_source or "EN")
+    source_up = eff_source.upper()
     lang_up = target_lang.upper() if isinstance(target_lang, str) and target_lang else "DE"
 
     # Resolve Telegram API credentials (env → config)
@@ -757,6 +839,15 @@ async def run_schedule(
         pending_inline_translations: List[RunsRecord] = []
         previous_title: Optional[str] = None
         mode_norm = (translation_mode or "inline").strip().lower()
+
+        # Zeitzonenobjekt für Zeitstempel in der ODT-Ausgabe
+        from zoneinfo import ZoneInfo
+
+        tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
+        try:
+            tzinfo = ZoneInfo(tz_name)
+        except Exception:
+            tzinfo = timezone.utc
         if mode_norm not in ("inline", "end", "separate"):
             mode_norm = "inline"
         lang_up = target_lang.upper()
@@ -767,6 +858,62 @@ async def run_schedule(
                     pending_inline_translations.clear()
             msg = item.message
             runs_list: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
+
+            # Zeitstempel + Medientyp als erste Zeile pro Nachricht einfügen
+            try:
+                dt = getattr(msg, "date", None)
+                if hasattr(dt, "astimezone"):
+                    local_dt = dt.astimezone(tzinfo)
+                    time_str = local_dt.strftime("%H:%M:%S")
+                else:
+                    time_str = "--:--:--"
+            except Exception:
+                time_str = "--:--:--"
+
+            media_type_parts: list[str] = []
+            try:
+                from telethon.tl.types import MessageMediaPhoto, DocumentAttributeSticker
+
+                is_photo = isinstance(getattr(msg, "media", None), MessageMediaPhoto)
+                is_image_doc = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("image/"))
+                is_video = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("video/"))
+                is_audio = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("audio/"))
+                is_voice = bool(getattr(msg, "document", None) and "voice" in (getattr(msg.document, "mime_type", "") or ""))
+                is_file = bool(getattr(msg, "document", None) and not (is_image_doc or is_video or is_audio or is_voice))
+                is_sticker = False
+                if getattr(msg, "document", None):
+                    for attr in (msg.document.attributes or []):
+                        if isinstance(attr, DocumentAttributeSticker):
+                            is_sticker = True
+                            break
+
+                if is_photo or is_image_doc or is_sticker:
+                    media_type_parts.append("Bild")
+                if is_video:
+                    media_type_parts.append("Video")
+                if is_audio or is_voice:
+                    media_type_parts.append("Audio")
+                if is_file:
+                    media_type_parts.append("Datei")
+                if getattr(msg, "media", None) is not None and not media_type_parts:
+                    media_type_parts.append("Anhang")
+            except Exception:
+                pass
+
+            if getattr(msg, "message", None) and str(msg.message).strip():
+                has_text = True
+            else:
+                has_text = False
+
+            if media_type_parts and not has_text:
+                media_type_parts.append("(ohne Text)")
+
+            header_text = time_str
+            if media_type_parts:
+                header_text += " – " + ", ".join(media_type_parts)
+
+            runs_list.append(TextRun(kind="TextRun", text=header_text))
+            runs_list.append(LineBreak(kind="LineBreak"))
             lm_for_group = _rbi._LM_IN_ORIGINAL or ("[LM]" in str(item.title).upper())
 
             if include_images:

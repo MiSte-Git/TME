@@ -51,6 +51,7 @@ class ScheduleWorker(QObject):
         include_emojis: bool,
         mapping_event: threading.Event,
         lettermap_enabled: bool = False,
+        source_lang: str = "de",
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -61,6 +62,7 @@ class ScheduleWorker(QObject):
         self.include_emojis = include_emojis
         self._mapping_event = mapping_event
         self.lettermap_enabled = lettermap_enabled
+        self.source_lang = source_lang
 
     def run(self) -> None:
         try:
@@ -90,6 +92,7 @@ class ScheduleWorker(QObject):
                 target_lang=self.target_lang,
                 include_images=self.include_images,
                 include_emojis=self.include_emojis,
+                source_lang=self.source_lang,
                 config_path=Path("config.yaml"),
                 progress_cb=_cb,
                 skip_lettermap_ui=True,
@@ -137,15 +140,20 @@ class ScheduleTab(QWidget):
         opt_lay.setSpacing(8)
         self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
+        # Quellsprachen-Auswahl für Dateiname (entspricht Sprachleiste)
+        self.src_lang_combo = QComboBox(); self.src_lang_combo.addItems(["de", "en", "fr", "it", "ru", "pl", "es", "hr", "nl", "fi"])
         self.lang_edit = QLineEdit(); self.lang_edit.setPlaceholderText("de")
         self.cb_images = QCheckBox(self.tr("Bilder einbetten")); self.cb_images.setChecked(True)
         self.cb_emojis = QCheckBox(self.tr("Custom Emojis einbetten")); self.cb_emojis.setChecked(True)
         self.cb_lettermap = QCheckBox(self.tr("Lettermapping aktivieren")); self.cb_lettermap.setChecked(False)
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
+        self.lbl_src_lang = QLabel(self.tr("Quellsprache (Dateiname):"))
         opt_lay.addWidget(self.cb_translate)
         opt_lay.addWidget(self.lbl_mode)
         opt_lay.addWidget(self.mode_combo)
+        opt_lay.addWidget(self.lbl_src_lang)
+        opt_lay.addWidget(self.src_lang_combo)
         opt_lay.addWidget(self.lbl_lang)
         opt_lay.addWidget(self.lang_edit)
         opt_lay.addWidget(self.cb_images)
@@ -254,6 +262,7 @@ class ScheduleTab(QWidget):
         self.lbl_schedule.setText(self.tr("Telegram-Export:"))
         self.cb_translate.setText(self.tr("Übersetzen"))
         self.lbl_mode.setText(self.tr("Modus:"))
+        self.lbl_src_lang.setText(self.tr("Quellsprache (Dateiname):"))
         self.lbl_lang.setText(self.tr("Sprache:"))
         self.cb_images.setText(self.tr("Bilder einbetten"))
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
@@ -293,6 +302,7 @@ class ScheduleTab(QWidget):
             return
         translate = self.cb_translate.isChecked()
         target_lang = self.lang_edit.text().strip() or ("de" if translate else "de")
+        source_lang = self.src_lang_combo.currentText().strip() or "de"
         self.btn_run.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
@@ -312,6 +322,7 @@ class ScheduleTab(QWidget):
             include_emojis=self.cb_emojis.isChecked(),
             mapping_event=self._mapping_event,
             lettermap_enabled=self.cb_lettermap.isChecked(),
+            source_lang=source_lang,
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -440,6 +451,7 @@ class ScheduleTab(QWidget):
         self.schedule_edit.editingFinished.connect(self._save_state)
         self.cb_translate.toggled.connect(lambda _checked: self._save_state())
         self.mode_combo.currentTextChanged.connect(lambda _text: self._save_state())
+        self.src_lang_combo.currentTextChanged.connect(lambda _text: self._save_state())
         self.lang_edit.editingFinished.connect(self._save_state)
         self.cb_images.toggled.connect(lambda _checked: self._save_state())
         self.cb_emojis.toggled.connect(lambda _checked: self._save_state())
@@ -469,6 +481,11 @@ class ScheduleTab(QWidget):
             lang = data.get("lang")
             if isinstance(lang, str):
                 self.lang_edit.setText(lang)
+            src_lang = data.get("source_lang")
+            if isinstance(src_lang, str):
+                idx = self.src_lang_combo.findText(src_lang)
+                if idx >= 0:
+                    self.src_lang_combo.setCurrentIndex(idx)
             include_images = data.get("include_images")
             if isinstance(include_images, bool):
                 self.cb_images.setChecked(include_images)
@@ -491,6 +508,7 @@ class ScheduleTab(QWidget):
             "translate": self.cb_translate.isChecked(),
             "mode": self.mode_combo.currentText(),
             "lang": self.lang_edit.text().strip(),
+            "source_lang": self.src_lang_combo.currentText().strip(),
             "include_images": self.cb_images.isChecked(),
             "include_emojis": self.cb_emojis.isChecked(),
             "lettermap_enabled": self.cb_lettermap.isChecked(),

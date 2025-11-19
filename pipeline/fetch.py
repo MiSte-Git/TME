@@ -11,6 +11,8 @@ import json, re
 from typing import List, Dict, Any, Tuple, Union
 from urllib.parse import urlparse
 
+from typing import Optional
+
 from telethon import TelegramClient, functions
 
 Peer = Union[str, int]
@@ -76,8 +78,47 @@ def parse_link(link: str) -> Tuple[Peer, int]:
     if not parts:
         raise ValueError("Ungültiger Link: " + link)
     if parts[0] == 'c':
-        return int('-100' + parts[1]), int(parts[2])
+        # Mögliche Formen:
+        # - /c/<chan>/<msg>
+        # - /c/<chan>/<topic>/<msg>
+        if len(parts) >= 3 and parts[1].isdigit() and parts[-1].isdigit():
+            return int('-100' + parts[1]), int(parts[-1])
+        raise ValueError("Ungültiger c-Link: " + link)
     return parts[0], int(parts[1])
+
+
+def parse_topic_from_link(link: str) -> Tuple[Optional[int], Optional[Peer]]:
+    """Extrahiert optional eine Topic-ID aus einem Telegram-Link.
+
+    Unterstützte Formen:
+      - https://t.me/c/<chan>/<topic>/<msg>
+      - https://t.me/c/<chan>/<topic>
+
+    Rückgabe:
+      (topic_id, peer):
+        - topic_id: Topic-/Thread-ID oder None, falls kein Topic erkennbar
+        - peer: die Chat-/Channel-ID (als Peer), falls ermittelbar
+    """
+    try:
+        u = urlparse(link.strip())
+    except Exception:
+        return None, None
+    parts = [p for p in u.path.split('/') if p]
+    if not parts:
+        return None, None
+    if parts[0] != 'c' or len(parts) < 3:
+        return None, None
+    # /c/<chan>/<topic>/[msg?]
+    chan_part = parts[1]
+    topic_part = parts[2]
+    if not chan_part.isdigit() or not topic_part.isdigit():
+        return None, None
+    try:
+        peer: Peer = int('-100' + chan_part)
+        topic_id = int(topic_part)
+        return topic_id, peer
+    except Exception:
+        return None, None
 
 
 async def ensure_join_channel(client: TelegramClient, entity: Any) -> None:
@@ -93,3 +134,4 @@ def collect_from_urls(urls: List[str]) -> List[MessageRecord]:
     Platzhalter: Hier später Telethon einbauen. Aktuell nur Interface.
     """
     raise NotImplementedError("fetch.collect_from_urls: Telethon-Implementierung fehlt")
+
