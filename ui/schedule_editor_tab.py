@@ -50,9 +50,16 @@ class ScheduleEditorTab(QWidget):
         lay.addLayout(doc_bar)
 
         # Sections table
-        self.table = QTableWidget(0, 6)
+        # Spalten: Datum, Von, Bis, Titel, Untertitel, Links, Nach Datum holen, Kanal
+        self.table = QTableWidget(0, 8)
+        # Bedienbarkeit verbessern: horizontales Scrollen erlauben, Spalten manuell resizebar,
+        # und Zeilenumbruch in den Titelzellen.
+        self.table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.table.setHorizontalHeaderLabels([
-            self.tr("Datum (YYYY-MM-DD)"),
+            self.tr("Datum\n(YYYY-MM-DD)"),
+            self.tr("Von\n(HH:MM[:SS])"),
+            self.tr("Bis\n(HH:MM[:SS])"),
             self.tr("Titel"),
             self.tr("Untertitel (optional)"),
             self.tr("Links (mit ; trennen)"),
@@ -61,12 +68,32 @@ class ScheduleEditorTab(QWidget):
         ])
         self.table.verticalHeader().setVisible(False)
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(1, QHeaderView.Stretch)
-        hh.setSectionResizeMode(2, QHeaderView.Stretch)
-        hh.setSectionResizeMode(3, QHeaderView.Stretch)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(5, QHeaderView.Stretch)
+        # Alle Spalten sind manuell größenveränderbar; breite Texte können durch
+        # horizontales Scrollen vollständig gelesen werden.
+        hh.setSectionResizeMode(QHeaderView.Interactive)
+        # Startbreiten sinnvoll vorgeben (können vom Nutzer angepasst werden)
+        # Datum/Zeiten relativ schmal halten, damit Überschriften mit Zeilenumbruch gut lesbar sind
+        hh.resizeSection(0, 120)  # Datum
+        hh.resizeSection(1, 90)   # Von
+        hh.resizeSection(2, 90)   # Bis
+        hh.resizeSection(3, 260)  # Titel
+        hh.resizeSection(4, 260)  # Untertitel
+        hh.resizeSection(5, 320)  # Links
+        hh.resizeSection(6, 130)  # Nach Datum holen
+        hh.resizeSection(7, 220)  # Kanal
+        # Tooltips für Spaltentitel
+        hh.setToolTip(self.tr("Schedule-Spalten"))
+        hh.setSectionsClickable(True)
+        model = hh.model()
+        if model is not None:
+            model.setHeaderData(0, Qt.Horizontal, self.tr("Datum im Format YYYY-MM-DD"), Qt.ToolTipRole)
+            model.setHeaderData(1, Qt.Horizontal, self.tr("Startzeit im Format HH:MM oder HH:MM:SS"), Qt.ToolTipRole)
+            model.setHeaderData(2, Qt.Horizontal, self.tr("Endzeit im Format HH:MM oder HH:MM:SS"), Qt.ToolTipRole)
+            model.setHeaderData(3, Qt.Horizontal, self.tr("Titel des Abschnitts"), Qt.ToolTipRole)
+            model.setHeaderData(4, Qt.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ToolTipRole)
+            model.setHeaderData(5, Qt.Horizontal, self.tr("Telegram-Links; mehrere mit ; trennen"), Qt.ToolTipRole)
+            model.setHeaderData(6, Qt.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden"), Qt.ToolTipRole)
+            model.setHeaderData(7, Qt.Horizontal, self.tr("Spezifischer Kanal für diesen Abschnitt (optional)"), Qt.ToolTipRole)
         lay.addWidget(self.table)
 
         # Section actions
@@ -115,7 +142,9 @@ class ScheduleEditorTab(QWidget):
         self.title_edit.setPlaceholderText(self.tr("Dokumenttitel (optional)"))
         self.default_channel_edit.setPlaceholderText(self.tr("Default-Channel (@name oder Link, optional)"))
         self.table.setHorizontalHeaderLabels([
-            self.tr("Datum (YYYY-MM-DD)"),
+            self.tr("Datum\n(YYYY-MM-DD)"),
+            self.tr("Von\n(HH:MM[:SS])"),
+            self.tr("Bis\n(HH:MM[:SS])"),
             self.tr("Titel"),
             self.tr("Untertitel (optional)"),
             self.tr("Links (mit ; trennen)"),
@@ -164,13 +193,24 @@ class ScheduleEditorTab(QWidget):
             for sec in sched.sections:
                 row = self.table.rowCount(); self.table.insertRow(row)
                 self.table.setItem(row, 0, QTableWidgetItem(sec.date.strftime(ISO_DATE_FMT)))
-                self.table.setItem(row, 1, QTableWidgetItem(sec.title))
-                self.table.setItem(row, 2, QTableWidgetItem(sec.subheading or ""))
-                self.table.setItem(row, 3, QTableWidgetItem(";".join(sec.links)))
+                # Zeiten; wenn nicht gesetzt, Defaults anzeigen
+                from_time = sec.start_time or "00:00:00"
+                to_time = sec.end_time or "23:59:59"
+                self.table.setItem(row, 1, QTableWidgetItem(from_time))
+                self.table.setItem(row, 2, QTableWidgetItem(to_time))
+                it_title = QTableWidgetItem(sec.title)
+                # Zeilenumbruch in Titelzellen erlauben, damit lange Titel lesbarer sind
+                it_title.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                self.table.setItem(row, 3, it_title)
+
+                it_sub = QTableWidgetItem(sec.subheading or "")
+                it_sub.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                self.table.setItem(row, 4, it_sub)
+                self.table.setItem(row, 5, QTableWidgetItem(";".join(sec.links)))
                 cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemIsUserCheckable)
                 cb.setCheckState(Qt.Checked if sec.fetch_by_date else Qt.Unchecked)
-                self.table.setItem(row, 4, cb)
-                self.table.setItem(row, 5, QTableWidgetItem(sec.channel or ""))
+                self.table.setItem(row, 6, cb)
+                self.table.setItem(row, 7, QTableWidgetItem(sec.channel or ""))
         finally:
             self._building = False
 
@@ -180,14 +220,16 @@ class ScheduleEditorTab(QWidget):
         sections: List[ScheduleSection] = []
         for row in range(self.table.rowCount()):
             date_text = (self.table.item(row, 0).text() if self.table.item(row, 0) else "").strip()
-            title_text = (self.table.item(row, 1).text() if self.table.item(row, 1) else "").strip()
-            sub_text = (self.table.item(row, 2).text() if self.table.item(row, 2) else "").strip() or None
-            links_text = (self.table.item(row, 3).text() if self.table.item(row, 3) else "").strip()
-            fetch_item = self.table.item(row, 4)
+            from_text = (self.table.item(row, 1).text() if self.table.item(row, 1) else "").strip() or "00:00:00"
+            to_text = (self.table.item(row, 2).text() if self.table.item(row, 2) else "").strip() or "23:59:59"
+            title_text = (self.table.item(row, 3).text() if self.table.item(row, 3) else "").strip()
+            sub_text = (self.table.item(row, 4).text() if self.table.item(row, 4) else "").strip() or None
+            links_text = (self.table.item(row, 5).text() if self.table.item(row, 5) else "").strip()
+            fetch_item = self.table.item(row, 6)
             fetch_flag = True
             if fetch_item and fetch_item.flags() & Qt.ItemIsUserCheckable:
                 fetch_flag = (fetch_item.checkState() == Qt.Checked)
-            channel_text = (self.table.item(row, 5).text() if self.table.item(row, 5) else "").strip() or None
+            channel_text = (self.table.item(row, 7).text() if self.table.item(row, 7) else "").strip() or None
             # Validation
             try:
                 date_obj = parse_date(date_text)
@@ -196,7 +238,17 @@ class ScheduleEditorTab(QWidget):
             if not title_text:
                 raise ValueError(self.tr("Titel fehlt in Zeile {row}").format(row=row+1))
             links = [seg.strip() for seg in links_text.split(";") if seg.strip()]
-            sections.append(ScheduleSection(date=date_obj, title=title_text, subheading=sub_text, links=links, fetch_by_date=bool(fetch_flag), channel=channel_text))
+            # Zeiten als Strings speichern; Validierung übernimmt schedule_json.
+            sections.append(ScheduleSection(
+                date=date_obj,
+                title=title_text,
+                subheading=sub_text,
+                start_time=from_text,
+                end_time=to_text,
+                links=links,
+                fetch_by_date=bool(fetch_flag),
+                channel=channel_text,
+            ))
         return ScheduleDocument(document_title=title, default_channel=default_channel, sections=sections)
 
     def _save_doc(self) -> None:
@@ -236,13 +288,20 @@ class ScheduleEditorTab(QWidget):
         # Initialize with today template
         from datetime import date
         self.table.setItem(row, 0, QTableWidgetItem(date.today().strftime(ISO_DATE_FMT)))
-        self.table.setItem(row, 1, QTableWidgetItem(""))
-        self.table.setItem(row, 2, QTableWidgetItem(""))
-        self.table.setItem(row, 3, QTableWidgetItem(""))
+        # Default-Zeiten: ganzer Tag
+        self.table.setItem(row, 1, QTableWidgetItem("00:00:00"))
+        self.table.setItem(row, 2, QTableWidgetItem("23:59:59"))
+        it_title = QTableWidgetItem("")
+        it_title.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.table.setItem(row, 3, it_title)
+        it_sub = QTableWidgetItem("")
+        it_sub.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.table.setItem(row, 4, it_sub)
+        self.table.setItem(row, 5, QTableWidgetItem(""))
         cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemIsUserCheckable)
         cb.setCheckState(Qt.Checked)
-        self.table.setItem(row, 4, cb)
-        self.table.setItem(row, 5, QTableWidgetItem(""))
+        self.table.setItem(row, 6, cb)
+        self.table.setItem(row, 7, QTableWidgetItem(""))
 
     def _remove_row(self) -> None:
         row = self.table.currentRow()

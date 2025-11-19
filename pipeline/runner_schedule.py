@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable
 
@@ -111,6 +111,27 @@ def _build_message_link(entity: Any, message: Any, original_link: Optional[str] 
     return f"https://t.me/c/{chan_str}/{msg_id}"
 
 
+def _build_day_time_range(date_obj, start_time_str: str | None, end_time_str: str | None) -> tuple[datetime, datetime]:
+    """Erzeugt UTC-nahe Datetime-Grenzen aus Datum + Zeitstrings ("HH:MM:SS").
+
+    Die tatsächliche Zeitzone/Umrechnung übernimmt `fetch_messages_for_day`/Telegram.
+    Hier wird nur eine saubere lokale Range produziert, falls spätere Filter nötig werden.
+    """
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(DEFAULT_LOCAL_TZ or "UTC")
+    try:
+        st_parts = [int(p) for p in (start_time_str or "00:00:00").split(":")]
+        et_parts = [int(p) for p in (end_time_str or "23:59:59").split(":")]
+        st = time(*st_parts[:3])
+        et = time(*et_parts[:3])
+    except Exception:
+        st = time(0, 0, 0)
+        et = time(23, 59, 59)
+    start_dt = datetime.combine(date_obj, st, tzinfo=tz)
+    end_dt = datetime.combine(date_obj, et, tzinfo=tz)
+    return start_dt, end_dt
+
+
 async def _collect_messages_for_schedule(
     client: TelegramClient,
     schedule: ScheduleDocument,
@@ -205,7 +226,18 @@ async def _collect_messages_for_schedule(
         if fetch_messages_for_day is None:
             raise RuntimeError("fetch_messages_for_day ist nicht verfügbar.")
         day_str = section.date.strftime("%d/%m/%Y")
-        msgs = await fetch_messages_for_day(client, entity, day_str, tz=local_tz)  # type: ignore[arg-type]
+        # Zeitfenster pro Sektion zur tatsächlichen Filterung der Nachrichten
+        start_dt, end_dt = _build_day_time_range(section.date, section.start_time, section.end_time)
+        start_time_str = section.start_time or start_dt.strftime("%H:%M:%S")
+        end_time_str = section.end_time or end_dt.strftime("%H:%M:%S")
+        msgs = await fetch_messages_for_day(
+            client,
+            entity,
+            day_str,
+            tz=local_tz,
+            start_time=start_time_str,
+            end_time=end_time_str,
+        )  # type: ignore[arg-type]
         if not msgs:
             _notify(f"Hinweis: Keine Nachrichten für {heading} gefunden.")
             continue

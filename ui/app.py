@@ -860,7 +860,8 @@ def main() -> None:
     _apply_language(app, _load_language_preference())
 
     w = MainWindow()
-    w.resize(900, 420)
+    # Standardfensterhöhe um ca. 15 % erhöhen (von 420 auf 483)
+    w.resize(900, 483)
     w.show()
     sys.exit(app.exec())
 

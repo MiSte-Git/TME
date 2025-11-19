@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -36,6 +36,27 @@ def _dump_date(value: date) -> str:
     return value.strftime(ISO_DATE_FMT)
 
 
+def _parse_time_optional(text: Any) -> Optional[str]:
+    """Akzeptiert None oder Zeitstrings 'HH:MM[:SS]' und gibt normalisierte 'HH:MM:SS'-Strings zurück.
+
+    Für leere oder ungültige Werte wird None zurückgegeben – der Aufrufer setzt dann Defaults.
+    """
+    if text is None:
+        return None
+    s = str(text).strip()
+    if not s:
+        return None
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            t = datetime.strptime(s, fmt).time()
+            return t.strftime("%H:%M:%S")
+        except ValueError:
+            continue
+    # Ungültiges Format → None (Aufrufer interpretiert als voller Tag)
+    return None
+
+
+
 def _normalize_links(raw: Any) -> List[str]:
     if raw is None:
         return []
@@ -57,6 +78,11 @@ class ScheduleSection:
     date: date
     title: str
     subheading: Optional[str] = None
+    # Optionale Zeitfenster; intern als normalisierte "HH:MM:SS"-Strings gehalten.
+    # Legacy-Schedules ohne diese Felder werden als voller Tag interpretiert
+    # (00:00:00–23:59:59) – diese Defaults werden beim Laden gesetzt.
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
     links: List[str] = field(default_factory=list)
     fetch_by_date: bool = True
     heading_override: Optional[str] = None
@@ -79,16 +105,24 @@ class ScheduleDocument:
             "document_title": self.document_title,
             "default_channel": self.default_channel,
             "sections": [
-                {
-                    "date": _dump_date(section.date),
-                    "title": section.title,
-                    "subheading": section.subheading,
-                    "links": _links_to_string(section.links),
-                    "fetch_by_date": bool(section.fetch_by_date),
-                }
-                for section in self.sections
+                self._section_to_json_dict(section) for section in self.sections
             ],
         }
+
+    @staticmethod
+    def _section_to_json_dict(section: ScheduleSection) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "date": _dump_date(section.date),
+            "title": section.title,
+            "subheading": section.subheading,
+            "links": _links_to_string(section.links),
+            "fetch_by_date": bool(section.fetch_by_date),
+        }
+        # Zeitfenster immer explizit mitschreiben, damit das Schema klar ist.
+        # Falls None, werden die Defaults (ganzer Tag) beim erneuten Laden gesetzt.
+        data["startTime"] = section.start_time
+        data["endTime"] = section.end_time
+        return data
 
 
 def load_schedule_document(path: Any) -> ScheduleDocument:
@@ -102,7 +136,10 @@ def load_schedule_document(path: Any) -> ScheduleDocument:
     for idx, raw in enumerate(sections_data):
         if not isinstance(raw, dict):
             raise ValueError(f"sections[{idx}] muss ein Objekt sein")
-        date_value = _parse_date(raw.get("date"))
+        date_raw = raw.get("date")
+        if date_raw is None:
+            raise ValueError(f"sections[{idx}] benötigt ein 'date'-Feld")
+        date_value = _parse_date(str(date_raw))
         title_value = (raw.get("title") or "").strip()
         if not title_value:
             raise ValueError(f"sections[{idx}] benötigt ein 'title'-Feld")
@@ -112,10 +149,19 @@ def load_schedule_document(path: Any) -> ScheduleDocument:
             fetch_flag = not bool(links)
         else:
             fetch_flag = bool(fetch_by_date)
+        # Zeitfenster laden; fehlende Felder werden auf Defaults für "ganzer Tag" gesetzt.
+        start_norm = _parse_time_optional(raw.get("startTime"))
+        end_norm = _parse_time_optional(raw.get("endTime"))
+        if start_norm is None:
+            start_norm = time(0, 0, 0).strftime("%H:%M:%S")
+        if end_norm is None:
+            end_norm = time(23, 59, 59).strftime("%H:%M:%S")
         section = ScheduleSection(
             date=date_value,
             title=title_value,
             subheading=(raw.get("subheading") or None),
+            start_time=start_norm,
+            end_time=end_norm,
             links=links,
             fetch_by_date=fetch_flag,
         )
@@ -189,15 +235,25 @@ def blocks_to_schedule(
             title = item[1] if len(item) >= 2 else ""
             links = list(item[2]) if len(item) >= 3 else []
             fetch_flag = not (len(item) >= 4 and bool(item[3]))
-            date_obj = _parse_date(day_raw)
+            if day_raw is None:
+                raise ValueError("Block-Eintrag ohne Datum (item[0]) ist ungültig")
+            date_obj = _parse_date(str(day_raw))
             metadata = item[5] if len(item) >= 6 and isinstance(item[5], dict) else {}
             heading = metadata.get("heading")
             subheading = metadata.get("subheading")
             section_channel = metadata.get("channel") or channel
+            start_norm = _parse_time_optional(metadata.get("startTime"))
+            end_norm = _parse_time_optional(metadata.get("endTime"))
+            if start_norm is None:
+                start_norm = time(0, 0, 0).strftime("%H:%M:%S")
+            if end_norm is None:
+                end_norm = time(23, 59, 59).strftime("%H:%M:%S")
             section = ScheduleSection(
                 date=date_obj,
                 title=title,
                 subheading=subheading,
+                start_time=start_norm,
+                end_time=end_norm,
                 links=links,
                 fetch_by_date=fetch_flag,
                 heading_override=heading,
