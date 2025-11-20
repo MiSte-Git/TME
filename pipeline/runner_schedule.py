@@ -18,25 +18,19 @@ from .assets import get_custom_emoji_cache, load_custom_emoji_alts, load_assets
 from .fetch import ensure_join_channel, parse_channel, parse_link
 from .odt_writer import write_odt_for_records
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
+from .message_collect import collect_messages_for_schedule
+from .runner_base_imports import (
+    CollectedMessage,
+    DEFAULT_LOCAL_TZ,
+    _build_message_link,
+    _format_heading,
+    _with_retries,
+)
 
 from schedule_json import load_legacy_schedule, load_schedule_document, ScheduleDocument
-# Fallback-Standardzeitzone, wenn nichts im Schedule angegeben ist
-DEFAULT_LOCAL_TZ = "Europe/Zurich"
 
 _apply_config_overrides = _rbi._apply_config_overrides
-_with_retries = _rbi._with_retries
 _fetch_translation = _rbi._fetch_translation
-
-
-@dataclass
-class CollectedMessage:
-    title: str
-    entity: Any
-    message: Any
-    subheading: Optional[str] = None
-    link: Optional[str] = None
-    topic_id: Optional[int] = None
-
 
 try:
     import yaml  # type: ignore
@@ -44,6 +38,9 @@ except Exception:  # pragma: no cover - optional dependency
     yaml = None  # type: ignore
 
 from zoneinfo import ZoneInfo
+
+
+DEBUG_FETCH = True
 
 
 async def fetch_messages_for_day(
@@ -92,12 +89,38 @@ async def fetch_messages_for_day(
         if not getattr(m, "date", None):
             continue
         local_dt = m.date.astimezone(tzinfo)
-        if local_dt.date() < d or local_dt < start_local:
-            # ab hier sind wir vor dem gesuchten Tag/Zeitfenster → abbrechen
+
+        if DEBUG_FETCH:
+            # DEBUG: Zeige alle Nachrichten, die wir sichten, und die effektive Zeitfilterung
+            print(
+                "DEBUG fetch_messages_for_day:",
+                "msg_id=", getattr(m, "id", None),
+                "local_dt=", local_dt,
+                "start_local=", start_local,
+                "end_local=", end_local,
+            )
+
+        # Wenn wir vor dem gesuchten Datum sind, können wir abbrechen
+        # (iter_messages liefert ältere Nachrichten in Richtung Vergangenheit).
+        if local_dt.date() < d:
+            if DEBUG_FETCH:
+                print("  -> BREAK (vor gesuchtem Tag)")
             break
-        if local_dt.date() > d or local_dt > end_local:
-            # nach dem gesuchten Tag/Zeitfenster → überspringen
+
+        # Datum passt, aber Uhrzeit ist vor dem Startfenster → nur überspringen
+        if local_dt < start_local:
+            if DEBUG_FETCH:
+                print("  -> SKIP (zu früh am Tag)")
             continue
+
+        # Nach dem gesuchten Tag/Zeitfenster → überspringen
+        if local_dt.date() > d or local_dt > end_local:
+            if DEBUG_FETCH:
+                print("  -> SKIP (zu spät/nach Tag)")
+            continue
+
+        if DEBUG_FETCH:
+            print("  -> KEEP")
         msgs.append(m)
     # stabil nach Datum + ID sortieren
     msgs.sort(key=lambda m: (m.date, m.id))
@@ -190,216 +213,6 @@ def _build_day_time_range(date_obj, start_time_str: str | None, end_time_str: st
     start_dt = datetime.combine(date_obj, st, tzinfo=tz)
     end_dt = datetime.combine(date_obj, et, tzinfo=tz)
     return start_dt, end_dt
-
-
-async def _collect_messages_for_schedule(
-    client: TelegramClient,
-    schedule: ScheduleDocument,
-    local_tz: Optional[str],
-) -> tuple[List[CollectedMessage], set[str]]:
-    from zoneinfo import ZoneInfo
-
-    tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
-    try:
-        tzinfo = ZoneInfo(tz_name)
-    except Exception:
-        tzinfo = timezone.utc
-
-    from .fetch import parse_topic_from_link
-
-    def _extract_topic_from_section(section) -> tuple[Optional[int], Optional[Any]]:
-        """Ermittelt Topic-bezogene Informationen für eine Section.
-
-        Rückgabe:
-            (topic_id, source):
-                - topic_id: Telegram-Thread-ID (top_msg_id) oder None
-                - source: der Link/Channel-String, aus dem das Topic ermittelt wurde
-        """
-        # 1) Section-spezifischer Channel kann ein Topic-Link sein
-        if section.channel:
-            tid, _ = parse_topic_from_link(str(section.channel))
-            if tid is not None:
-                return tid, section.channel
-        # 2) Default-Channel aus dem Schedule kann ein Topic-Link sein
-        if schedule.default_channel:
-            tid, _ = parse_topic_from_link(str(schedule.default_channel))
-            if tid is not None:
-                return tid, schedule.default_channel
-        # 3) Falls genau ein Link in der Section vorhanden ist, der ein Topic referenziert,
-        #    verwenden wir diesen als Quelle für das Topic, ignorieren aber seine konkrete msg_id
-        links = [lnk for lnk in (section.links or []) if lnk]
-        if len(links) == 1:
-            tid, _ = parse_topic_from_link(str(links[0]))
-            if tid is not None:
-                return tid, links[0]
-        return None, None
-    collected: List[CollectedMessage] = []
-    used_doc_ids: set[str] = set()
-    debug_dir = Path("data/debug")
-    if _rbi._DEBUG_DUMP_ENTITIES:
-        debug_dir.mkdir(parents=True, exist_ok=True)
-
-    default_entity_cache: Dict[str, Any] = {}
-
-    def _get_default_entity_key(channel: Optional[str]) -> Optional[str]:
-        if not channel:
-            return None
-        return str(channel)
-
-    async def _ensure_entity(raw: Any) -> Any:
-        entity = await _with_retries("get_entity", lambda: client.get_entity(raw))
-        if entity:
-            await ensure_join_channel(client, entity)
-        return entity
-
-    for section in schedule.sections:
-        heading = _format_heading(section.date.strftime("%Y-%m-%d"), section.title)
-        subheading = section.subheading or None
-        links = [lnk for lnk in section.links if lnk]
-        if links:
-            for link in links:
-                try:
-                    peer_raw, msg_id = parse_link(link)
-                    entity = await _ensure_entity(peer_raw)
-                    if not entity:
-                        continue
-                    msg = await _with_retries("get_messages", lambda: client.get_messages(entity, ids=msg_id))
-                    if not msg:
-                        continue
-                    # (ehemalige Debug-Ausgabe entfernt)
-                    link_url = _build_message_link(entity, msg, original_link=link)
-                    collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url, topic_id=None))
-                    twe_tmp = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
-                    try:
-                        await _with_retries("load_custom_emoji_alts(pre)", lambda: load_custom_emoji_alts(client, twe_tmp))
-                    except Exception:
-                        pass
-                    for e in (msg.entities or []):
-                        if isinstance(e, types.MessageEntityCustomEmoji):
-                            did = getattr(e, "document_id", None)
-                            if did:
-                                used_doc_ids.add(str(did))
-                    if _rbi._DEBUG_DUMP_ENTITIES:
-                        out = {
-                            "title": heading,
-                            "peer": str(peer_raw),
-                            "message_id": int(getattr(msg, "id", 0)),
-                            "text": msg.message or "",
-                            "entities": [
-                                {
-                                    "type": type(ent).__name__,
-                                    "offset": int(getattr(ent, "offset", 0)),
-                                    "length": int(getattr(ent, "length", 0)),
-                                    **({"document_id": str(getattr(ent, "document_id", ""))} if isinstance(ent, types.MessageEntityCustomEmoji) else {}),
-                                }
-                                for ent in (msg.entities or [])
-                            ],
-                        }
-                        dp = debug_dir / f"entities_{str(peer_raw).replace('/', '_')}_{msg_id}.json"
-                        try:
-                            dp.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-                        except Exception:
-                            pass
-                except Exception:
-                    continue
-            continue
-
-        # fetch by date
-        default_channel = section.channel or schedule.default_channel
-
-        # Prüfen, ob für diese Section ein Topic (Thread) abgeleitet werden kann
-        topic_id, topic_source = _extract_topic_from_section(section)
-        key = _get_default_entity_key(default_channel)
-        if key is None:
-            continue
-        if key not in default_entity_cache:
-            # Wenn der Default-Channel selbst ein Topic-Link ist, extrahieren wir nur den Basis-Channel
-            # (parse_topic_from_link liefert in diesem Fall die Peer-ID bereits korrekt)
-            raw = parse_channel(default_channel)
-            entity = await _ensure_entity(raw)
-            if not entity:
-                print(f"Hinweis: Kanal '{default_channel}' konnte nicht geladen werden.")
-                default_entity_cache[key] = None
-            else:
-                default_entity_cache[key] = entity
-        entity = default_entity_cache.get(key)
-        if not entity:
-            continue
-        if fetch_messages_for_day is None:
-            raise RuntimeError("fetch_messages_for_day ist nicht verfügbar.")
-        day_str = section.date.strftime("%d/%m/%Y")
-        # Zeitfenster pro Sektion zur tatsächlichen Filterung der Nachrichten
-        start_dt, end_dt = _build_day_time_range(section.date, section.start_time, section.end_time)
-        start_time_str = section.start_time or start_dt.strftime("%H:%M:%S")
-        end_time_str = section.end_time or end_dt.strftime("%H:%M:%S")
-        # Wenn ein Topic erkannt wurde, filtern wir nachträglich auf Nachrichten, die zu diesem Topic gehören.
-        msgs = await fetch_messages_for_day(
-            client,
-            entity,
-            day_str,
-            tz=local_tz,
-            start_time=start_time_str,
-            end_time=end_time_str,
-        )  # type: ignore[arg-type]
-
-        if topic_id is not None:
-            filtered = []
-            for msg in msgs or []:
-                try:
-                    rto = getattr(msg, "reply_to", None)
-                    if rto is None:
-                        continue
-                    is_forum = bool(getattr(rto, "forum_topic", False))
-                    base_id = getattr(rto, "top_msg_id", None)
-                    if base_id is None:
-                        base_id = getattr(rto, "reply_to_msg_id", None)
-                    # Im Topic sind alle Nachrichten, die zum selben Thread gehören;
-                    # hier verwenden wir die vom Link bekannte topic_id als Gruppenkennung.
-                    if is_forum and base_id is not None and int(base_id) >= int(topic_id):
-                        filtered.append(msg)
-                except Exception:
-                    continue
-            msgs = filtered
-        if not msgs:
-            print(f"Hinweis: Keine Nachrichten für {heading} gefunden.")
-            continue
-        for msg in msgs:
-            link_url = _build_message_link(entity, msg, topic_id=topic_id)
-            collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url, topic_id=topic_id))
-            twe_tmp = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
-            try:
-                await _with_retries("load_custom_emoji_alts(pre)", lambda: load_custom_emoji_alts(client, twe_tmp))
-            except Exception:
-                pass
-            for e in (msg.entities or []):
-                if isinstance(e, types.MessageEntityCustomEmoji):
-                    did = getattr(e, "document_id", None)
-                    if did:
-                        used_doc_ids.add(str(did))
-            if _rbi._DEBUG_DUMP_ENTITIES:
-                peer_id = getattr(entity, "id", "")
-                out = {
-                    "title": heading,
-                    "peer": str(peer_id),
-                    "message_id": int(getattr(msg, "id", 0)),
-                    "text": msg.message or "",
-                    "entities": [
-                        {
-                            "type": type(ent).__name__,
-                            "offset": int(getattr(ent, "offset", 0)),
-                            "length": int(getattr(ent, "length", 0)),
-                            **({"document_id": str(getattr(ent, "document_id", ""))} if isinstance(ent, types.MessageEntityCustomEmoji) else {}),
-                        }
-                        for ent in (msg.entities or [])
-                    ],
-                }
-                dp = debug_dir / f"entities_{str(peer_id).replace('-', 'm')}_{msg.id}.json"
-                try:
-                    dp.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-                except Exception:
-                    pass
-    return collected, used_doc_ids
-
 
 async def run_schedule(
     schedule_path: Path,
@@ -598,7 +411,10 @@ async def run_schedule(
                 pass
 
         _notify("Nachrichten werden gesammelt…")
-        collected, used_doc_ids = await _collect_messages_for_schedule(client, schedule, local_tz)
+        collected, used_doc_ids = await collect_messages_for_schedule(client, schedule, local_tz)
+        print("DEBUG run_schedule: len(collected) =", len(collected))
+        print("DEBUG run_schedule: first collected IDs =",
+            [getattr(it.message, "id", None) for it in collected[:10]])
 
         out_dir = output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -895,6 +711,10 @@ async def run_schedule(
     lang_up = target_lang.upper()
 
     for item in collected:
+        print("DEBUG run_schedule: processing item with msg_id =",
+            getattr(item.message, "id", None),
+            "title =", item.title)
+
         if mode_norm == "inline" and previous_title is not None and item.title != previous_title:
             if pending_inline_translations:
                 records.extend(pending_inline_translations)
@@ -907,7 +727,8 @@ async def run_schedule(
             dt = getattr(msg, "date", None)
             if hasattr(dt, "astimezone"):
                 local_dt = dt.astimezone(tzinfo)
-                time_str = local_dt.strftime("%H:%M:%S")
+                # Datum + Uhrzeit in lokaler Zeitzone ausgeben
+                time_str = local_dt.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 time_str = "--:--:--"
         except Exception:
