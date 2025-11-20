@@ -24,11 +24,10 @@ def extract_topic_from_section(
             return tid, section.channel
 
     # 2) Default-Channel aus dem Schedule kann ein Topic-Link sein.
-    #    Wenn es sich jedoch um den Standard-"General"-Thread (Topic-ID 1) handelt,
-    #    betrachten wir das als "kein spezifisches Topic" (voller Kanal).
+    #    Jede erkannte Topic-ID (einschließlich 1) bedeutet: spezifischer Thread.
     if getattr(schedule, "default_channel", None):
         tid, _ = parse_topic_from_link(str(schedule.default_channel))
-        if tid is not None and int(tid) != 1:
+        if tid is not None:
             return tid, schedule.default_channel
 
     # 3) Falls genau ein Link in der Section vorhanden ist, der ein Topic referenziert,

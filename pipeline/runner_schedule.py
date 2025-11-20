@@ -17,6 +17,7 @@ from . import runner_by_ids as _rbi
 from .assets import get_custom_emoji_cache, load_custom_emoji_alts, load_assets
 from .fetch import ensure_join_channel, parse_channel, parse_link
 from .odt_writer import write_odt_for_records
+from .speech_to_text import transcribe_voice, SpeechToTextError
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
 from .runner_base_imports import (
@@ -40,7 +41,7 @@ except Exception:  # pragma: no cover - optional dependency
 from zoneinfo import ZoneInfo
 
 
-DEBUG_FETCH = True
+DEBUG_FETCH = False
 
 
 async def fetch_messages_for_day(
@@ -91,7 +92,6 @@ async def fetch_messages_for_day(
         local_dt = m.date.astimezone(tzinfo)
 
         if DEBUG_FETCH:
-            # DEBUG: Zeige alle Nachrichten, die wir sichten, und die effektive Zeitfilterung
             print(
                 "DEBUG fetch_messages_for_day:",
                 "msg_id=", getattr(m, "id", None),
@@ -412,9 +412,6 @@ async def run_schedule(
 
         _notify("Nachrichten werden gesammelt…")
         collected, used_doc_ids = await collect_messages_for_schedule(client, schedule, local_tz)
-        print("DEBUG run_schedule: len(collected) =", len(collected))
-        print("DEBUG run_schedule: first collected IDs =",
-            [getattr(it.message, "id", None) for it in collected[:10]])
 
         out_dir = output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -711,9 +708,6 @@ async def run_schedule(
     lang_up = target_lang.upper()
 
     for item in collected:
-        print("DEBUG run_schedule: processing item with msg_id =",
-            getattr(item.message, "id", None),
-            "title =", item.title)
 
         if mode_norm == "inline" and previous_title is not None and item.title != previous_title:
             if pending_inline_translations:
@@ -846,6 +840,48 @@ async def run_schedule(
             except Exception:
                 pass
 
+        # Sprachnachrichten (Voice/Audio) optional mit Speech-to-Text transkribieren
+        try:
+            from telethon.tl.types import DocumentAttributeAudio
+
+            mime = (getattr(getattr(msg, "document", None), "mime_type", "") or "").lower()
+            attrs = list(getattr(getattr(msg, "document", None), "attributes", []) or [])
+            has_voice_attr = False
+            for a in attrs:
+                if isinstance(a, DocumentAttributeAudio) and getattr(a, "voice", False):
+                    has_voice_attr = True
+                    break
+
+            is_audio_or_voice = bool(
+                getattr(msg, "document", None)
+                and (
+                    mime.startswith("audio/")
+                    or "voice" in mime
+                    or has_voice_attr
+                )
+            )
+
+            if is_audio_or_voice:
+                media_dir = Path("media"); media_dir.mkdir(exist_ok=True)
+                audio_path_str = await _with_retries(
+                    "download_media_voice",
+                    lambda: msg.download_media(file=str(media_dir)),
+                )
+                if audio_path_str:
+                    audio_path = Path(audio_path_str)
+                    try:
+                        stt_text = transcribe_voice(audio_path, language=(target_lang or "de"))
+                    except SpeechToTextError:
+                        stt_text = None
+                    if stt_text:
+                        runs_list.append(LineBreak(kind="LineBreak"))
+                        runs_list.append(TextRun(kind="TextRun", text="Transkript der Sprachnachricht:"))
+                        runs_list.append(LineBreak(kind="LineBreak"))
+                        runs_list.append(TextRun(kind="TextRun", text=stt_text))
+                        runs_list.append(LineBreak(kind="LineBreak"))
+        except Exception:
+            pass
+
         # Falls die Nachricht eine Antwort ist, Verweis auf die Ursprungnachricht einfügen
         try:
             rto = getattr(msg, "reply_to", None)
@@ -965,7 +1001,6 @@ async def run_schedule(
     if pending_inline_translations:
         records.extend(pending_inline_translations)
 
-    print(f"DEBUG: run_schedule - anzahl records: {len(records)}")
 
     if missing_png_tracker:
         rep_png = Path("data/missing_pngs.json"); rep_png.parent.mkdir(parents=True, exist_ok=True)
@@ -981,7 +1016,6 @@ async def run_schedule(
     }
 
     _notify("ODT wird geschrieben…")
-    print(f"DEBUG: run_schedule - schreibe ODT nach: {out_path}")
     write_odt_for_records(records, out_path, styles, doc_title=schedule.document_title)
 
     extra_path: Optional[Path] = None

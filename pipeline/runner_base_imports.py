@@ -17,7 +17,8 @@ class CollectedMessage:
     message: Any
     subheading: Optional[str] = None
     link: Optional[str] = None
-    topic_id: Optional[int] = None
+    topic_id: Optional[int] = None  # gewünschtes Topic laut Section/Schedule
+    actual_topic_id: Optional[int] = None  # tatsächlich erkannter Thread der Nachricht
 
 
 def _format_heading(date_iso: str, title: str) -> str:

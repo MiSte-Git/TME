@@ -7,7 +7,7 @@ from telethon import TelegramClient
 from zoneinfo import ZoneInfo
 
 
-DEBUG_FETCH = True
+DEBUG_FETCH = False  # bei Bedarf auf True setzen, um Details zu sehen
 
 
 def build_day_time_range(
@@ -64,11 +64,19 @@ async def fetch_messages_for_section_day(
     local_tz: Optional[str],
     start_time_str: Optional[str],
     end_time_str: Optional[str],
+    *,
+    topic_id: Optional[int] = None,
 ) -> Sequence[Any]:
     """Lädt Nachrichten für einen Tag mit Zeitfenster aus einem Channel.
 
     Dies ist eine ausgelagerte Variante der bisherigen fetch_messages_for_day-
     Logik aus runner_schedule.py, angepasst auf Section/Day-Kontext.
+
+    Wenn ``topic_id`` gesetzt ist und es sich um ein Forum-Topic handelt,
+    werden die Nachrichten serverseitig auf genau dieses Topic gefiltert,
+    indem ``reply_to=topic_id`` an ``iter_messages`` übergeben wird. Damit
+    entfällt die Notwendigkeit, topic_id/top_msg_id/forum_topic_id an den
+    einzelnen Nachrichtenobjekten auszuwerten.
     """
     tz_name = local_tz or "Europe/Zurich"  # ggf. an DEFAULT_LOCAL_TZ angleichen
     try:
@@ -87,11 +95,19 @@ async def fetch_messages_for_section_day(
     msgs: list[Any] = []
     # reverse=False: neu -> alt; mit offset_date=end_utc bekommen wir nur Nachrichten
     # bis zum Tagesende/-zeitpunkt
+    iter_kwargs: dict[str, Any] = {
+        "reverse": False,
+        "offset_date": end_utc,
+        "limit": None,
+    }
+    # Server-seitiges Topic-Filtering für Forum-Topics, basierend auf
+    # https://t.me/c/<chatId>/<topicId>/<messageId> → reply_to=topic_id
+    if topic_id is not None:
+        iter_kwargs["reply_to"] = int(topic_id)
+
     async for m in client.iter_messages(
         entity,
-        reverse=False,
-        offset_date=end_utc,
-        limit=None,
+        **iter_kwargs,
     ):
         if not getattr(m, "date", None):
             continue
@@ -133,6 +149,48 @@ async def fetch_messages_for_section_day(
     return msgs
 
 
+def _debug_dump_msg_topic_info(msg: Any) -> None:
+    """Debug: Gibt Topic-relevante Felder einer Nachricht aus."""
+    if not DEBUG_FETCH:
+        return
+    mid = getattr(msg, "id", None)
+    reply_to = getattr(msg, "reply_to", None)
+    print("DEBUG TOPIC MSG", mid)
+    print("  date:", getattr(msg, "date", None))
+    print("  topic_id:", getattr(msg, "topic_id", None))
+    print("  top_msg_id:", getattr(msg, "top_msg_id", None))
+    print("  forum_topic_id:", getattr(msg, "forum_topic_id", None))
+    print("  raw reply_to:", repr(reply_to))
+    if reply_to is not None:
+        print("    reply_to_msg_id:", getattr(reply_to, "reply_to_msg_id", None))
+        print("    top_msg_id:", getattr(reply_to, "top_msg_id", None))
+        print("    reply_to_top_id:", getattr(reply_to, "reply_to_top_id", None))
+    d = getattr(msg, "__dict__", None)
+    if isinstance(d, dict):
+        print("  __dict__ keys:", list(d.keys()))
+
+
+def _extract_actual_topic_id(msg: Any) -> Optional[int]:
+    """Versucht, die tatsächliche Topic-/Thread-ID einer Nachricht zu bestimmen.
+
+    Nutzt primär reply_to.top_msg_id / reply_to.reply_to_top_id usw.
+    """
+    reply_to = getattr(msg, "reply_to", None)
+    t_id = getattr(reply_to, "top_msg_id", None)
+    if t_id is None:
+        t_id = getattr(reply_to, "reply_to_top_id", None)
+    if t_id is None:
+        t_id = getattr(reply_to, "reply_to_msg_id", None)
+    if t_id is None:
+        t_id = getattr(msg, "top_msg_id", None)
+    if t_id is None:
+        t_id = getattr(msg, "topic_id", None)
+    try:
+        return int(t_id) if t_id is not None else None
+    except Exception:
+        return None
+
+
 def filter_messages_for_topic(
     msgs: Sequence[Any],
     topic_id: Optional[int],
@@ -151,46 +209,41 @@ def filter_messages_for_topic(
     if topic_id is None:
         return msgs
 
+    wanted_tid: Optional[int]
+    try:
+        wanted_tid = int(topic_id)
+    except Exception:
+        wanted_tid = None
+    if wanted_tid is None:
+        return msgs
+
     out: list[Any] = []
+    interesting_ids = {7289, 7295, 7298, 7301, 7304}
+
     for m in msgs:
-        reply_to = getattr(m, "reply_to", None)
-        # Für Forum-Topics in /c/-Links ist reply_to.reply_to_msg_id häufig die Topic-ID
-        t_id = getattr(reply_to, "top_msg_id", None)
-        if t_id is None:
-            t_id = getattr(reply_to, "reply_to_top_id", None)
-        if t_id is None:
-            t_id = getattr(reply_to, "reply_to_msg_id", None)
-        # Fallbacks für andere Typen / ältere Nachrichten
-        if t_id is None:
-            t_id = getattr(m, "top_msg_id", None)
-        if t_id is None:
-            t_id = getattr(m, "topic_id", None)
+        if getattr(m, "id", None) in interesting_ids:
+            _debug_dump_msg_topic_info(m)
 
-        from_id = getattr(m, "from_id", None)
-        peer_id = getattr(m, "peer_id", None)
+        actual_tid = _extract_actual_topic_id(m)
 
-        try:
-            print(
-                "DEBUG filter_messages_for_topic:",
-                "msg_id=", getattr(m, "id", None),
-                "t_id=", t_id,
-                "topic_id=", topic_id,
-                "reply_to=", reply_to,
-                "from_id=", from_id,
-                "peer_id=", peer_id,
-            )
-        except Exception:
-            pass
-
-        try:
-            if t_id is not None and int(t_id) == int(topic_id):
+        # Fall A: explizite Topics (nicht 1) → hart filtern
+        if wanted_tid != 1:
+            if actual_tid is None:
+                continue
+            if actual_tid == wanted_tid:
                 out.append(m)
-            else:
-                # Nachrichten ohne passende Topic-Info werden ausgeschlossen,
-                # um das Verhalten klar zu halten.
-                pass
-        except Exception:
-            # Wenn irgendeine Konvertierung schiefgeht, Nachricht lieber ausschließen
-            pass
+            continue
+
+        # Fall B: Topic 1 ("General") → aktueller Stand der Telethon-Daten:
+        # Alle relevanten Nachrichten haben topic_id/top_msg_id/forum_topic_id = None.
+        # Wir können also nicht zwischen "Topic 1" und "topiclos" unterscheiden und
+        # müssen alle Nachrichten im Zeitfenster akzeptieren.
+        out.append(m)
+
+    # Nach erfolgreichem Topic-Filter innerhalb des Topics stabil nach Zeit und ID sortieren
+    try:
+        out.sort(key=lambda mm: (mm.date, mm.id))
+    except Exception:
+        pass
 
     return out

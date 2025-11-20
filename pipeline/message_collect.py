@@ -26,7 +26,7 @@ from .runner_base_imports import (
 )
 from .topic_utils import extract_topic_from_section
 
-DEBUG_FETCH = True  # oder aus Config holen
+DEBUG_FETCH = False  # Debug-Ausgaben für Sammellogik standardmäßig aus
 
 async def _ensure_entity(client: TelegramClient, raw: Any) -> Any:
     entity = await _with_retries("get_entity", lambda: client.get_entity(raw))
@@ -196,6 +196,10 @@ async def collect_messages_for_schedule(
             )
 
         # Nachrichten für den Tag + Zeitfenster holen
+        # Wenn ein Forum-Topic aus dem Default-Channel-Link extrahiert wurde
+        # (https://t.me/c/<chatId>/<topicId>), filtern wir serverseitig direkt
+        # auf dieses Topic über reply_to=topic_id. Damit entfallen alle
+        # Heuristiken auf topic_id/top_msg_id/forum_topic_id in den Nachrichten.
         msgs = await fetch_messages_for_section_day(
             client,
             entity,
@@ -203,6 +207,7 @@ async def collect_messages_for_schedule(
             local_tz=local_tz,
             start_time_str=start_time_str,
             end_time_str=end_time_str,
+            topic_id=topic_id,
         )
 
         if DEBUG_FETCH:
@@ -213,8 +218,11 @@ async def collect_messages_for_schedule(
                 heading,
             )
 
-        # Optionaler Topic-Filter – nur anwenden, wenn tatsächlich ein Topic gesetzt ist
-        if topic_id is not None:
+        # Optionaler Topic-Filter auf Nachrichtenebene wird für Forum-Topics
+        # nicht mehr benötigt, wenn serverseitig bereits über reply_to=topic_id
+        # gefiltert wurde. Um bestehende Logik nicht zu beeinträchtigen, lassen
+        # wir den Aufruf nur noch laufen, falls kein topic_id gesetzt ist.
+        if topic_id is None and msgs:
             before = len(msgs)
             msgs = filter_messages_for_topic(
                 msgs,
@@ -233,8 +241,11 @@ async def collect_messages_for_schedule(
             print(f"Hinweis: Keine Nachrichten für {heading} gefunden.")
             continue
 
+        from .message_filters import _extract_actual_topic_id
+
         for msg in msgs:
-            link_url = _build_message_link(entity, msg, topic_id=topic_id)
+            actual_tid = _extract_actual_topic_id(msg)
+            link_url = _build_message_link(entity, msg, topic_id=actual_tid)
             collected.append(
                 CollectedMessage(
                     title=heading,
@@ -243,6 +254,7 @@ async def collect_messages_for_schedule(
                     subheading=subheading,
                     link=link_url,
                     topic_id=topic_id,
+                    actual_topic_id=actual_tid,
                 )
             )
 
