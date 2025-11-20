@@ -20,7 +20,8 @@ from .odt_writer import write_odt_for_records
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
 
 from schedule_json import load_legacy_schedule, load_schedule_document, ScheduleDocument
-from tg_by_date_to_odt_modes import LOCAL_TZ as DEFAULT_LOCAL_TZ
+# Fallback-Standardzeitzone, wenn nichts im Schedule angegeben ist
+DEFAULT_LOCAL_TZ = "Europe/Zurich"
 
 _apply_config_overrides = _rbi._apply_config_overrides
 _with_retries = _rbi._with_retries
@@ -34,6 +35,7 @@ class CollectedMessage:
     message: Any
     subheading: Optional[str] = None
     link: Optional[str] = None
+    topic_id: Optional[int] = None
 
 
 try:
@@ -41,10 +43,65 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     yaml = None  # type: ignore
 
-try:
-    from tg_by_date_to_odt_modes import fetch_messages_for_day  # type: ignore
-except Exception:  # pragma: no cover - legacy script missing
-    fetch_messages_for_day = None  # type: ignore
+from zoneinfo import ZoneInfo
+
+
+async def fetch_messages_for_day(
+    client,
+    entity,
+    day_str: str,
+    tz: str | None = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+):
+    """Lädt alle Nachrichten eines Tages (lokale Zeit) mit optionalem Zeitfenster.
+
+    - day_str: "dd/mm/YYYY"
+    - tz: Name der Zeitzone (z.B. "Europe/Zurich"), fällt sonst auf DEFAULT_LOCAL_TZ zurück
+    - start_time / end_time: "HH:MM:SS"-Strings für das Tageszeitfenster
+    """
+    tz_name = tz or DEFAULT_LOCAL_TZ or "UTC"
+    try:
+        tzinfo = ZoneInfo(tz_name)
+    except Exception:
+        tzinfo = timezone.utc
+
+    d = datetime.strptime(day_str, "%d/%m/%Y").date()
+
+    def _parse_time(value: Optional[str], default: time) -> time:
+        if not value:
+            return default
+        try:
+            parts = [int(p) for p in value.split(":")]
+            while len(parts) < 3:
+                parts.append(0)
+            return time(*parts[:3])
+        except Exception:
+            return default
+
+    start_t = _parse_time(start_time, time(0, 0, 0))
+    end_t = _parse_time(end_time, time(23, 59, 59))
+
+    start_local = datetime.combine(d, start_t, tzinfo)
+    end_local = datetime.combine(d, end_t, tzinfo)
+    end_utc = end_local.astimezone(timezone.utc)
+
+    msgs: list[Any] = []
+    # reverse=False: neu -> alt; mit offset_date=end_utc bekommen wir nur Nachrichten bis zum Tagesende/-zeitpunkt
+    async for m in client.iter_messages(entity, reverse=False, offset_date=end_utc, limit=None):
+        if not getattr(m, "date", None):
+            continue
+        local_dt = m.date.astimezone(tzinfo)
+        if local_dt.date() < d or local_dt < start_local:
+            # ab hier sind wir vor dem gesuchten Tag/Zeitfenster → abbrechen
+            break
+        if local_dt.date() > d or local_dt > end_local:
+            # nach dem gesuchten Tag/Zeitfenster → überspringen
+            continue
+        msgs.append(m)
+    # stabil nach Datum + ID sortieren
+    msgs.sort(key=lambda m: (m.date, m.id))
+    return msgs
 
 
 def _ensure_png_from_export(doc_id: str) -> bool:
@@ -82,7 +139,7 @@ def _format_heading(date_iso: str, title: str) -> str:
     return f"{date_iso}  -  {title}".strip()
 
 
-def _build_message_link(entity: Any, message: Any, original_link: Optional[str] = None) -> Optional[str]:
+def _build_message_link(entity: Any, message: Any, original_link: Optional[str] = None, topic_id: Optional[int] = None) -> Optional[str]:
     if original_link:
         return original_link
     try:
@@ -108,6 +165,9 @@ def _build_message_link(entity: Any, message: Any, original_link: Optional[str] 
     chan_str = str(channel_id_int)
     if chan_str.startswith("100") and len(chan_str) > 3:
         chan_str = chan_str[3:]
+    # Topic-Link, falls Topic-ID bekannt ist
+    if topic_id is not None:
+        return f"https://t.me/c/{chan_str}/{int(topic_id)}/{msg_id}"
     return f"https://t.me/c/{chan_str}/{msg_id}"
 
 
@@ -206,28 +266,9 @@ async def _collect_messages_for_schedule(
                     msg = await _with_retries("get_messages", lambda: client.get_messages(entity, ids=msg_id))
                     if not msg:
                         continue
-                    # DEBUG: Topic- und Datumsstruktur dieser Nachricht ausgeben
-                    try:
-                        rto = getattr(msg, "reply_to", None)
-                        debug_msg = {
-                            "id": int(getattr(msg, "id", 0)),
-                            "date": str(getattr(msg, "date", "")),
-                            "date_type": str(type(getattr(msg, "date", None)).__name__),
-                            "reply_to": {
-                                "type": type(rto).__name__ if rto is not None else None,
-                                "forum_topic": getattr(rto, "forum_topic", None),
-                                "top_msg_id": getattr(rto, "top_msg_id", None),
-                                "reply_to_msg_id": getattr(rto, "reply_to_msg_id", None),
-                            },
-                            "forum_topic_id": getattr(msg, "forum_topic_id", None),
-                            "peer_type": type(getattr(msg, "peer_id", None)).__name__,
-                            "peer_data": str(getattr(msg, "peer_id", None)),
-                        }
-                        print("DEBUG_TOPIC_MSG:", json.dumps(debug_msg, ensure_ascii=False))
-                    except Exception:
-                        pass
+                    # (ehemalige Debug-Ausgabe entfernt)
                     link_url = _build_message_link(entity, msg, original_link=link)
-                    collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url))
+                    collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url, topic_id=None))
                     twe_tmp = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                     try:
                         await _with_retries("load_custom_emoji_alts(pre)", lambda: load_custom_emoji_alts(client, twe_tmp))
@@ -305,7 +346,6 @@ async def _collect_messages_for_schedule(
             filtered = []
             for msg in msgs or []:
                 try:
-                    # Bei Foren-Topics ist reply_to.forum_topic True und reply_to.reply_to_msg_id == top_msg_id des Topics
                     rto = getattr(msg, "reply_to", None)
                     if rto is None:
                         continue
@@ -313,7 +353,9 @@ async def _collect_messages_for_schedule(
                     base_id = getattr(rto, "top_msg_id", None)
                     if base_id is None:
                         base_id = getattr(rto, "reply_to_msg_id", None)
-                    if is_forum and base_id is not None and int(base_id) == int(topic_id):
+                    # Im Topic sind alle Nachrichten, die zum selben Thread gehören;
+                    # hier verwenden wir die vom Link bekannte topic_id als Gruppenkennung.
+                    if is_forum and base_id is not None and int(base_id) >= int(topic_id):
                         filtered.append(msg)
                 except Exception:
                     continue
@@ -322,8 +364,8 @@ async def _collect_messages_for_schedule(
             print(f"Hinweis: Keine Nachrichten für {heading} gefunden.")
             continue
         for msg in msgs:
-            link_url = _build_message_link(entity, msg)
-            collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url))
+            link_url = _build_message_link(entity, msg, topic_id=topic_id)
+            collected.append(CollectedMessage(title=heading, entity=entity, message=msg, subheading=subheading, link=link_url, topic_id=topic_id))
             twe_tmp = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
             try:
                 await _with_retries("load_custom_emoji_alts(pre)", lambda: load_custom_emoji_alts(client, twe_tmp))
@@ -469,13 +511,10 @@ async def run_schedule(
     needs_default = [s for s in schedule.sections if s.fetch_by_date and not s.links]
     schedule.default_channel = _normalize_default_channel(schedule.default_channel)
     if needs_default and not schedule.default_channel:
-        _notify("Folgende Sektionen benötigen einen Default-Channel:")
-        for sec in needs_default:
-            _notify(f"  - {sec.date.isoformat()} :: {sec.title}")
-        user_input = input("Bitte Default-Channel (@name oder Link) eingeben: ").strip()
-        if not user_input:
-            raise SystemExit("Abbruch: Default-Channel erforderlich.")
-        schedule.default_channel = user_input
+        # In UI/Non-CLI Kontext können wir keine input()-Eingabe erzwingen.
+        # Stattdessen brechen wir mit einer klaren Fehlermeldung ab, die in der UI angezeigt wird.
+        missing_list = ", ".join(f"{sec.date.isoformat()} :: {sec.title}" for sec in needs_default)
+        raise RuntimeError(f"Default-Channel fehlt für Sektionen: {missing_list}")
 
     local_tz = local_tz_override or cfg.get("local_tz") or DEFAULT_LOCAL_TZ
 
@@ -514,6 +553,7 @@ async def run_schedule(
         _assets_cache = load_assets(Path("data/assets.json"))
     except Exception:
         _assets_cache = {}
+
 
     def _is_letter_doc(doc_id: str) -> bool:
         rec = _assets_cache.get(str(doc_id)) if isinstance(_assets_cache, dict) else None
@@ -781,309 +821,363 @@ async def run_schedule(
         except Exception:
             pass
 
-        def _can_open_ui() -> bool:
-            try:
-                import PySide6  # type: ignore
-            except Exception:
-                return False
-            import os
-            if os.environ.get("DISPLAY"):
-                return True
-            import sys
-            return sys.platform.startswith("win") or sys.platform == "darwin"
+        # Effektive Einstellung für Reaktions-Anzeige (config-Override möglich)
 
-        if _rbi._LM_CONTINUE_WITHOUT_MAPPING:
-            _notify("Konfiguration erlaubt: weiter ohne Mapping. Nicht gemappte Buchstaben bleiben als Text.")
-        elif _rbi._LM_OPEN_UI_ON_MISSING and _can_open_ui() and not skip_lettermap_ui:
-            import subprocess, sys
-            try:
-                proc = subprocess.Popen([sys.executable, "ui/app.py"])
-            except Exception:
-                proc = None
-            if proc is not None:
-                _notify("Lettermap-UI geöffnet. Bitte Mapping ergänzen und Fenster schließen…")
-                while proc.poll() is None:
-                    try:
-                        letter_map_path = Path("data/letter_map.json")
-                        if letter_map_path.exists():
-                            data = json.loads(letter_map_path.read_text(encoding="utf-8"))
-                            if isinstance(data, dict):
-                                tmp: Dict[str, str] = {}
-                                for k, v in data.items():
-                                    if isinstance(v, dict):
-                                        did = str(v.get("document_id", "")).strip()
-                                        docs = v.get("document_ids")
-                                        if isinstance(docs, list) and docs:
-                                            did = str(docs[0] if docs[0] is not None else "").strip() or did
-                                        if did:
-                                            tmp[str(k)] = did
-                                letter_to_doc = tmp
-                                inv_map = _invert_letter(letter_to_doc)
-                        still_missing = [d for d in used_doc_ids if d not in inv_map]
-                        if not still_missing:
-                            break
-                    except Exception:
-                        pass
-                    if proc.poll() is not None:
-                        _notify("Hinweis: UI wurde geschlossen, es fehlen noch Zuordnungen. Fahre ohne Unterbruch fort.")
-                        break
-                    await asyncio.sleep(1.0)
-                _notify("Fahre fort…")
-        elif skip_lettermap_ui and missing_docs:
-            _notify("Lettermap-UI bereits geöffnet – bitte im Lettermap-Tab fehlende Zuordnungen ergänzen und danach erneut ausführen, falls nötig.")
-        else:
-            _notify("Hinweis: Interaktives Mapping ist nicht verfügbar. Nicht gemappte Buchstaben bleiben als Text.")
-
-        records: List[RunsRecord] = []
-        translations_acc: List[RunsRecord] = []
-        pending_inline_translations: List[RunsRecord] = []
-        previous_title: Optional[str] = None
-        mode_norm = (translation_mode or "inline").strip().lower()
-
-        # Zeitzonenobjekt für Zeitstempel in der ODT-Ausgabe
-        from zoneinfo import ZoneInfo
-
-        tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
+    def _can_open_ui() -> bool:
         try:
-            tzinfo = ZoneInfo(tz_name)
+            import PySide6  # type: ignore
         except Exception:
-            tzinfo = timezone.utc
-        if mode_norm not in ("inline", "end", "separate"):
-            mode_norm = "inline"
-        lang_up = target_lang.upper()
-        for item in collected:
-            if mode_norm == "inline" and previous_title is not None and item.title != previous_title:
-                if pending_inline_translations:
-                    records.extend(pending_inline_translations)
-                    pending_inline_translations.clear()
-            msg = item.message
-            runs_list: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
+            return False
+        import os
+        if os.environ.get("DISPLAY"):
+            return True
+        import sys
+        return sys.platform.startswith("win") or sys.platform == "darwin"
 
-            # Zeitstempel + Medientyp als erste Zeile pro Nachricht einfügen
-            try:
-                dt = getattr(msg, "date", None)
-                if hasattr(dt, "astimezone"):
-                    local_dt = dt.astimezone(tzinfo)
-                    time_str = local_dt.strftime("%H:%M:%S")
-                else:
-                    time_str = "--:--:--"
-            except Exception:
+    if _rbi._LM_CONTINUE_WITHOUT_MAPPING:
+        _notify("Konfiguration erlaubt: weiter ohne Mapping. Nicht gemappte Buchstaben bleiben als Text.")
+    elif _rbi._LM_OPEN_UI_ON_MISSING and _can_open_ui() and not skip_lettermap_ui:
+        import subprocess, sys
+        try:
+            proc = subprocess.Popen([sys.executable, "ui/app.py"])
+        except Exception:
+            proc = None
+        if proc is not None:
+            _notify("Lettermap-UI geöffnet. Bitte Mapping ergänzen und Fenster schließen…")
+            while proc.poll() is None:
+                try:
+                    letter_map_path = Path("data/letter_map.json")
+                    if letter_map_path.exists():
+                        data = json.loads(letter_map_path.read_text(encoding="utf-8"))
+                        if isinstance(data, dict):
+                            tmp: Dict[str, str] = {}
+                            for k, v in data.items():
+                                if isinstance(v, dict):
+                                    did = str(v.get("document_id", "")).strip()
+                                    docs = v.get("document_ids")
+                                    if isinstance(docs, list) and docs:
+                                        did = str(docs[0] if docs[0] is not None else "").strip() or did
+                                    if did:
+                                        tmp[str(k)] = did
+                            letter_to_doc = tmp
+                            inv_map = _invert_letter(letter_to_doc)
+                    still_missing = [d for d in used_doc_ids if d not in inv_map]
+                    if not still_missing:
+                        break
+                except Exception:
+                    pass
+                if proc.poll() is not None:
+                    _notify("Hinweis: UI wurde geschlossen, es fehlen noch Zuordnungen. Fahre ohne Unterbruch fort.")
+                    break
+                await asyncio.sleep(1.0)
+            _notify("Fahre fort…")
+    elif skip_lettermap_ui and missing_docs:
+        _notify("Lettermap-UI bereits geöffnet – bitte im Lettermap-Tab fehlende Zuordnungen ergänzen und danach erneut ausführen, falls nötig.")
+    else:
+        _notify("Hinweis: Interaktives Mapping ist nicht verfügbar. Nicht gemappte Buchstaben bleiben als Text.")
+
+    records: List[RunsRecord] = []
+    translations_acc: List[RunsRecord] = []
+    pending_inline_translations: List[RunsRecord] = []
+    previous_title: Optional[str] = None
+    mode_norm = (translation_mode or "inline").strip().lower()
+
+    # Zeitzonenobjekt für Zeitstempel in der ODT-Ausgabe
+    from zoneinfo import ZoneInfo
+
+    tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
+    try:
+        tzinfo = ZoneInfo(tz_name)
+    except Exception:
+        tzinfo = timezone.utc
+    if mode_norm not in ("inline", "end", "separate"):
+        mode_norm = "inline"
+    lang_up = target_lang.upper()
+
+    for item in collected:
+        if mode_norm == "inline" and previous_title is not None and item.title != previous_title:
+            if pending_inline_translations:
+                records.extend(pending_inline_translations)
+                pending_inline_translations.clear()
+        msg = item.message
+        runs_list: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
+
+        # Zeitstempel + Medientyp als erste Zeile pro Nachricht einfügen
+        try:
+            dt = getattr(msg, "date", None)
+            if hasattr(dt, "astimezone"):
+                local_dt = dt.astimezone(tzinfo)
+                time_str = local_dt.strftime("%H:%M:%S")
+            else:
                 time_str = "--:--:--"
+        except Exception:
+            time_str = "--:--:--"
 
-            media_type_parts: list[str] = []
+        media_type_parts: list[str] = []
+        try:
+            from telethon.tl.types import MessageMediaPhoto, DocumentAttributeSticker
+
+            is_photo = isinstance(getattr(msg, "media", None), MessageMediaPhoto)
+            is_image_doc = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("image/"))
+            is_video = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("video/"))
+            is_audio = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("audio/"))
+            is_voice = bool(getattr(msg, "document", None) and "voice" in (getattr(msg.document, "mime_type", "") or ""))
+            is_file = bool(getattr(msg, "document", None) and not (is_image_doc or is_video or is_audio or is_voice))
+            is_sticker = False
+            if getattr(msg, "document", None):
+                for attr in (msg.document.attributes or []):
+                    if isinstance(attr, DocumentAttributeSticker):
+                        is_sticker = True
+                        break
+
+            if is_photo or is_image_doc or is_sticker:
+                media_type_parts.append("Bild")
+            if is_video:
+                media_type_parts.append("Video")
+            if is_audio or is_voice:
+                media_type_parts.append("Audio")
+            if is_file:
+                media_type_parts.append("Datei")
+            if getattr(msg, "media", None) is not None and not media_type_parts:
+                media_type_parts.append("Anhang")
+        except Exception:
+            pass
+
+        if getattr(msg, "message", None) and str(msg.message).strip():
+            has_text = True
+        else:
+            has_text = False
+
+        if media_type_parts and not has_text:
+            media_type_parts.append("(ohne Text)")
+
+        header_text = time_str
+        if media_type_parts:
+            header_text += " – " + ", ".join(media_type_parts)
+
+        # Absender unter der Uhrzeit ausgeben: @username + Name, wenn möglich
+        try:
+            sender_line = ""
+            s = getattr(msg, "sender", None)
+            if s is not None:
+                uname = getattr(s, "username", None)
+                if isinstance(uname, str) and uname.strip():
+                    sender_line = f"@{uname.strip()}"
+                title = getattr(s, "title", None) or ""
+                first = getattr(s, "first_name", None) or ""
+                last = getattr(s, "last_name", None) or ""
+                name_part = (title or (first + " " + last).strip()).strip()
+                if name_part:
+                    if sender_line:
+                        sender_line = f"{sender_line} ({name_part})"
+                    else:
+                        sender_line = name_part
+            if not sender_line:
+                sender_line = "Unbekannter Absender"
+        except Exception:
+            sender_line = "Unbekannter Absender"
+
+        runs_list.append(TextRun(kind="TextRun", text=header_text))
+        runs_list.append(LineBreak(kind="LineBreak"))
+        if sender_line:
+            runs_list.append(TextRun(kind="TextRun", text=sender_line))
+            runs_list.append(LineBreak(kind="LineBreak"))
+        lm_for_group = _rbi._LM_IN_ORIGINAL or ("[LM]" in str(item.title).upper())
+
+        if include_images:
             try:
                 from telethon.tl.types import MessageMediaPhoto, DocumentAttributeSticker
-
-                is_photo = isinstance(getattr(msg, "media", None), MessageMediaPhoto)
-                is_image_doc = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("image/"))
-                is_video = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("video/"))
-                is_audio = bool(getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("audio/"))
-                is_voice = bool(getattr(msg, "document", None) and "voice" in (getattr(msg.document, "mime_type", "") or ""))
-                is_file = bool(getattr(msg, "document", None) and not (is_image_doc or is_video or is_audio or is_voice))
+                is_photo = isinstance(msg.media, MessageMediaPhoto)
+                is_image_doc = getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("image/")
                 is_sticker = False
                 if getattr(msg, "document", None):
                     for attr in (msg.document.attributes or []):
                         if isinstance(attr, DocumentAttributeSticker):
                             is_sticker = True
                             break
-
                 if is_photo or is_image_doc or is_sticker:
-                    media_type_parts.append("Bild")
-                if is_video:
-                    media_type_parts.append("Video")
-                if is_audio or is_voice:
-                    media_type_parts.append("Audio")
-                if is_file:
-                    media_type_parts.append("Datei")
-                if getattr(msg, "media", None) is not None and not media_type_parts:
-                    media_type_parts.append("Anhang")
+                    media_dir = Path("media"); media_dir.mkdir(exist_ok=True)
+                    path = await _with_retries("download_media", lambda: msg.download_media(file=str(media_dir)))
+                    if path and str(path).lower().endswith(".webp"):
+                        try:
+                            from PIL import Image as PILImage
+                            p = Path(path)
+                            png_path = p.with_suffix(".png")
+                            with PILImage.open(p) as im:
+                                im.save(png_path, "PNG")
+                            path = str(png_path)
+                        except Exception:
+                            pass
+                    if path:
+                        try:
+                            from PIL import Image as PILImage, ImageOps
+                            safe_name = f"img_{img_idx:04d}.png"; img_idx += 1
+                            safe_path = safe_img_dir / safe_name
+                            with PILImage.open(Path(path)) as im:
+                                im = ImageOps.exif_transpose(im)
+                                if im.mode not in ("RGB", "RGBA"):
+                                    im = im.convert("RGB")
+                                im.save(safe_path, "PNG")
+                            path = str(safe_path)
+                        except Exception:
+                            pass
+                        runs_list.append(ImageRun(kind="ImageRun", path=path, width_cm=10.0))
             except Exception:
                 pass
 
-            if getattr(msg, "message", None) and str(msg.message).strip():
-                has_text = True
-            else:
-                has_text = False
-
-            if media_type_parts and not has_text:
-                media_type_parts.append("(ohne Text)")
-
-            header_text = time_str
-            if media_type_parts:
-                header_text += " – " + ", ".join(media_type_parts)
-
-            runs_list.append(TextRun(kind="TextRun", text=header_text))
-            runs_list.append(LineBreak(kind="LineBreak"))
-            lm_for_group = _rbi._LM_IN_ORIGINAL or ("[LM]" in str(item.title).upper())
-
-            if include_images:
-                try:
-                    from telethon.tl.types import MessageMediaPhoto, DocumentAttributeSticker
-                    is_photo = isinstance(msg.media, MessageMediaPhoto)
-                    is_image_doc = getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("image/")
-                    is_sticker = False
-                    if getattr(msg, "document", None):
-                        for attr in (msg.document.attributes or []):
-                            if isinstance(attr, DocumentAttributeSticker):
-                                is_sticker = True
-                                break
-                    if is_photo or is_image_doc or is_sticker:
-                        media_dir = Path("media"); media_dir.mkdir(exist_ok=True)
-                        path = await _with_retries("download_media", lambda: msg.download_media(file=str(media_dir)))
-                        if path and str(path).lower().endswith(".webp"):
-                            try:
-                                from PIL import Image as PILImage
-                                p = Path(path)
-                                png_path = p.with_suffix(".png")
-                                with PILImage.open(p) as im:
-                                    im.save(png_path, "PNG")
-                                path = str(png_path)
-                            except Exception:
-                                pass
-                        if path:
-                            try:
-                                from PIL import Image as PILImage, ImageOps
-                                safe_name = f"img_{img_idx:04d}.png"; img_idx += 1
-                                safe_path = safe_img_dir / safe_name
-                                with PILImage.open(Path(path)) as im:
-                                    im = ImageOps.exif_transpose(im)
-                                    if im.mode not in ("RGB", "RGBA"):
-                                        im = im.convert("RGB")
-                                    im.save(safe_path, "PNG")
-                                path = str(safe_path)
-                            except Exception:
-                                pass
-                            runs_list.append(ImageRun(kind="ImageRun", path=path, width_cm=10.0))
-                except Exception:
-                    pass
-
-            if (msg.message or "").strip():
-                twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
-                await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, twe))
-                missing_after: set[str] = set()
-                if include_emojis:
-                    try:
-                        from pipeline.assets import ensure_pngs_for_twe as _ensure_pngs_for_twe
-                        res = await _with_retries("ensure_pngs_for_twe", lambda: _ensure_pngs_for_twe(client, twe))
-                        if isinstance(res, set):
-                            missing_after = {str(int(d)) for d in res if d is not None and str(int(d)) not in ignored}
-                    except Exception:
-                        missing_after = set()
-                    if missing_after:
-                        missing_png_tracker.update(missing_after)
-                        _notify(
-                            f"Hinweis: {len(missing_after)} Emoji-PNGs fehlen weiterhin nach Generierung für Nachricht {msg.id}:"
-                            f" {', '.join(sorted(missing_after))}"
-                        )
-                runs = build_runs_from_twe(twe)
-                ce_map = get_custom_emoji_cache()
-                new_runs: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
-                for rr in runs:
-                    if isinstance(rr, EmojiRun):
-                        if not include_emojis:
-                            doc_id = rr.document_id
-                            alt = ce_map.get(int(doc_id)) if doc_id.isdigit() else None
-                            new_runs.append(TextRun(kind="TextRun", text=alt or f"[CE:{doc_id}]"))
-                        else:
-                            png_path = Path("cache/emoji") / f"{rr.document_id}.png"
-                            if png_path.exists() or _ensure_png_from_export(rr.document_id):
-                                new_runs.append(rr)
-                            else:
-                                alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
-                                new_runs.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
-                    elif isinstance(rr, TextRun):
-                        mapped = _apply_lettermap_to_textrun(rr)
-                        new_runs.extend(mapped)
-                    else:
-                        new_runs.append(rr)
-                runs = new_runs
-                runs_list.extend(runs)
-            if runs_list:
-                base_meta: Dict[str, Any] = {}
-                if item.subheading:
-                    base_meta["subheading"] = item.subheading
-                link_url = item.link or _build_message_link(item.entity, msg)
-                if link_url:
-                    base_meta["link"] = link_url
-                records.append(RunsRecord(chat=item.title, message_id=msg.id, runs=runs_list, meta=base_meta or None))
-
-                if translate and msg and ((msg.message or "").strip()):
-                    try:
-                        twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
-                        tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
-                        if tr is not None:
-                            await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr))
-                            runs_tr = build_runs_from_twe(tr)
-                            ce_map = get_custom_emoji_cache()
-                            new_runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
-                            for rr in runs_tr:
-                                if isinstance(rr, EmojiRun):
-                                    png_path = Path("cache/emoji") / f"{rr.document_id}.png"
-                                    if png_path.exists():
-                                        new_runs_tr.append(rr)
-                                    else:
-                                        alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
-                                        new_runs_tr.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
-                                elif isinstance(rr, TextRun):
-                                    mapped = _apply_lettermap_to_textrun(rr)
-                                    new_runs_tr.extend(mapped)
-                                else:
-                                    new_runs_tr.append(rr)
-                            tr_meta: Dict[str, Any] = {}
-                            if item.subheading:
-                                tr_meta["subheading"] = item.subheading
-                            if link_url:
-                                tr_meta["link"] = link_url
-                            translation_record = RunsRecord(
-                                chat=f"{item.title} - {lang_up}",
-                                message_id=msg.id,
-                                runs=new_runs_tr,
-                                meta=tr_meta or None,
-                            )
-                            if mode_norm == "inline":
-                                pending_inline_translations.append(translation_record)
-                            else:
-                                translations_acc.append(translation_record)
-                    except Exception:
-                        pass
-            previous_title = item.title
-
-        if translate and mode_norm == "end" and translations_acc:
-            records.extend(translations_acc)
-        if pending_inline_translations:
-            records.extend(pending_inline_translations)
-
-        if missing_png_tracker:
-            rep_png = Path("data/missing_pngs.json"); rep_png.parent.mkdir(parents=True, exist_ok=True)
-            final_sorted = sorted(missing_png_tracker)
-            rep_png.write_text(json.dumps({"missing_pngs": final_sorted}, ensure_ascii=False, indent=2), encoding="utf-8")
-            if missing_png_tracker != initial_missing_pngs:
-                _notify(f"Hinweis: {len(final_sorted)} Emoji-PNGs fehlen weiterhin → {rep_png}")
-
-        styles = {
-            "paragraph": {"base": "P.Base"},
-            "text": {"base": "T.Base"},
-            "graphic": {"inline_emoji": "G.InlineEmoji"},
-        }
-
-        _notify("ODT wird geschrieben…")
-        write_odt_for_records(records, out_path, styles, doc_title=schedule.document_title)
-
-        extra_path: Optional[Path] = None
-        if translate and mode_norm == "separate" and translations_acc:
-            tr_title = f"{schedule.document_title} - {lang_up}" if schedule.document_title else f"{out_basename} - {lang_up}"
-            extra_path = out_dir / f"{out_basename}_{ts}_{lang_up}.odt"
-            _notify("Übersetzungs-ODT wird geschrieben…")
-            write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)
-
+        # Falls die Nachricht eine Antwort ist, Verweis auf die Ursprungnachricht einfügen
         try:
-            if missing_letters:
-                rep_path = Path("data/missing_lettermap.json")
-                rep_path.parent.mkdir(parents=True, exist_ok=True)
-                rep_path.write_text(json.dumps({"missing": sorted(missing_letters)}, ensure_ascii=False, indent=2), encoding="utf-8")
-                _notify(f"Hinweis: {len(missing_letters)} nicht zugeordnete Zeichen → {rep_path}")
+            rto = getattr(msg, "reply_to", None)
+            base_reply_id = None
+            if rto is not None:
+                base_reply_id = getattr(rto, "top_msg_id", None)
+                if base_reply_id is None:
+                    base_reply_id = getattr(rto, "reply_to_msg_id", None)
+            if base_reply_id is not None:
+                try:
+                    base_reply_id_int = int(base_reply_id)
+                except Exception:
+                    base_reply_id_int = None
+                if base_reply_id_int:
+                    # Für Threads im gleichen Topic bauen wir einen Link zur Ursprungnachricht
+                    reply_link = _build_message_link(item.entity, msg, topic_id=item.topic_id)
+                    if reply_link:
+                        reply_link = reply_link.rsplit("/", 1)[0] + f"/{base_reply_id_int}"
+                        runs_list.append(TextRun(kind="TextRun", text=f"Antwort auf: {reply_link}", href=reply_link))
+                        runs_list.append(LineBreak(kind="LineBreak"))
         except Exception:
             pass
 
-        _notify("Fertig.")
-        return (out_path, extra_path) if extra_path else out_path
+        if (msg.message or "").strip():
+            twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
+            await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, twe))
+            missing_after: set[str] = set()
+            if include_emojis:
+                try:
+                    from pipeline.assets import ensure_pngs_for_twe as _ensure_pngs_for_twe
+                    res = await _with_retries("ensure_pngs_for_twe", lambda: _ensure_pngs_for_twe(client, twe))
+                    if isinstance(res, set):
+                        missing_after = {str(int(d)) for d in res if d is not None and str(int(d)) not in ignored}
+                except Exception:
+                    missing_after = set()
+                if missing_after:
+                    missing_png_tracker.update(missing_after)
+                    _notify(
+                        f"Hinweis: {len(missing_after)} Emoji-PNGs fehlen weiterhin nach Generierung für Nachricht {msg.id}:"
+                        f" {', '.join(sorted(missing_after))}"
+                    )
+            runs = build_runs_from_twe(twe)
+            ce_map = get_custom_emoji_cache()
+            new_runs: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
+            for rr in runs:
+                if isinstance(rr, EmojiRun):
+                    if not include_emojis:
+                        doc_id = rr.document_id
+                        alt = ce_map.get(int(doc_id)) if doc_id.isdigit() else None
+                        new_runs.append(TextRun(kind="TextRun", text=alt or f"[CE:{doc_id}]"))
+                    else:
+                        png_path = Path("cache/emoji") / f"{rr.document_id}.png"
+                        if png_path.exists() or _ensure_png_from_export(rr.document_id):
+                            new_runs.append(rr)
+                        else:
+                            alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
+                            new_runs.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
+                elif isinstance(rr, TextRun):
+                    mapped = _apply_lettermap_to_textrun(rr)
+                    new_runs.extend(mapped)
+                else:
+                    new_runs.append(rr)
+            runs = new_runs
+            runs_list.extend(runs)
+        if runs_list:
+            base_meta: Dict[str, Any] = {}
+            if item.subheading:
+                base_meta["subheading"] = item.subheading
+            link_url = item.link or _build_message_link(item.entity, msg, topic_id=item.topic_id)
+            if link_url:
+                base_meta["link"] = link_url
+            records.append(RunsRecord(chat=item.title, message_id=msg.id, runs=runs_list, meta=base_meta or None))
+
+            if translate and msg and ((msg.message or "").strip()):
+                try:
+                    twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
+                    tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
+                    if tr is not None:
+                        await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr))
+                        runs_tr = build_runs_from_twe(tr)
+                        ce_map = get_custom_emoji_cache()
+                        new_runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
+                        for rr in runs_tr:
+                            if isinstance(rr, EmojiRun):
+                                png_path = Path("cache/emoji") / f"{rr.document_id}.png"
+                                if png_path.exists():
+                                    new_runs_tr.append(rr)
+                                else:
+                                    alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
+                                    new_runs_tr.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
+                            elif isinstance(rr, TextRun):
+                                mapped = _apply_lettermap_to_textrun(rr)
+                                new_runs_tr.extend(mapped)
+                            else:
+                                new_runs_tr.append(rr)
+                        tr_meta: Dict[str, Any] = {}
+                        if item.subheading:
+                            tr_meta["subheading"] = item.subheading
+                        if link_url:
+                            tr_meta["link"] = link_url
+                        translation_record = RunsRecord(
+                            chat=f"{item.title} - {lang_up}",
+                            message_id=msg.id,
+                            runs=new_runs_tr,
+                            meta=tr_meta or None,
+                        )
+                        if mode_norm == "inline":
+                            pending_inline_translations.append(translation_record)
+                        else:
+                            translations_acc.append(translation_record)
+                except Exception:
+                    pass
+        previous_title = item.title
+
+    if translate and mode_norm == "end" and translations_acc:
+        records.extend(translations_acc)
+    if pending_inline_translations:
+        records.extend(pending_inline_translations)
+
+    print(f"DEBUG: run_schedule - anzahl records: {len(records)}")
+
+    if missing_png_tracker:
+        rep_png = Path("data/missing_pngs.json"); rep_png.parent.mkdir(parents=True, exist_ok=True)
+        final_sorted = sorted(missing_png_tracker)
+        rep_png.write_text(json.dumps({"missing_pngs": final_sorted}, ensure_ascii=False, indent=2), encoding="utf-8")
+        if missing_png_tracker != initial_missing_pngs:
+            _notify(f"Hinweis: {len(final_sorted)} Emoji-PNGs fehlen weiterhin → {rep_png}")
+
+    styles = {
+        "paragraph": {"base": "P.Base"},
+        "text": {"base": "T.Base"},
+        "graphic": {"inline_emoji": "G.InlineEmoji"},
+    }
+
+    _notify("ODT wird geschrieben…")
+    print(f"DEBUG: run_schedule - schreibe ODT nach: {out_path}")
+    write_odt_for_records(records, out_path, styles, doc_title=schedule.document_title)
+
+    extra_path: Optional[Path] = None
+    if translate and mode_norm == "separate" and translations_acc:
+        tr_title = f"{schedule.document_title} - {lang_up}" if schedule.document_title else f"{out_basename} - {lang_up}"
+        extra_path = out_dir / f"{out_basename}_{ts}_{lang_up}.odt"
+        _notify("Übersetzungs-ODT wird geschrieben…")
+        write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)
+
+    try:
+        if missing_letters:
+            rep_path = Path("data/missing_lettermap.json")
+            rep_path.parent.mkdir(parents=True, exist_ok=True)
+            rep_path.write_text(json.dumps({"missing": sorted(missing_letters)}, ensure_ascii=False, indent=2), encoding="utf-8")
+            _notify(f"Hinweis: {len(missing_letters)} nicht zugeordnete Zeichen → {rep_path}")
+    except Exception:
+        pass
+
+    _notify("Fertig.")
+    return (out_path, extra_path) if extra_path else out_path

@@ -100,7 +100,9 @@ class ScheduleWorker(QObject):
             if self.lettermap_enabled:
                 kwargs["wait_for_mapping_cb"] = _wait_for_mapping
             try:
+                print("DEBUG UI: Starte run_schedule mit kwargs:", kwargs)
                 result = asyncio.run(run_schedule(**kwargs))
+                print("DEBUG UI: run_schedule fertig, Resultat:", result)
             except TypeError as exc:
                 if "wait_for_mapping_cb" in str(exc):
                     kwargs.pop("wait_for_mapping_cb", None)
@@ -364,6 +366,7 @@ class ScheduleTab(QWidget):
             self.lettermap_tab.on_mapping_finished()
 
     def _on_worker_finished(self, result: object) -> None:
+        print("DEBUG UI: _on_worker_finished aufgerufen, result =", result)
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
         self.btn_run.setEnabled(True)
