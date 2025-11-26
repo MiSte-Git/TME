@@ -263,10 +263,3 @@ def blocks_to_schedule(
     return ScheduleDocument(document_title=doc_title, default_channel=default_channel, sections=sections)
 
 
-def load_legacy_schedule(path: Any) -> ScheduleDocument:
-    """Importiert eine Legacy-TXT-Datei über den bestehenden Parser."""
-    from tg_by_date_to_odt_modes import parse_schedule_file_v2  # Lazy import
-
-    p = _as_path(path)
-    doc_title, blocks = parse_schedule_file_v2(str(p))
-    return blocks_to_schedule(doc_title, blocks)

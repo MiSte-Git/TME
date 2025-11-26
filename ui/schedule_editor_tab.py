@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 
 from schedule_json import (
     ScheduleDocument, ScheduleSection, load_schedule_document, save_schedule_document,
-    load_legacy_schedule, ISO_DATE_FMT, _parse_date as parse_date
+    ISO_DATE_FMT, _parse_date as parse_date
 )
 
 
@@ -174,13 +174,12 @@ class ScheduleEditorTab(QWidget):
             return
         p = Path(p_str)
         try:
-            if p.suffix.lower() == ".json":
-                sched = load_schedule_document(p)
-            else:
-                sched = load_legacy_schedule(p)
+            if p.suffix.lower() != ".json":
+                raise ValueError(self.tr("Nur JSON-Schedules werden unterstützt. Bitte die Datei zuerst nach JSON konvertieren."))
+            sched = load_schedule_document(p)
             self._populate_from_schedule(sched)
-            self.current_path = p if p.suffix.lower() == ".json" else None
-            self.path_edit.setText(str(p if p.suffix.lower() == ".json" else Path(Path.cwd() / "input/schedule.json")))
+            self.current_path = p
+            self.path_edit.setText(str(p))
         except Exception as e:
             QMessageBox.critical(self, self.tr("Fehler"), str(e))
 

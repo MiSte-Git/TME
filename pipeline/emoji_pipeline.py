@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Tuple
+from credentials import get_telegram_credentials
 from pipeline.adapters.existing_scripts import run_by_date
 
 # Optional: YAML-Konfiguration (falls PyYAML nicht installiert ist, wird ohne Config gearbeitet)
@@ -28,7 +29,7 @@ def main() -> None:
 
     ap.add_argument("--config", default="config.yaml", help="Pfad zu config.yaml")
 
-    s1 = sub.add_parser("by-date", help="tg_by_date_to_odt_modes.py ausführen")
+    s1 = sub.add_parser("by-date", help="Schedule-zu-ODT Pipeline ausführen")
     s1.add_argument("--schedule", required=True, type=Path)
     s1.add_argument("--mode", default=None, help="inline|end|separate")
     s1.add_argument("--translate", type=int, choices=[0,1], default=None)
@@ -132,14 +133,6 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 def _require_api_credentials() -> Tuple[int, str]:
-    from tg_by_date_to_odt_modes import API_ID, API_HASH
-
-    try:
-        api_id = int(API_ID)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        raise SystemExit(
-            "TELEGRAM_API_ID (Environment-Variable) fehlt oder ist keine Ganzzahl."
-        )
-    if not API_HASH or not str(API_HASH).strip():
-        raise SystemExit("TELEGRAM_API_HASH (Environment-Variable) fehlt.")
-    return api_id, str(API_HASH)
+    api_id, api_hash, phone = get_telegram_credentials()
+    print("[DEBUG TELEGRAM CREDS]", "api_id:", api_id, "api_hash_len:", len(api_hash))
+    return api_id, api_hash

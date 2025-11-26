@@ -2,8 +2,8 @@
 
 - Language/runtime: Python 3.11+ (tested up to 3.13). Single-folder utility scripts; no package/module layout.
 - Entry points:
-  - tg_by_date_to_odt_modes.py → builds ODT by date blocks from schedule files; optional OCR and Telegram inline translations.
-  - TelegramNachrichtenKopieren.py → builds ODT from grouped message links with per-group translations.
+  - schedule_to_odt.py → builds ODT by date blocks from JSON schedule files; optional OCR and Telegram inline translations.
+  - emoji_pipeline.py → utility CLI for by-date, by-ids and lettermap-related workflows.
 - Dependencies (install before running): python3 -m pip install telethon odfpy pillow pytesseract easyocr
 - Build/run:
   - Syntax check (no deps): python3 -m compileall -q .
@@ -13,7 +13,7 @@
   - No tests configured in repo. If adding pytest: run all → pytest -q; single test → pytest -q path/to/test_file.py -k test_name
   - No linter/formatter configured. Prefer PEP 8; if adding tools, use ruff/black with default settings.
 - Structure & data:
-  - Input schedules: links_*.txt; outputs: *.odt; media files saved under media/ and embedded into ODT.
+  - Input schedules: JSON schedule files; outputs: *.odt; media files saved under media/ and embedded into ODT.
   - Telegram session persists in tg_session.session (created on first run).
   - Custom emoji mapping in custom_emoji_user_map.json; archive experiments in _archive/ (not part of runtime).
 - External APIs:

@@ -11,6 +11,8 @@ import shutil
 
 from telethon import TelegramClient, functions, types
 
+from credentials import get_telegram_credentials
+
 from .fetch import parse_link, ensure_join_channel
 from .assets import load_custom_emoji_alts, get_custom_emoji_cache
 from .runs import RunsRecord, build_runs_from_twe, ImageRun, EmojiRun, TextRun, LineBreak
@@ -63,6 +65,59 @@ _LM_CONTINUE_WITHOUT_MAPPING = False
 _LM_SCOPE = "emoji-only"  # emoji-only|all|none
 _DEBUG_DUMP_ENTITIES = False
 
+# --- Forward/Absender Anzeige ---
+_SHOW_FORWARD_INFO = True  # Konfigurierbar über config.yaml ("show_forward_info")
+
+
+def _format_forward_info(msg, show_forward_info: bool) -> tuple[str | None, datetime | None]:
+    """Ermittelt die anzuzeigende Autoren-Zeile und optional das Originaldatum.
+
+    Gibt (display_author, original_date) zurück.
+    """
+    fwd = getattr(msg, "fwd_from", None)
+    if show_forward_info and fwd is not None:
+        try:
+            orig_username = getattr(getattr(fwd, "from_id", None), "username", None) or getattr(fwd, "from_username", None)
+        except Exception:
+            orig_username = None
+        from_name = getattr(fwd, "from_name", None) or ""
+        if isinstance(orig_username, str) and orig_username.strip():
+            base = f"@{orig_username.strip()}"
+        elif from_name:
+            base = from_name
+        else:
+            base = None
+        orig_date = getattr(fwd, "date", None)
+        if base and isinstance(orig_date, datetime):
+            suffix = orig_date.strftime("%Y-%m-%d %H:%M:%S")
+            display = f"{base} (forwarded, original_date={suffix})"
+            return display, orig_date
+        if base:
+            display = f"{base} (forwarded)"
+            return display, None
+    # Kein Forward oder show_forward_info=False → aktueller Sender
+    s = getattr(msg, "sender", None)
+    sender_username = None
+    sender_name = ""
+    if s is not None:
+        try:
+            sender_username = getattr(s, "username", None)
+            title = getattr(s, "title", None) or ""
+            first = getattr(s, "first_name", None) or ""
+            last = getattr(s, "last_name", None) or ""
+            sender_name = (title or (first + " " + last).strip()).strip()
+        except Exception:
+            sender_username = None
+            sender_name = ""
+    if isinstance(sender_username, str) and sender_username.strip():
+        base = f"@{sender_username.strip()}"
+        if sender_name:
+            return f"{base} ({sender_name})", None
+        return base, None
+    if sender_name:
+        return sender_name, None
+    return "Unbekannter Absender", None
+
 
 def _apply_config_overrides(cfg_path: Path = Path("config.yaml")) -> None:
     global _RETRIES, _BACKOFF, _INITIAL_DELAY, _JITTER
@@ -75,6 +130,10 @@ def _apply_config_overrides(cfg_path: Path = Path("config.yaml")) -> None:
             data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return
+        # Forward/Absender Anzeige
+        show_fwd = data.get("show_forward_info")
+        if isinstance(show_fwd, bool):
+            globals()["_SHOW_FORWARD_INFO"] = show_fwd
         retry = data.get("retry") or data.get("retries") or {}
         if isinstance(retry, dict):
             _RETRIES = int(retry.get("retries", _RETRIES))
@@ -234,8 +293,9 @@ async def run_by_ids(
     Baut pro #Gruppe erst Originale und – falls translate=True – danach die Übersetzungen als eigenen Block ("Titel - DE").
     translation_mode wird aktuell nicht differenziert (inline/end/separate → inline-artiger Block je Gruppe).
     """
-    # API-Creds aus vorhandenem Skript beziehen
-    from tg_by_date_to_odt_modes import API_ID, API_HASH
+    # API-Creds aus Environment/Config beziehen (zentral)
+    API_ID, API_HASH, PHONE = get_telegram_credentials()
+    print("[DEBUG TELEGRAM CREDS]", "api_id:", API_ID, "api_hash_len:", len(API_HASH))
 
     doc_title, groups = parse_groups_file(links_file)
 
@@ -543,6 +603,12 @@ async def run_by_ids(
         for title, entity, msg in collected:
             try:
                 runs_list = []
+
+                # Autoren-/Forward-Info bestimmen
+                display_author, orig_date = _format_forward_info(msg, _SHOW_FORWARD_INFO)
+                if display_author:
+                    runs_list.append(TextRun(kind="TextRun", text=display_author))
+                    runs_list.append(LineBreak(kind="LineBreak"))
                 # Gruppenspezifisches Lettermapping: [LM] Marker im Titel aktiviert Mapping für diese Gruppe
                 lm_for_group = _LM_IN_ORIGINAL or ("[LM]" in str(title).upper())
                 # Bilder einbetten, falls vorhanden und erlaubt

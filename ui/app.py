@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
+from pathlib import Path
 import sys
 import asyncio
-from pathlib import Path
 import json
 import os
-# Ensure project root on sys.path when running from ui/ directly
-try:
-    ROOT = Path(__file__).resolve().parents[1]
-    if str(ROOT) not in sys.path:
-        sys.path.insert(0, str(ROOT))
-except Exception:
-    pass
-
 import threading
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from credentials import get_telegram_credentials
 
 from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
@@ -100,9 +99,7 @@ class ScheduleWorker(QObject):
             if self.lettermap_enabled:
                 kwargs["wait_for_mapping_cb"] = _wait_for_mapping
             try:
-                print("DEBUG UI: Starte run_schedule mit kwargs:", kwargs)
                 result = asyncio.run(run_schedule(**kwargs))
-                print("DEBUG UI: run_schedule fertig, Resultat:", result)
             except TypeError as exc:
                 if "wait_for_mapping_cb" in str(exc):
                     kwargs.pop("wait_for_mapping_cb", None)
@@ -205,17 +202,11 @@ class ScheduleTab(QWidget):
         self._install_state_handlers()
 
     def _credentials_present(self) -> bool:
-        if os.environ.get("TELEGRAM_API_ID") and os.environ.get("TELEGRAM_API_HASH"):
-            return True
-        xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-        cand = [
-            Path(xdg) / "telegram-odt" / "credentials.json",
-            Path(xdg) / "telegram-odt" / "credentials.yaml",
-            Path(xdg) / "telegram-odt" / "credentials.yml",
-            Path(xdg) / "telegram-odt" / "credentials.env",
-            Path(xdg) / "telegram-odt.env",
-        ]
-        return any(p.exists() for p in cand)
+        try:
+            api_id, api_hash, phone = get_telegram_credentials()
+            return bool(api_id and api_hash)
+        except Exception:
+            return False
 
     def _prompt_store_credentials(self) -> bool:
         api_id, ok1 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API ID (my.telegram.org):"))
@@ -366,7 +357,6 @@ class ScheduleTab(QWidget):
             self.lettermap_tab.on_mapping_finished()
 
     def _on_worker_finished(self, result: object) -> None:
-        print("DEBUG UI: _on_worker_finished aufgerufen, result =", result)
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
         self.btn_run.setEnabled(True)
