@@ -7,12 +7,19 @@ import asyncio
 import json
 import os
 import threading
+import warnings
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from credentials import get_telegram_credentials
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*NVIDIA GeForce GT 1030.*not compatible with the current PyTorch installation.*",
+    category=UserWarning,
+)
 
 from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices

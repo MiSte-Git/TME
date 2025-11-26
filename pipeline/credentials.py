@@ -14,12 +14,9 @@ def get_telegram_credentials() -> Tuple[int, str, Optional[str]]:
 
     Bricht hart ab, wenn api_id/api_hash fehlen oder ungültig sind.
     """
-    api_id_raw = ***REMOVED*** #os.environ.get("TELEGRAM_API_ID")
-    api_hash_raw = "***REMOVED***" #os.environ.get("TELEGRAM_API_HASH")
-    phone_raw = "***REMOVED***" #os.environ.get("TELEGRAM_PHONE")
-
-    print("[DEBUG CREDS HARDCODED]", api_id_raw, len(api_hash_raw), phone_raw)
-    return api_id_raw, api_hash_raw, phone_raw
+    api_id_raw = os.environ.get("TELEGRAM_API_ID")
+    api_hash_raw = os.environ.get("TELEGRAM_API_HASH")
+    phone_raw = os.environ.get("TELEGRAM_PHONE")
 
     if not api_id_raw or not api_hash_raw:
         raise RuntimeError("TELEGRAM_API_ID oder TELEGRAM_API_HASH nicht gesetzt")
