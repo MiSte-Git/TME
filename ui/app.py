@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from credentials import get_telegram_credentials
+from credentials import get_telegram_credentials, save_telegram_credentials
 
 warnings.filterwarnings(
     "ignore",
@@ -210,29 +210,31 @@ class ScheduleTab(QWidget):
 
     def _credentials_present(self) -> bool:
         try:
-            api_id, api_hash, phone = get_telegram_credentials()
-            return bool(api_id and api_hash)
-        except Exception:
+            get_telegram_credentials()
+            return True
+        except RuntimeError:
             return False
 
     def _prompt_store_credentials(self) -> bool:
-        api_id, ok1 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API ID (my.telegram.org):"))
-        if not ok1 or not api_id.strip():
+        api_id_text, ok1 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API ID (my.telegram.org):"))
+        if not ok1:
             return False
-        api_hash, ok2 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API Hash (my.telegram.org):"))
-        if not ok2 or not api_hash.strip():
+        api_hash_text, ok2 = QInputDialog.getText(self, self.tr("Telegram API"), self.tr("API Hash (my.telegram.org):"))
+        if not ok2:
             return False
         try:
-            xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-            cred_dir = Path(xdg) / "telegram-odt"
-            cred_dir.mkdir(parents=True, exist_ok=True)
-            cred_file = cred_dir / "credentials.json"
-            cred_file.write_text(json.dumps({"api_id": api_id.strip(), "api_hash": api_hash.strip()}, ensure_ascii=False, indent=2), encoding="utf-8")
-            try:
-                if os.name == "posix":
-                    os.chmod(cred_file, 0o600)
-            except Exception:
-                pass
+            api_id_text = api_id_text.strip()
+            api_hash_text = api_hash_text.strip()
+            phone_text = ""
+            if not api_id_text or not api_hash_text:
+                QMessageBox.warning(self, self.tr("Fehler"), self.tr("ID oder Hash nicht gesetzt"))
+                return False
+
+            api_id = int(api_id_text)
+            phone_val = phone_text.strip() or None
+            save_telegram_credentials(api_id, api_hash_text, phone_val)
+            # Optional Validierung über zentrale Funktion
+            get_telegram_credentials()
             return True
         except Exception as e:
             QMessageBox.critical(self, self.tr("Fehler"), str(e))
