@@ -100,6 +100,9 @@ class ScheduleEditorTab(QWidget):
         sec_bar = QHBoxLayout(); sec_bar.setSpacing(8)
         self.btn_add = QPushButton(self.tr("Abschnitt hinzufügen")); self.btn_add.clicked.connect(self._add_row)
         self.btn_remove = QPushButton(self.tr("Ausgewählten Abschnitt entfernen")); self.btn_remove.clicked.connect(self._remove_row)
+        sec_bar.addWidget(QLabel(self.tr("Einfügen an Position:")))
+        self.add_position = QComboBox(); self._set_add_position_items()
+        sec_bar.addWidget(self.add_position)
         sec_bar.addWidget(self.btn_add)
         sec_bar.addWidget(self.btn_remove)
         sec_bar.addStretch(1)
@@ -128,6 +131,13 @@ class ScheduleEditorTab(QWidget):
         lay.addStretch(1)
         self._new_doc()
 
+    def _set_add_position_items(self) -> None:
+        self.add_position.clear()
+        self.add_position.addItem(self.tr("unterhalb der Auswahl"), "below")
+        self.add_position.addItem(self.tr("oberhalb der Auswahl"), "above")
+        self.add_position.addItem(self.tr("am Anfang"), "start")
+        self.add_position.addItem(self.tr("am Ende"), "end")
+
     def changeEvent(self, event) -> None:
         from PySide6.QtCore import QEvent
         if event.type() == QEvent.LanguageChange:
@@ -153,6 +163,13 @@ class ScheduleEditorTab(QWidget):
         ])
         self.translate_cb.setText(self.tr("Übersetzen"))
         self.btn_run.setText(self.tr("Schedule → ODT erzeugen"))
+        if hasattr(self, "add_position"):
+            current_data = self.add_position.currentData()
+            self._set_add_position_items()
+            # nach dem Reset Auswahl wiederherstellen
+            idx = self.add_position.findData(current_data)
+            if idx >= 0:
+                self.add_position.setCurrentIndex(idx)
 
     # Document model helpers -------------------------------------------------
     def _new_doc(self) -> None:
@@ -283,24 +300,37 @@ class ScheduleEditorTab(QWidget):
             QMessageBox.critical(self, self.tr("Fehler"), str(e))
 
     def _add_row(self) -> None:
-        row = self.table.rowCount(); self.table.insertRow(row)
+        insert_pos = self.table.rowCount()
+        mode = getattr(self, "add_position", None)
+        if mode is not None:
+            sel = mode.currentData()
+            current_row = self.table.currentRow()
+            if sel == "above" and current_row >= 0:
+                insert_pos = current_row
+            elif sel == "below" and current_row >= 0:
+                insert_pos = current_row + 1
+            elif sel == "start":
+                insert_pos = 0
+            elif sel == "end":
+                insert_pos = self.table.rowCount()
+        self.table.insertRow(insert_pos)
         # Initialize with today template
         from datetime import date
-        self.table.setItem(row, 0, QTableWidgetItem(date.today().strftime(ISO_DATE_FMT)))
+        self.table.setItem(insert_pos, 0, QTableWidgetItem(date.today().strftime(ISO_DATE_FMT)))
         # Default-Zeiten: ganzer Tag
-        self.table.setItem(row, 1, QTableWidgetItem("00:00:00"))
-        self.table.setItem(row, 2, QTableWidgetItem("23:59:59"))
+        self.table.setItem(insert_pos, 1, QTableWidgetItem("00:00:00"))
+        self.table.setItem(insert_pos, 2, QTableWidgetItem("23:59:59"))
         it_title = QTableWidgetItem("")
         it_title.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.table.setItem(row, 3, it_title)
+        self.table.setItem(insert_pos, 3, it_title)
         it_sub = QTableWidgetItem("")
         it_sub.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.table.setItem(row, 4, it_sub)
-        self.table.setItem(row, 5, QTableWidgetItem(""))
+        self.table.setItem(insert_pos, 4, it_sub)
+        self.table.setItem(insert_pos, 5, QTableWidgetItem(""))
         cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemIsUserCheckable)
         cb.setCheckState(Qt.Checked)
-        self.table.setItem(row, 6, cb)
-        self.table.setItem(row, 7, QTableWidgetItem(""))
+        self.table.setItem(insert_pos, 6, cb)
+        self.table.setItem(insert_pos, 7, QTableWidgetItem(""))
 
     def _remove_row(self) -> None:
         row = self.table.currentRow()

@@ -138,17 +138,17 @@ async def fetch_messages_for_day(
             return default
         try:
             parts = [int(p) for p in value.split(":")]
-            while len(parts) < 3:
-                parts.append(0)
-            return time(*parts[:3])
+            padded = (parts + [0, 0, 0])[:3]
+            hour, minute, second = padded
+            return time(hour, minute, second)
         except Exception:
             return default
 
     start_t = _parse_time(start_time, time(0, 0, 0))
     end_t = _parse_time(end_time, time(23, 59, 59))
 
-    start_local = datetime.combine(d, start_t, tzinfo)
-    end_local = datetime.combine(d, end_t, tzinfo)
+    start_local = datetime.combine(d, start_t, tzinfo=tzinfo)
+    end_local = datetime.combine(d, end_t, tzinfo=tzinfo)
     end_utc = end_local.astimezone(timezone.utc)
 
     msgs: list[Any] = []
@@ -277,8 +277,10 @@ def _build_day_time_range(date_obj, start_time_str: str | None, end_time_str: st
     try:
         st_parts = [int(p) for p in (start_time_str or "00:00:00").split(":")]
         et_parts = [int(p) for p in (end_time_str or "23:59:59").split(":")]
-        st = time(*st_parts[:3])
-        et = time(*et_parts[:3])
+        st_h, st_m, st_s = (st_parts + [0, 0, 0])[:3]
+        et_h, et_m, et_s = (et_parts + [0, 0, 0])[:3]
+        st = time(st_h, st_m, st_s)
+        et = time(et_h, et_m, et_s)
     except Exception:
         st = time(0, 0, 0)
         et = time(23, 59, 59)
@@ -734,7 +736,7 @@ async def run_schedule(
             # Zeitstempel + Medientyp als erste Zeile pro Nachricht einfügen
             try:
                 dt = getattr(msg, "date", None)
-                if hasattr(dt, "astimezone"):
+                if isinstance(dt, datetime):
                     local_dt = dt.astimezone(tzinfo)
                     # Datum + Uhrzeit in lokaler Zeitzone ausgeben
                     time_str = local_dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -814,7 +816,7 @@ async def run_schedule(
                         if path and str(path).lower().endswith(".webp"):
                             try:
                                 from PIL import Image as PILImage
-                                p = Path(path)
+                                p = Path(str(path))
                                 png_path = p.with_suffix(".png")
                                 with PILImage.open(p) as im:
                                     im.save(png_path, "PNG")
@@ -826,7 +828,7 @@ async def run_schedule(
                                 from PIL import Image as PILImage, ImageOps
                                 safe_name = f"img_{img_idx:04d}.png"; img_idx += 1
                                 safe_path = safe_img_dir / safe_name
-                                with PILImage.open(Path(path)) as im:
+                                with PILImage.open(Path(str(path))) as im:
                                     im = ImageOps.exif_transpose(im)
                                     if im.mode not in ("RGB", "RGBA"):
                                         im = im.convert("RGB")
@@ -866,7 +868,7 @@ async def run_schedule(
                         lambda: msg.download_media(file=str(media_dir)),
                     )
                     if audio_path_str:
-                        audio_path = Path(audio_path_str)
+                        audio_path = Path(str(audio_path_str))
                         try:
                             stt_text = transcribe_voice(audio_path, language=(target_lang or "de"))
                         except SpeechToTextError:
@@ -922,7 +924,7 @@ async def run_schedule(
                                 reply_user = None
                             try:
                                 reply_dt = getattr(reply_msg, "date", None) if reply_msg is not None else None
-                                if hasattr(reply_dt, "astimezone"):
+                                if isinstance(reply_dt, datetime):
                                     reply_dt_local = reply_dt.astimezone(tzinfo)
                                     reply_dt_str = reply_dt_local.strftime("%d.%m.%Y %H:%M:%S")
                                 else:
@@ -941,7 +943,7 @@ async def run_schedule(
                 missing_after: set[str] = set()
                 if include_emojis:
                     try:
-                        from pipeline.assets import ensure_pngs_for_twe as _ensure_pngs_for_twe
+                        from pipeline.assets import ensure_pngs_for_twe as _ensure_pngs_for_twe  # type: ignore[attr-defined]
                         res = await _with_retries("ensure_pngs_for_twe", lambda: _ensure_pngs_for_twe(client, twe))
                         if isinstance(res, set):
                             missing_after = {str(int(d)) for d in res if d is not None and str(int(d)) not in ignored}
@@ -991,8 +993,9 @@ async def run_schedule(
                         twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                         tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
                         if tr is not None:
-                            await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr))
-                            runs_tr = build_runs_from_twe(tr)
+                            tr_non_null = tr
+                            await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
+                            runs_tr = build_runs_from_twe(tr_non_null)
                             ce_map = get_custom_emoji_cache()
                             new_runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
                             for rr in runs_tr:
@@ -1070,4 +1073,5 @@ async def run_schedule(
         _notify("Fertig.")
         return (out_path, extra_path) if extra_path else out_path
     finally:
-        await client.disconnect()
+        if client is not None:
+            await client.disconnect()
