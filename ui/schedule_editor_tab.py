@@ -3,11 +3,11 @@ from pathlib import Path
 from typing import List, Optional
 import json
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QTableWidget, QTableWidgetItem, QFileDialog, QMessageBox, QHeaderView,
-    QCheckBox, QComboBox
+    QCheckBox, QComboBox, QAbstractItemView
 )
 
 from schedule_json import (
@@ -54,8 +54,8 @@ class ScheduleEditorTab(QWidget):
         self.table = QTableWidget(0, 8)
         # Bedienbarkeit verbessern: horizontales Scrollen erlauben, Spalten manuell resizebar,
         # und Zeilenumbruch in den Titelzellen.
-        self.table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
-        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setHorizontalHeaderLabels([
             self.tr("Datum\n(YYYY-MM-DD)"),
             self.tr("Von\n(HH:MM[:SS])"),
@@ -70,7 +70,7 @@ class ScheduleEditorTab(QWidget):
         hh = self.table.horizontalHeader()
         # Alle Spalten sind manuell größenveränderbar; breite Texte können durch
         # horizontales Scrollen vollständig gelesen werden.
-        hh.setSectionResizeMode(QHeaderView.Interactive)
+        hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         # Startbreiten sinnvoll vorgeben (können vom Nutzer angepasst werden)
         # Datum/Zeiten relativ schmal halten, damit Überschriften mit Zeilenumbruch gut lesbar sind
         hh.resizeSection(0, 120)  # Datum
@@ -86,14 +86,14 @@ class ScheduleEditorTab(QWidget):
         hh.setSectionsClickable(True)
         model = hh.model()
         if model is not None:
-            model.setHeaderData(0, Qt.Horizontal, self.tr("Datum im Format YYYY-MM-DD"), Qt.ToolTipRole)
-            model.setHeaderData(1, Qt.Horizontal, self.tr("Startzeit im Format HH:MM oder HH:MM:SS"), Qt.ToolTipRole)
-            model.setHeaderData(2, Qt.Horizontal, self.tr("Endzeit im Format HH:MM oder HH:MM:SS"), Qt.ToolTipRole)
-            model.setHeaderData(3, Qt.Horizontal, self.tr("Titel des Abschnitts"), Qt.ToolTipRole)
-            model.setHeaderData(4, Qt.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ToolTipRole)
-            model.setHeaderData(5, Qt.Horizontal, self.tr("Telegram-Links; mehrere mit ; trennen"), Qt.ToolTipRole)
-            model.setHeaderData(6, Qt.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden"), Qt.ToolTipRole)
-            model.setHeaderData(7, Qt.Horizontal, self.tr("Spezifischer Kanal für diesen Abschnitt (optional)"), Qt.ToolTipRole)
+            model.setHeaderData(0, Qt.Orientation.Horizontal, self.tr("Datum im Format YYYY-MM-DD"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(1, Qt.Orientation.Horizontal, self.tr("Startzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(2, Qt.Orientation.Horizontal, self.tr("Endzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(3, Qt.Orientation.Horizontal, self.tr("Titel des Abschnitts"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(4, Qt.Orientation.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(5, Qt.Orientation.Horizontal, self.tr("Telegram-Links; mehrere mit ; trennen"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(6, Qt.Orientation.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(7, Qt.Orientation.Horizontal, self.tr("Spezifischer Kanal für diesen Abschnitt (optional)"), Qt.ItemDataRole.ToolTipRole)
         lay.addWidget(self.table)
 
         # Section actions
@@ -139,8 +139,7 @@ class ScheduleEditorTab(QWidget):
         self.add_position.addItem(self.tr("am Ende"), "end")
 
     def changeEvent(self, event) -> None:
-        from PySide6.QtCore import QEvent
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self.retranslate()
         super().changeEvent(event)
 
@@ -216,15 +215,15 @@ class ScheduleEditorTab(QWidget):
                 self.table.setItem(row, 2, QTableWidgetItem(to_time))
                 it_title = QTableWidgetItem(sec.title)
                 # Zeilenumbruch in Titelzellen erlauben, damit lange Titel lesbarer sind
-                it_title.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                it_title.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 3, it_title)
 
                 it_sub = QTableWidgetItem(sec.subheading or "")
-                it_sub.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                it_sub.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 4, it_sub)
                 self.table.setItem(row, 5, QTableWidgetItem(";".join(sec.links)))
-                cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemIsUserCheckable)
-                cb.setCheckState(Qt.Checked if sec.fetch_by_date else Qt.Unchecked)
+                cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                cb.setCheckState(Qt.CheckState.Checked if sec.fetch_by_date else Qt.CheckState.Unchecked)
                 self.table.setItem(row, 6, cb)
                 self.table.setItem(row, 7, QTableWidgetItem(sec.channel or ""))
         finally:
@@ -235,17 +234,24 @@ class ScheduleEditorTab(QWidget):
         default_channel = (self.default_channel_edit.text() or "").strip() or None
         sections: List[ScheduleSection] = []
         for row in range(self.table.rowCount()):
-            date_text = (self.table.item(row, 0).text() if self.table.item(row, 0) else "").strip()
-            from_text = (self.table.item(row, 1).text() if self.table.item(row, 1) else "").strip() or "00:00:00"
-            to_text = (self.table.item(row, 2).text() if self.table.item(row, 2) else "").strip() or "23:59:59"
-            title_text = (self.table.item(row, 3).text() if self.table.item(row, 3) else "").strip()
-            sub_text = (self.table.item(row, 4).text() if self.table.item(row, 4) else "").strip() or None
-            links_text = (self.table.item(row, 5).text() if self.table.item(row, 5) else "").strip()
+            date_item = self.table.item(row, 0)
+            from_item = self.table.item(row, 1)
+            to_item = self.table.item(row, 2)
+            title_item = self.table.item(row, 3)
+            sub_item = self.table.item(row, 4)
+            links_item = self.table.item(row, 5)
+            date_text = (date_item.text() if date_item is not None else "").strip()
+            from_text = (from_item.text() if from_item is not None else "").strip() or "00:00:00"
+            to_text = (to_item.text() if to_item is not None else "").strip() or "23:59:59"
+            title_text = (title_item.text() if title_item is not None else "").strip()
+            sub_text = (sub_item.text() if sub_item is not None else "").strip() or None
+            links_text = (links_item.text() if links_item is not None else "").strip()
             fetch_item = self.table.item(row, 6)
             fetch_flag = True
-            if fetch_item and fetch_item.flags() & Qt.ItemIsUserCheckable:
-                fetch_flag = (fetch_item.checkState() == Qt.Checked)
-            channel_text = (self.table.item(row, 7).text() if self.table.item(row, 7) else "").strip() or None
+            if fetch_item and fetch_item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+                fetch_flag = (fetch_item.checkState() == Qt.CheckState.Checked)
+            channel_item = self.table.item(row, 7)
+            channel_text = (channel_item.text() if channel_item is not None else "").strip() or None
             # Validation
             try:
                 date_obj = parse_date(date_text)
@@ -321,14 +327,14 @@ class ScheduleEditorTab(QWidget):
         self.table.setItem(insert_pos, 1, QTableWidgetItem("00:00:00"))
         self.table.setItem(insert_pos, 2, QTableWidgetItem("23:59:59"))
         it_title = QTableWidgetItem("")
-        it_title.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        it_title.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.setItem(insert_pos, 3, it_title)
         it_sub = QTableWidgetItem("")
-        it_sub.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        it_sub.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.setItem(insert_pos, 4, it_sub)
         self.table.setItem(insert_pos, 5, QTableWidgetItem(""))
-        cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemIsUserCheckable)
-        cb.setCheckState(Qt.Checked)
+        cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        cb.setCheckState(Qt.CheckState.Checked)
         self.table.setItem(insert_pos, 6, cb)
         self.table.setItem(insert_pos, 7, QTableWidgetItem(""))
 
@@ -351,11 +357,13 @@ class ScheduleEditorTab(QWidget):
             target_lang = (self.lang_edit.text() or "").strip() or ("de" if translate else "de")
             if hasattr(mw, "schedule_tab") and hasattr(mw, "tabs"):
                 st = getattr(mw, "schedule_tab")
+                tabs = getattr(mw, "tabs", None)
                 st.schedule_edit.setText(str(self.current_path))
                 st.cb_translate.setChecked(translate)
                 st.mode_combo.setCurrentText(self.mode_combo.currentText())
                 st.lang_edit.setText(target_lang)
-                mw.tabs.setCurrentWidget(st)
+                if tabs is not None and hasattr(tabs, "setCurrentWidget"):
+                    tabs.setCurrentWidget(st)
                 st.run_schedule_file()
             else:
                 # Fallback: basic run (no UI progress)

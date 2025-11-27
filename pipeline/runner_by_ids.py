@@ -267,15 +267,17 @@ async def _fetch_translation(client: TelegramClient, entity, msg_id: int, twe: t
         "TranslateTextRequest(peer,id)",
         lambda: client(functions.messages.TranslateTextRequest(peer=entity, id=[msg_id], to_lang=to_lang)),
     )
-    if res is not None and getattr(res, "result", None):
-        return res.result[0]
+    res_result = getattr(res, "result", None)
+    if isinstance(res_result, list) and res_result:
+        return res_result[0]
     # 2) Fallback: nur Text
     res2 = await _with_retries(
         "TranslateTextRequest(text)",
         lambda: client(functions.messages.TranslateTextRequest(text=[twe], to_lang=to_lang)),
     )
-    if res2 is not None and getattr(res2, "result", None):
-        return res2.result[0]
+    res2_result = getattr(res2, "result", None)
+    if isinstance(res2_result, list) and res2_result:
+        return res2_result[0]
     return None
 
 
@@ -433,7 +435,7 @@ async def run_by_ids(
                 pass
         # 1) Vorab: alle Nachrichten laden und verwendete Custom-Emoji-Dokumente sammeln
         from telethon.tl.types import MessageEntityCustomEmoji
-        collected: List[Tuple[str, object, object]] = []  # (title, entity, msg)
+        collected: List[Tuple[str, object, types.Message]] = []  # (title, entity, msg)
         used_doc_ids: set[str] = set()
         debug_dir = Path("data/debug"); debug_dir.mkdir(parents=True, exist_ok=True)
         for title, links in groups:
@@ -445,7 +447,7 @@ async def run_by_ids(
                         continue
                     await ensure_join_channel(client, entity)
                     msg = await _with_retries("get_messages", lambda: client.get_messages(entity, ids=msg_id))
-                    if not msg:
+                    if not msg or not isinstance(msg, types.Message):
                         continue
                     collected.append((title, entity, msg))
                     # doc_ids aus Entities sammeln und Alt-Texte laden (für Filter)
@@ -602,6 +604,8 @@ async def run_by_ids(
         # 3) Nun ODT-Inhalte erzeugen aus bereits geladenen Nachrichten
         for title, entity, msg in collected:
             try:
+                if not isinstance(msg, types.Message):
+                    continue
                 runs_list = []
 
                 # Autoren-/Forward-Info bestimmen
@@ -615,21 +619,25 @@ async def run_by_ids(
                 if include_images:
                     try:
                         from telethon.tl.types import MessageMediaPhoto, DocumentAttributeSticker
-                        is_photo = isinstance(msg.media, MessageMediaPhoto)
-                        is_image_doc = getattr(msg, "document", None) and (getattr(msg.document, "mime_type", "") or "").startswith("image/")
+                        doc_attr = getattr(msg, "document", None)
+                        is_photo = isinstance(getattr(msg, "media", None), MessageMediaPhoto)
+                        is_image_doc = bool(doc_attr and (getattr(doc_attr, "mime_type", "") or "").startswith("image/"))
                         is_sticker = False
-                        if getattr(msg, "document", None):
-                            for attr in (msg.document.attributes or []):
+                        if doc_attr is not None:
+                            for attr in (getattr(doc_attr, "attributes", []) or []):
                                 if isinstance(attr, DocumentAttributeSticker):
                                     is_sticker = True; break
                         if is_photo or is_image_doc or is_sticker:
                             media_dir = Path("media"); media_dir.mkdir(exist_ok=True)
-                            path = await _with_retries("download_media", lambda: msg.download_media(file=str(media_dir)))
+                            download_media_fn = getattr(msg, "download_media", None)
+                            if not callable(download_media_fn):
+                                raise AttributeError("download_media missing")
+                            path = await _with_retries("download_media", lambda: download_media_fn(file=str(media_dir)))  # type: ignore[misc]
                             if path and str(path).lower().endswith('.webp'):
                                 # nach PNG konvertieren
                                 try:
                                     from PIL import Image as PILImage
-                                    p = Path(path)
+                                    p = Path(str(path))
                                     png_path = p.with_suffix('.png')
                                     with PILImage.open(p) as im:
                                         im.save(png_path, 'PNG')
@@ -642,7 +650,8 @@ async def run_by_ids(
                                     from PIL import Image as PILImage, ImageOps
                                     safe_name = f"img_{img_idx:04d}.png"; img_idx += 1
                                     safe_path = safe_img_dir / safe_name
-                                    with PILImage.open(Path(path)) as im:
+                                    path_str = str(path)
+                                    with PILImage.open(Path(path_str)) as im:
                                         im = ImageOps.exif_transpose(im)
                                         if im.mode not in ('RGB','RGBA'):
                                             im = im.convert('RGB')
@@ -650,11 +659,11 @@ async def run_by_ids(
                                     path = str(safe_path)
                                 except Exception:
                                     pass
-                                runs_list.append(ImageRun(kind="ImageRun", path=path, width_cm=10.0))
+                                runs_list.append(ImageRun(kind="ImageRun", path=str(path), width_cm=10.0))
                     except Exception:
                         pass
                 # Text
-                if (msg.message or "").strip():
+                if (getattr(msg, "message", None) or "").strip():
                     twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                     await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, twe))
                     # Optional: Emojis in cache/emoji rendern (nur statische WEBP/PNG)
@@ -716,7 +725,7 @@ async def run_by_ids(
                     runs = new_runs
                     runs_list.extend(runs)
                 if runs_list:
-                    records.append(RunsRecord(chat=title, message_id=msg.id, runs=runs_list))
+                    records.append(RunsRecord(chat=title, message_id=getattr(msg, "id", 0), runs=runs_list))
             except Exception:
                 continue
         # 4) Übersetzungen (optional), nutzt bereits geladene Nachrichten
@@ -724,14 +733,15 @@ async def run_by_ids(
             lang_up = target_lang.upper()
             for title, entity, msg in collected:
                 try:
-                    if not msg or not ((msg.message or "").strip()):
+                    if not msg or not isinstance(msg, types.Message) or not ((msg.message or "").strip()):
                         continue
                     twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                     tr = await _fetch_translation(client, entity, msg.id, twe, target_lang)
                     if tr is None:
                         continue
-                    await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr))
-                    runs_tr = build_runs_from_twe(tr)
+                    tr_non_null = tr
+                    await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
+                    runs_tr = build_runs_from_twe(tr_non_null)
                     ce_map = get_custom_emoji_cache()
                     new_runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
                     for rr in runs_tr:
@@ -748,7 +758,7 @@ async def run_by_ids(
                         else:
                             new_runs_tr.append(rr)
                     runs_tr = new_runs_tr
-                    records.append(RunsRecord(chat=f"{title} - {lang_up}", message_id=msg.id, runs=runs_tr))
+                    records.append(RunsRecord(chat=f"{title} - {lang_up}", message_id=getattr(msg, "id", 0), runs=runs_tr))
                 except Exception:
                     continue
 

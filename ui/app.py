@@ -8,6 +8,7 @@ import json
 import os
 import threading
 import warnings
+from typing import Any, Callable, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -89,22 +90,22 @@ class ScheduleWorker(QObject):
                 _rbi_cfg._LM_OPEN_UI_ON_MISSING = False
             except Exception:
                 pass
-            kwargs = dict(
-                schedule_path=self.schedule_path,
-                out_basename=self.schedule_path.stem,
-                output_dir=Path("output"),
-                translate=self.translate,
-                translation_mode=self.translation_mode,
-                target_lang=self.target_lang,
-                include_images=self.include_images,
-                include_emojis=self.include_emojis,
-                source_lang=self.source_lang,
-                config_path=Path("config.yaml"),
-                progress_cb=_cb,
-                skip_lettermap_ui=True,
-            )
+            kwargs: dict[str, Any] = {
+                "schedule_path": self.schedule_path,
+                "out_basename": self.schedule_path.stem,
+                "output_dir": Path("output"),
+                "translate": self.translate,
+                "translation_mode": self.translation_mode,
+                "target_lang": self.target_lang,
+                "include_images": self.include_images,
+                "include_emojis": self.include_emojis,
+                "source_lang": self.source_lang,
+                "config_path": Path("config.yaml"),
+                "progress_cb": cast(Callable[[str], None], _cb),
+                "skip_lettermap_ui": True,
+            }
             if self.lettermap_enabled:
-                kwargs["wait_for_mapping_cb"] = _wait_for_mapping
+                kwargs["wait_for_mapping_cb"] = cast(Callable[[], None], _wait_for_mapping)
             try:
                 result = asyncio.run(run_schedule(**kwargs))
             except TypeError as exc:
@@ -247,15 +248,15 @@ class ScheduleTab(QWidget):
             self,
             self.tr("Telegram API"),
             self.tr("Telegram API-Zugangsdaten fehlen. Jetzt eintragen und lokal speichern?"),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
-        if ans != QMessageBox.Yes:
+        if ans != QMessageBox.StandardButton.Yes:
             return False
         return self._prompt_store_credentials()
 
     def changeEvent(self, event) -> None:
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self.retranslate()
         super().changeEvent(event)
 
@@ -622,8 +623,9 @@ class MainWindow(QMainWindow):
         # Prefer last output path; else default output dir
         try:
             target: Path
-            if self._last_output_path and Path(str(self._last_output_path)).exists():
-                target = Path(str(self._last_output_path)).parent
+            last_out = getattr(self, "_last_output_path", None)
+            if last_out and Path(str(last_out)).exists():
+                target = Path(str(last_out)).parent
             else:
                 target = Path.cwd() / "output"
             target.mkdir(parents=True, exist_ok=True)
@@ -665,7 +667,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, title, html)
 
     def changeEvent(self, event) -> None:
-        if event.type() == QEvent.LanguageChange:
+        if event.type() == QEvent.Type.LanguageChange:
             self.retranslate()
         super().changeEvent(event)
 
@@ -690,7 +692,9 @@ class MainWindow(QMainWindow):
                 self.action_deploy.setText(self.tr("Deployment-Anleitung öffnen"))
             if hasattr(self, "action_spec"):
                 self.action_spec.setText(self.tr("PyInstaller-Spezifikation öffnen"))
-        self.lang_menu.setTitle(self.tr("Sprache"))
+        lang_menu_obj = getattr(self, "lang_menu", None)
+        if lang_menu_obj is not None:
+            lang_menu_obj.setTitle(self.tr("Sprache"))
         self.action_light.setText(self.tr("Hell"))
         self.action_dark.setText(self.tr("Dunkel"))
         # Sprachaktionen werden dynamisch in _init_menus erstellt
@@ -788,9 +792,9 @@ def _save_theme_preference(theme: str) -> None:
 
 def _set_theme(theme: str) -> None:
     app = QApplication.instance()
-    if app is None:
+    if app is None or not isinstance(app, QApplication):
         return
-    _apply_theme(app, theme)
+    _apply_theme(cast(QApplication, app), theme)
     _save_theme_preference(theme)
 
 
@@ -849,12 +853,12 @@ def _save_language_preference(lang: str) -> None:
 
 def _set_language(lang: str) -> None:
     app = QApplication.instance()
-    if app is None:
+    if app is None or not isinstance(app, QApplication):
         return
     _save_language_preference(lang)
-    _apply_language(app, lang)
+    _apply_language(cast(QApplication, app), lang)
     # Retranslate top-level MainWindow(s)
-    for w in app.topLevelWidgets():
+    for w in cast(QApplication, app).topLevelWidgets():
         try:
             if isinstance(w, MainWindow):
                 w.retranslate()

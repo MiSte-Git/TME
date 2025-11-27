@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import inspect
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -836,7 +837,7 @@ async def run_schedule(
                                 path = str(safe_path)
                             except Exception:
                                 pass
-                            runs_list.append(ImageRun(kind="ImageRun", path=path, width_cm=10.0))
+                            runs_list.append(ImageRun(kind="ImageRun", path=str(path), width_cm=10.0))
                 except Exception:
                     pass
 
@@ -1074,4 +1075,9 @@ async def run_schedule(
         return (out_path, extra_path) if extra_path else out_path
     finally:
         if client is not None:
-            await client.disconnect()
+            try:
+                res = client.disconnect()
+                if inspect.isawaitable(res):
+                    await res
+            except Exception:
+                pass
