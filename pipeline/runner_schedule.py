@@ -725,6 +725,7 @@ async def run_schedule(
                     records.extend(pending_inline_translations)
                     pending_inline_translations.clear()
             msg = item.message
+            header_runs: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
             runs_list: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
 
             # Autoren-/Forward-Info bestimmen
@@ -784,11 +785,16 @@ async def run_schedule(
             if media_type_parts:
                 header_text += " – " + ", ".join(media_type_parts)
 
-            runs_list.append(TextRun(kind="TextRun", text=header_text))
-            runs_list.append(LineBreak(kind="LineBreak"))
+            link_url = item.link or _build_message_link(item.entity, msg, topic_id=item.topic_id)
+
+            header_runs.append(TextRun(kind="TextRun", text=header_text))
+            header_runs.append(LineBreak(kind="LineBreak"))
+            if link_url:
+                header_runs.append(TextRun(kind="TextRun", text=link_url, href=link_url, bold=True, underline=True))
+                header_runs.append(LineBreak(kind="LineBreak"))
             if display_author:
-                runs_list.append(TextRun(kind="TextRun", text=display_author))
-                runs_list.append(LineBreak(kind="LineBreak"))
+                header_runs.append(TextRun(kind="TextRun", text=display_author))
+                header_runs.append(LineBreak(kind="LineBreak"))
             lm_for_group = _rbi._LM_IN_ORIGINAL or ("[LM]" in str(item.title).upper())
 
             if include_images:
@@ -892,8 +898,40 @@ async def run_schedule(
                         reply_link = _build_message_link(item.entity, msg, topic_id=item.topic_id)
                         if reply_link:
                             reply_link = reply_link.rsplit("/", 1)[0] + f"/{base_reply_id_int}"
-                            runs_list.append(TextRun(kind="TextRun", text=f"Antwort auf: {reply_link}", href=reply_link))
-                            runs_list.append(LineBreak(kind="LineBreak"))
+                            reply_msg = None
+                            try:
+                                reply_msg = await msg.get_reply_message()
+                            except Exception:
+                                reply_msg = None
+                            reply_user = None
+                            try:
+                                sender = getattr(reply_msg, "sender", None) if reply_msg is not None else None
+                                if sender is not None:
+                                    username_raw = getattr(sender, "username", None)
+                                    if username_raw:
+                                        uname = str(username_raw).lstrip("@")
+                                        if uname:
+                                            reply_user = f"@{uname}"
+                                    if not reply_user:
+                                        fn = getattr(sender, "first_name", None) or ""
+                                        ln = getattr(sender, "last_name", None) or ""
+                                        name_combined = f"{fn} {ln}".strip()
+                                        if name_combined:
+                                            reply_user = name_combined
+                            except Exception:
+                                reply_user = None
+                            try:
+                                reply_dt = getattr(reply_msg, "date", None) if reply_msg is not None else None
+                                if hasattr(reply_dt, "astimezone"):
+                                    reply_dt_local = reply_dt.astimezone(tzinfo)
+                                    reply_dt_str = reply_dt_local.strftime("%d.%m.%Y %H:%M:%S")
+                                else:
+                                    reply_dt_str = "--.--.---- --:--:--"
+                            except Exception:
+                                reply_dt_str = "--.--.---- --:--:--"
+                            reply_user = reply_user or "Unbekannt"
+                            header_runs.append(TextRun(kind="TextRun", text=f"Antwort auf: {reply_user} – {reply_dt_str} – {reply_link}", href=reply_link))
+                            header_runs.append(LineBreak(kind="LineBreak"))
             except Exception:
                 pass
 
@@ -942,7 +980,8 @@ async def run_schedule(
                 base_meta: Dict[str, Any] = {}
                 if item.subheading:
                     base_meta["subheading"] = item.subheading
-                link_url = item.link or _build_message_link(item.entity, msg, topic_id=item.topic_id)
+                if header_runs:
+                    base_meta["header_runs"] = header_runs
                 if link_url:
                     base_meta["link"] = link_url
                 records.append(RunsRecord(chat=item.title, message_id=msg.id, runs=runs_list, meta=base_meta or None))
@@ -972,6 +1011,8 @@ async def run_schedule(
                             tr_meta: Dict[str, Any] = {}
                             if item.subheading:
                                 tr_meta["subheading"] = item.subheading
+                            if header_runs:
+                                tr_meta["header_runs"] = header_runs
                             if link_url:
                                 tr_meta["link"] = link_url
                             translation_record = RunsRecord(

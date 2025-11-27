@@ -80,10 +80,20 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
     doc.styles.addElement(link_para)
     out["P.MessageLink"] = "P.MessageLink"
 
+    header_para = Style(name="P.MessageHeader", family="paragraph")
+    header_para.addElement(ParagraphProperties(margintop="0.1cm", marginbottom="0.2cm", backgroundcolor="#f2f2f2", paddingtop="0.05cm", paddingbottom="0.05cm"))
+    doc.styles.addElement(header_para)
+    out["P.MessageHeader"] = "P.MessageHeader"
+
     pb = Style(name="P.PageBreak", family="paragraph")
     pb.addElement(ParagraphProperties(breakbefore="page"))
     doc.automaticstyles.addElement(pb)
     out["P.PageBreak"] = "P.PageBreak"
+
+    separator = Style(name="P.MessageSeparator", family="paragraph")
+    separator.addElement(ParagraphProperties(borderbottom="0.02cm solid #000000", marginbottom="0.35cm", margintop="0.35cm"))
+    doc.styles.addElement(separator)
+    out["P.MessageSeparator"] = "P.MessageSeparator"
 
     return out
 
@@ -222,16 +232,44 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
                 doc.text.addElement(H(outlinelevel=2, text=_sanitize_text(str(rec.meta["subheading"])), stylename=style_names.get("H.Sub")))
                 seen_subheading[rec.chat] = True
         link_text = rec.meta.get("link") if rec.meta else None
-        if link_text:
-            p_link = P(stylename=style_names.get("P.MessageLink", style_names.get("P.Base")))
-            a = A(href=link_text)
-            p_link.addElement(a)
-            container = Span(stylename=style_names.get("T.Bold"))
-            a.addElement(container)
-            underline_span = Span(stylename=style_names.get("T.Underline"))
-            container.addElement(underline_span)
-            underline_span.addElement(Span(text=_sanitize_text(link_text)))
-            doc.text.addElement(p_link)
+        header_runs = rec.meta.get("header_runs") if rec.meta else None
+        if header_runs or link_text:
+            p_header = P(stylename=style_names.get("P.MessageHeader", style_names.get("P.Base")))
+            link_inserted_header = False
+            for r in header_runs or []:
+                if isinstance(r, TextRun):
+                    parts = (r.text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+                    for idx, seg in enumerate(parts):
+                        if seg:
+                            parent = p_header
+                            if r.href:
+                                a = A(href=r.href)
+                                parent.addElement(a)
+                                parent = a
+                            container = parent
+                            for flag, sty_key in ((r.bold, "T.Bold"),(r.italic, "T.Italic"),(r.underline, "T.Underline"),(r.strike, "T.Strike"),(r.code, "T.Code"),(r.spoiler, "T.Spoiler")):
+                                if flag:
+                                    sp = Span(stylename=style_names.get(sty_key))
+                                    container.addElement(sp)
+                                    container = sp
+                            container.addElement(Span(text=_sanitize_text(seg)))
+                            if r.href and link_text and r.href == link_text:
+                                link_inserted_header = True
+                        if idx < len(parts) - 1:
+                            p_header.addElement(LineBreak())
+                elif isinstance(r, LB):
+                    p_header.addElement(LineBreak())
+                elif isinstance(r, EmojiRun):
+                    _add_emoji_as_char(doc, p_header, r.document_id, style_names["G.InlineEmojiObj"])
+            if link_text and not link_inserted_header:
+                a = A(href=link_text)
+                p_header.addElement(a)
+                container = Span(stylename=style_names.get("T.Bold"))
+                a.addElement(container)
+                underline_span = Span(stylename=style_names.get("T.Underline"))
+                container.addElement(underline_span)
+                underline_span.addElement(Span(text=_sanitize_text(link_text)))
+            doc.text.addElement(p_header)
         # Jede Nachricht als Absatzblock (nutze Defaultstil)
         p = P(stylename=style_names.get("P.Base"))
         for r in rec.runs:
@@ -266,6 +304,9 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
                 # Emoji als inlined frame (hier Style-Objekt notwendig)
                 _add_emoji_as_char(doc, p, r.document_id, style_names["G.InlineEmojiObj"])
         doc.text.addElement(p)
+        separator_style = style_names.get("P.MessageSeparator")
+        if separator_style:
+            doc.text.addElement(P(stylename=separator_style))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
