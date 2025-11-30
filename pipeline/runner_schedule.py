@@ -68,10 +68,10 @@ def _get_display_author(msg, show_forward_info: bool) -> tuple[str | None, datet
     """
     fwd = getattr(msg, "fwd_from", None)
     if show_forward_info and fwd is not None:
-        def _add_candidate(val: Optional[str], acc: list[str]) -> None:
+        def _add_candidate(val: Optional[str], acc: list[str], force_at: bool = False) -> None:
             if isinstance(val, str) and val.strip():
                 txt = val.strip()
-                if txt.startswith("@"):
+                if force_at:
                     txt = "@" + txt.lstrip("@")
                 acc.append(txt)
 
@@ -80,7 +80,7 @@ def _get_display_author(msg, show_forward_info: bool) -> tuple[str | None, datet
             orig_username = getattr(fwd, "from_username", None)
         except Exception:
             orig_username = None
-        _add_candidate(orig_username, candidates)
+        _add_candidate(orig_username, candidates, force_at=True)
         try:
             from_name = getattr(fwd, "from_name", None)
         except Exception:
@@ -99,7 +99,7 @@ def _get_display_author(msg, show_forward_info: bool) -> tuple[str | None, datet
             if fwd_obj is not None:
                 fwd_chat = getattr(fwd_obj, "chat", None) or getattr(fwd_obj, "sender", None)
             if fwd_chat is not None:
-                _add_candidate(getattr(fwd_chat, "username", None), candidates)
+                _add_candidate(getattr(fwd_chat, "username", None), candidates, force_at=True)
                 title = getattr(fwd_chat, "title", None) or ""
                 if title.strip():
                     _add_candidate(title, candidates)
