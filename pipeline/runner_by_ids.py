@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Tuple, Dict, Callable, Awaitable
+from typing import List, Tuple, Dict, Callable, Awaitable, Optional
 from datetime import datetime
 from dataclasses import dataclass
 import asyncio
@@ -76,17 +76,49 @@ def _format_forward_info(msg, show_forward_info: bool) -> tuple[str | None, date
     """
     fwd = getattr(msg, "fwd_from", None)
     if show_forward_info and fwd is not None:
+        def _add_candidate(val: Optional[str], acc: list[str]) -> None:
+            if isinstance(val, str) and val.strip():
+                txt = val.strip()
+                if txt.startswith("@"):
+                    txt = "@" + txt.lstrip("@")
+                acc.append(txt)
+
+        candidates: list[str] = []
         try:
-            orig_username = getattr(getattr(fwd, "from_id", None), "username", None) or getattr(fwd, "from_username", None)
+            orig_username = getattr(fwd, "from_username", None)
         except Exception:
             orig_username = None
-        from_name = getattr(fwd, "from_name", None) or ""
-        if isinstance(orig_username, str) and orig_username.strip():
-            base = f"@{orig_username.strip()}"
-        elif from_name:
-            base = from_name
-        else:
-            base = None
+        _add_candidate(orig_username, candidates)
+        try:
+            from_name = getattr(fwd, "from_name", None)
+        except Exception:
+            from_name = None
+        _add_candidate(from_name, candidates)
+        try:
+            post_author = getattr(fwd, "post_author", None)
+        except Exception:
+            post_author = None
+        _add_candidate(post_author, candidates)
+
+        try:
+            fwd_obj = getattr(msg, "forward", None)
+            fwd_chat = None
+            if fwd_obj is not None:
+                fwd_chat = getattr(fwd_obj, "chat", None) or getattr(fwd_obj, "sender", None)
+            if fwd_chat is not None:
+                _add_candidate(getattr(fwd_chat, "username", None), candidates)
+                title = getattr(fwd_chat, "title", None) or ""
+                if title.strip():
+                    _add_candidate(title, candidates)
+                else:
+                    first = getattr(fwd_chat, "first_name", None) or ""
+                    last = getattr(fwd_chat, "last_name", None) or ""
+                    combined = f"{first} {last}".strip()
+                    _add_candidate(combined, candidates)
+        except Exception:
+            pass
+
+        base = next((c for c in candidates if c), None)
         orig_date = getattr(fwd, "date", None)
         if base and isinstance(orig_date, datetime):
             suffix = orig_date.strftime("%Y-%m-%d %H:%M:%S")
