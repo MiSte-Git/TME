@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+import asyncio
+import random
+from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from typing import Any, Optional, Sequence
 
 from telethon import TelegramClient
+from telethon.errors import BadRequestError, FloodWaitError, RPCError
 from zoneinfo import ZoneInfo
 
 
 DEBUG_FETCH = False  # bei Bedarf auf True setzen, um Details zu sehen
+_BATCH_SIZE = 200
+_RETRY_DELAYS = (1.0, 3.0, 7.0)
+
+
+@dataclass
+class FetchMessagesResult:
+    messages: list[Any]
+    resume_hint: Optional[dict[str, Any]] = None
+    error_info: Optional[str] = None
+    stats: Optional[dict[str, float]] = None
 
 
 def build_day_time_range(
@@ -66,17 +80,14 @@ async def fetch_messages_for_section_day(
     end_time_str: Optional[str],
     *,
     topic_id: Optional[int] = None,
-) -> Sequence[Any]:
-    """Lädt Nachrichten für einen Tag mit Zeitfenster aus einem Channel.
+) -> FetchMessagesResult:
+    """Lädt Nachrichten für einen Tag/Topic robust in Batches und bricht
+    kontrolliert beim ersten nicht behebbaren Fehler ab.
 
-    Dies ist eine ausgelagerte Variante der bisherigen fetch_messages_for_day-
-    Logik aus runner_schedule.py, angepasst auf Section/Day-Kontext.
-
-    Wenn ``topic_id`` gesetzt ist und es sich um ein Forum-Topic handelt,
-    werden die Nachrichten serverseitig auf genau dieses Topic gefiltert,
-    indem ``reply_to=topic_id`` an ``iter_messages`` übergeben wird. Damit
-    entfällt die Notwendigkeit, topic_id/top_msg_id/forum_topic_id an den
-    einzelnen Nachrichtenobjekten auszuwerten.
+    - FloodWait wird ausgesessen.
+    - Timeout/RPC/BadRequest bekommen Backoff-Retries.
+    - Bei nicht behebbaren Fehlern: Abbruch + resume_hint + error_info,
+      keine stillen Batch-Skips.
     """
     tz_name = local_tz or "Europe/Zurich"  # ggf. an DEFAULT_LOCAL_TZ angleichen
     try:
@@ -93,60 +104,193 @@ async def fetch_messages_for_section_day(
     end_utc = end_local.astimezone(timezone.utc)
 
     msgs: list[Any] = []
-    # reverse=False: neu -> alt; mit offset_date=end_utc bekommen wir nur Nachrichten
-    # bis zum Tagesende/-zeitpunkt
     iter_kwargs: dict[str, Any] = {
         "reverse": False,
         "offset_date": end_utc,
-        "limit": None,
+        "limit": _BATCH_SIZE,
     }
-    # Server-seitiges Topic-Filtering für Forum-Topics, basierend auf
-    # https://t.me/c/<chatId>/<topicId>/<messageId> → reply_to=topic_id
     if topic_id is not None:
         iter_kwargs["reply_to"] = int(topic_id)
 
-    async for m in client.iter_messages(
-        entity,
-        **iter_kwargs,
-    ):
-        if not getattr(m, "date", None):
-            continue
-        local_dt = m.date.astimezone(tzinfo)
+    stats = {
+        "skipped_messages": 0,
+        "flood_waits": 0,
+        "flood_wait_seconds": 0.0,
+    }
 
-        if DEBUG_FETCH:
-            print(
-                "DEBUG fetch_messages_for_section_day:",
-                "msg_id=", getattr(m, "id", None),
-                "local_dt=", local_dt,
-                "start_local=", start_local,
-                "end_local=", end_local,
-            )
+    offset_id = 0  # Pagination: älteste ID der letzten erfolgreichen Batch
+    stop_reached = False
+    resume_hint: Optional[dict[str, Any]] = None
+    error_info: Optional[str] = None
+    last_ok_msg: Any = None
 
-        # Wenn wir vor dem gesuchten Datum sind, können wir abbrechen
-        if local_dt.date() < d:
-            if DEBUG_FETCH:
-                print("  -> BREAK (vor gesuchtem Tag)")
+    while not stop_reached:
+        batch, stop_reached, last_seen_id, err_info, last_kept = await _fetch_batch_with_retries(
+            client,
+            entity,
+            iter_kwargs,
+            offset_id=offset_id,
+            tzinfo=tzinfo,
+            start_local=start_local,
+            end_local=end_local,
+            day=d,
+            stats=stats,
+        )
+        offset_id = last_seen_id
+        if err_info:
+            last_ok_msg = last_kept or last_ok_msg
+            error_info = err_info
+            resume_hint = _build_resume_hint(entity, topic_id, last_ok_msg)
+            if last_ok_msg:
+                warn_dt = getattr(last_ok_msg, "date", None)
+                print(
+                    f"WARN: Export abgebrochen bei msg_id={getattr(last_ok_msg, 'id', '?')}, "
+                    f"date={warn_dt}; bitte ab diesem Punkt neu starten."
+                )
+            else:
+                print(
+                    "WARN: Export abgebrochen vor erster Nachricht; keine Daten geladen."
+                )
             break
-
-        # Datum passt, aber Uhrzeit ist vor dem Startfenster → nur überspringen
-        if local_dt < start_local:
-            if DEBUG_FETCH:
-                print("  -> SKIP (zu früh am Tag)")
-            continue
-
-        # Nach dem gesuchten Tag/Zeitfenster → überspringen
-        if local_dt.date() > d or local_dt > end_local:
-            if DEBUG_FETCH:
-                print("  -> SKIP (zu spät/nach Tag)")
-            continue
-
-        if DEBUG_FETCH:
-            print("  -> KEEP")
-        msgs.append(m)
+        if not batch:
+            break
+        msgs.extend(batch)
+        if batch:
+            last_ok_msg = batch[-1]
 
     # stabil nach Datum + ID sortieren
     msgs.sort(key=lambda m: (m.date, m.id))
-    return msgs
+
+    print(
+        f"Info: {len(msgs)} Nachrichten geladen "
+        f"(übersprungene Nachrichten: {stats['skipped_messages']}; "
+        f"FloodWaits: {stats['flood_waits']} / {stats['flood_wait_seconds']:.1f}s gewartet)"
+    )
+
+    return FetchMessagesResult(
+        messages=msgs,
+        resume_hint=resume_hint,
+        error_info=error_info,
+        stats=stats,
+    )
+
+
+def _build_resume_hint(entity: Any, topic_id: Optional[int], last_ok_msg: Any) -> Optional[dict[str, Any]]:
+    if last_ok_msg is None:
+        return None
+    try:
+        chat_id = getattr(entity, "id", None)
+    except Exception:
+        chat_id = None
+    last_ok_id = getattr(last_ok_msg, "id", None)
+    last_ok_date = getattr(last_ok_msg, "date", None)
+    try:
+        last_ok_date_iso = last_ok_date.isoformat()
+    except Exception:
+        last_ok_date_iso = None
+    return {
+        "chat_id": chat_id,
+        "topic_id": int(topic_id) if topic_id is not None else None,
+        "last_ok_id": last_ok_id,
+        "last_ok_date": last_ok_date_iso,
+        "direction": "backward",  # iter_messages reverse=False läuft von neu nach alt
+    }
+
+
+async def _fetch_batch_with_retries(
+    client: TelegramClient,
+    entity: Any,
+    iter_kwargs: dict[str, Any],
+    *,
+    offset_id: int,
+    tzinfo: ZoneInfo,
+    start_local: datetime,
+    end_local: datetime,
+    day,
+    stats: dict[str, float],
+) -> tuple[Optional[list[Any]], bool, int, Optional[str], Optional[Any]]:
+    """Lädt eine Batch Nachrichten robust mit Retries/Backoff.
+
+    Liefert zusätzlich error_info und last_kept_msg für Resume-Hinweise.
+    """
+    delays = list(_RETRY_DELAYS)
+    last_seen_id = offset_id
+    last_kept_msg = None
+
+    attempt = 0
+    while True:
+        try:
+            batch: list[Any] = []
+            stop_reached = False
+            async for m in client.iter_messages(
+                entity,
+                offset_id=offset_id,
+                **iter_kwargs,
+            ):
+                last_seen_id = getattr(m, "id", last_seen_id)
+                if not getattr(m, "date", None):
+                    stats["skipped_messages"] += 1
+                    continue
+                local_dt = m.date.astimezone(tzinfo)
+
+                if DEBUG_FETCH:
+                    print(
+                        "DEBUG fetch_messages_for_section_day:",
+                        "msg_id=", getattr(m, "id", None),
+                        "local_dt=", local_dt,
+                        "start_local=", start_local,
+                        "end_local=", end_local,
+                    )
+
+                if local_dt.date() < day:
+                    stop_reached = True
+                    if DEBUG_FETCH:
+                        print("  -> BREAK (vor gesuchtem Tag)")
+                    break
+
+                if local_dt < start_local:
+                    stats["skipped_messages"] += 1
+                    if DEBUG_FETCH:
+                        print("  -> SKIP (zu früh am Tag)")
+                    continue
+
+                if local_dt.date() > day or local_dt > end_local:
+                    stats["skipped_messages"] += 1
+                    if DEBUG_FETCH:
+                        print("  -> SKIP (zu spät/nach Tag)")
+                    continue
+
+                if DEBUG_FETCH:
+                    print("  -> KEEP")
+                batch.append(m)
+                last_kept_msg = m
+
+            return batch, stop_reached, last_seen_id, None, last_kept_msg
+        except FloodWaitError as e:
+            wait_s = max(int(getattr(e, "seconds", 1)), 1)
+            stats["flood_waits"] += 1
+            stats["flood_wait_seconds"] += wait_s
+            print(f"Hinweis: FloodWait {wait_s}s beim Laden, warte und versuche Batch erneut…")
+            await asyncio.sleep(wait_s + random.uniform(0, 0.4))
+            continue
+        except (asyncio.TimeoutError, TimeoutError, RPCError, BadRequestError) as e:
+            if attempt < len(delays):
+                delay = delays[attempt]
+                attempt += 1
+                print(f"Hinweis: {type(e).__name__} beim Laden, Versuch {attempt}/{len(delays)} – warte {delay}s…")
+                await asyncio.sleep(delay)
+                continue
+            err_info = f"{type(e).__name__}: {e}"
+            return None, False, last_seen_id, err_info, last_kept_msg
+        except Exception as e:
+            if attempt < len(delays):
+                delay = delays[attempt]
+                attempt += 1
+                print(f"Hinweis: {type(e).__name__} beim Laden, Versuch {attempt}/{len(delays)} – warte {delay}s…")
+                await asyncio.sleep(delay)
+                continue
+            err_info = f"{type(e).__name__}: {e}"
+            return None, False, last_seen_id, err_info, last_kept_msg
 
 
 def _debug_dump_msg_topic_info(msg: Any) -> None:

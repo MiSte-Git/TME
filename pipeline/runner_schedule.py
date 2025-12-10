@@ -26,6 +26,7 @@ from .odt_writer import write_odt_for_records
 from .speech_to_text import transcribe_voice, SpeechToTextError
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
+from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
 from .runner_base_imports import (
     CollectedMessage,
     DEFAULT_LOCAL_TZ,
@@ -153,79 +154,20 @@ async def fetch_messages_for_day(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
 ):
-    """Lädt alle Nachrichten eines Tages (lokale Zeit) mit optionalem Zeitfenster.
+    """Vertrauenswürdiger Wrapper für Tagesladungen.
 
-    - day_str: "dd/mm/YYYY"
-    - tz: Name der Zeitzone (z.B. "Europe/Zurich"), fällt sonst auf DEFAULT_LOCAL_TZ zurück
-    - start_time / end_time: "HH:MM:SS"-Strings für das Tageszeitfenster
+    Nutzt die robuste Variante in message_filters.fetch_messages_for_section_day,
+    damit auch dieser Pfad FloodWaits/Timeouts abfedert.
     """
-    tz_name = tz or DEFAULT_LOCAL_TZ or "UTC"
-    try:
-        tzinfo = ZoneInfo(tz_name)
-    except Exception:
-        tzinfo = timezone.utc
-
-    d = datetime.strptime(day_str, "%d/%m/%Y").date()
-
-    def _parse_time(value: Optional[str], default: time) -> time:
-        if not value:
-            return default
-        try:
-            parts = [int(p) for p in value.split(":")]
-            padded = (parts + [0, 0, 0])[:3]
-            hour, minute, second = padded
-            return time(hour, minute, second)
-        except Exception:
-            return default
-
-    start_t = _parse_time(start_time, time(0, 0, 0))
-    end_t = _parse_time(end_time, time(23, 59, 59))
-
-    start_local = datetime.combine(d, start_t, tzinfo=tzinfo)
-    end_local = datetime.combine(d, end_t, tzinfo=tzinfo)
-    end_utc = end_local.astimezone(timezone.utc)
-
-    msgs: list[Any] = []
-    # reverse=False: neu -> alt; mit offset_date=end_utc bekommen wir nur Nachrichten bis zum Tagesende/-zeitpunkt
-    async for m in client.iter_messages(entity, reverse=False, offset_date=end_utc, limit=None):
-        if not getattr(m, "date", None):
-            continue
-        local_dt = m.date.astimezone(tzinfo)
-
-        if DEBUG_FETCH:
-            print(
-                "DEBUG fetch_messages_for_day:",
-                "msg_id=", getattr(m, "id", None),
-                "local_dt=", local_dt,
-                "start_local=", start_local,
-                "end_local=", end_local,
-            )
-
-        # Wenn wir vor dem gesuchten Datum sind, können wir abbrechen
-        # (iter_messages liefert ältere Nachrichten in Richtung Vergangenheit).
-        if local_dt.date() < d:
-            if DEBUG_FETCH:
-                print("  -> BREAK (vor gesuchtem Tag)")
-            break
-
-        # Datum passt, aber Uhrzeit ist vor dem Startfenster → nur überspringen
-        if local_dt < start_local:
-            if DEBUG_FETCH:
-                print("  -> SKIP (zu früh am Tag)")
-            continue
-
-        # Nach dem gesuchten Tag/Zeitfenster → überspringen
-        if local_dt.date() > d or local_dt > end_local:
-            if DEBUG_FETCH:
-                print("  -> SKIP (zu spät/nach Tag)")
-            continue
-
-        if DEBUG_FETCH:
-            print("  -> KEEP")
-        msgs.append(m)
-    # stabil nach Datum + ID sortieren
-    msgs.sort(key=lambda m: (m.date, m.id))
-    return msgs
+    return await _fetch_messages_for_section_day_robust(
+        client,
+        entity,
+        day_str,
+        local_tz=tz,
+        start_time_str=start_time,
+        end_time_str=end_time,
+        topic_id=None,
+    )
 
 
 def _ensure_png_from_export(doc_id: str) -> bool:
@@ -458,7 +400,18 @@ async def run_schedule(
                 pass
 
         _notify("Nachrichten werden gesammelt…")
-        collected, used_doc_ids = await collect_messages_for_schedule(client, schedule, local_tz)
+        collected, used_doc_ids, resume_hints = await collect_messages_for_schedule(client, schedule, local_tz)
+        if resume_hints:
+            for rh in resume_hints:
+                hint = rh.get("hint", {}) if isinstance(rh, dict) else {}
+                err = rh.get("error") if isinstance(rh, dict) else None
+                msg_id = hint.get("last_ok_id")
+                msg_dt = hint.get("last_ok_date")
+                _notify(
+                    f"WARN: Teil-Export für Section '{rh.get('section', '?')}' "
+                    f"stoppt bei msg_id={msg_id}, date={msg_dt}; "
+                    f"Resume-Hinweis: {hint} (Fehler: {err})"
+                )
 
         out_dir = output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1079,6 +1032,12 @@ async def run_schedule(
             if missing_png_tracker != initial_missing_pngs:
                 _notify(f"Hinweis: {len(final_sorted)} Emoji-PNGs fehlen weiterhin → {rep_png}")
 
+        doc_title_base = schedule.document_title
+        if resume_hints:
+            first_hint = resume_hints[0].get("hint", {}) if isinstance(resume_hints[0], dict) else {}
+            stop_id = first_hint.get("last_ok_id")
+            doc_title_base = f"{doc_title_base or out_basename} (Teil-Export, Stop bei msg_id {stop_id})"
+
         styles = {
             "paragraph": {"base": "P.Base"},
             "text": {"base": "T.Base"},
@@ -1086,11 +1045,14 @@ async def run_schedule(
         }
 
         _notify("ODT wird geschrieben…")
-        write_odt_for_records(records, out_path, styles, doc_title=schedule.document_title)
+        write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
 
         extra_path: Optional[Path] = None
         if translate and mode_norm == "separate" and translations_acc:
             tr_title = f"{schedule.document_title} - {lang_up}" if schedule.document_title else f"{out_basename} - {lang_up}"
+            if resume_hints:
+                stop_id = (resume_hints[0].get("hint", {}) or {}).get("last_ok_id")
+                tr_title = f"{tr_title} (Teil-Export, Stop bei msg_id {stop_id})"
             extra_path = out_dir / f"{out_basename}_{ts}_{lang_up}.odt"
             _notify("Übersetzungs-ODT wird geschrieben…")
             write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)

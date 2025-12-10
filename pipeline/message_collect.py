@@ -11,6 +11,7 @@ from telethon.client.telegramclient import TelegramClient
 from schedule_json import ScheduleDocument
 from .fetch import parse_channel, parse_link
 from .message_filters import (
+    FetchMessagesResult,
     build_day_time_range,
     fetch_messages_for_section_day,
     filter_messages_for_topic,
@@ -45,7 +46,7 @@ async def collect_messages_for_schedule(
     client: TelegramClient,
     schedule: ScheduleDocument,
     local_tz: Optional[str],
-) -> Tuple[List[CollectedMessage], Set[str]]:
+) -> Tuple[List[CollectedMessage], Set[str], list[dict[str, Any]]]:
     from zoneinfo import ZoneInfo
 
     tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
@@ -56,6 +57,7 @@ async def collect_messages_for_schedule(
 
     collected: List[CollectedMessage] = []
     used_doc_ids: Set[str] = set()
+    resume_hints: list[dict[str, Any]] = []
     debug_dir = Path("data/debug")
     if _DEBUG_DUMP_ENTITIES:
         debug_dir.mkdir(parents=True, exist_ok=True)
@@ -200,7 +202,7 @@ async def collect_messages_for_schedule(
         # (https://t.me/c/<chatId>/<topicId>), filtern wir serverseitig direkt
         # auf dieses Topic über reply_to=topic_id. Damit entfallen alle
         # Heuristiken auf topic_id/top_msg_id/forum_topic_id in den Nachrichten.
-        msgs = await fetch_messages_for_section_day(
+        result: FetchMessagesResult = await fetch_messages_for_section_day(
             client,
             entity,
             day_str,
@@ -213,15 +215,25 @@ async def collect_messages_for_schedule(
         if DEBUG_FETCH:
             print(
                 "DEBUG _collect_messages_for_schedule: fetched",
-                len(msgs) if msgs is not None else 0,
+                len(result.messages) if result and result.messages is not None else 0,
                 "messages for",
                 heading,
+            )
+
+        if result.resume_hint:
+            resume_hints.append(
+                {
+                    "section": heading,
+                    "hint": result.resume_hint,
+                    "error": result.error_info,
+                }
             )
 
         # Optionaler Topic-Filter auf Nachrichtenebene wird für Forum-Topics
         # nicht mehr benötigt, wenn serverseitig bereits über reply_to=topic_id
         # gefiltert wurde. Um bestehende Logik nicht zu beeinträchtigen, lassen
         # wir den Aufruf nur noch laufen, falls kein topic_id gesetzt ist.
+        msgs = result.messages
         if topic_id is None and msgs:
             before = len(msgs)
             msgs = filter_messages_for_topic(
@@ -299,4 +311,4 @@ async def collect_messages_for_schedule(
                 except Exception:
                     pass
 
-    return collected, used_doc_ids
+    return collected, used_doc_ids, resume_hints
