@@ -305,12 +305,27 @@ async def run_schedule(
         raise RuntimeError("Nur JSON-Schedule-Dateien werden unterstützt. Bitte die Schedule zuerst nach JSON konvertieren.")
     schedule = load_schedule_document(schedule_path)
 
-    needs_default = [s for s in schedule.sections if s.fetch_by_date and not s.links]
     schedule.default_channel = _normalize_default_channel(schedule.default_channel)
-    if needs_default and not schedule.default_channel:
+    def _section_channel(sec: Any) -> Optional[str]:
+        chan = getattr(sec, "channel", None)
+        if not chan:
+            return None
+        return _normalize_default_channel(str(chan))
+
+    def _has_username_entry(sec: Any) -> bool:
+        for raw in (getattr(sec, "links", None) or []):
+            for seg in re.split(r"[;,]", str(raw)):
+                if seg.strip().startswith("@"):
+                    return True
+        return False
+
+    needs_default = [s for s in schedule.sections if s.fetch_by_date and not s.links and not _section_channel(s)]
+    user_needs_default = [s for s in schedule.sections if _has_username_entry(s) and not (_section_channel(s) or schedule.default_channel)]
+    missing_sections = needs_default + [s for s in user_needs_default if s not in needs_default]
+    if missing_sections and not schedule.default_channel:
         # In UI/Non-CLI Kontext können wir keine input()-Eingabe erzwingen.
         # Stattdessen brechen wir mit einer klaren Fehlermeldung ab, die in der UI angezeigt wird.
-        missing_list = ", ".join(f"{sec.date.isoformat()} :: {sec.title}" for sec in needs_default)
+        missing_list = ", ".join(f"{sec.date.isoformat()} :: {sec.title}" for sec in missing_sections)
         raise RuntimeError(f"Default-Channel fehlt für Sektionen: {missing_list}")
 
     local_tz = local_tz_override or cfg.get("local_tz") or DEFAULT_LOCAL_TZ

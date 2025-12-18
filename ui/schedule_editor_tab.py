@@ -62,7 +62,7 @@ class ScheduleEditorTab(QWidget):
             self.tr("Bis\n(HH:MM[:SS])"),
             self.tr("Titel"),
             self.tr("Untertitel (optional)"),
-            self.tr("Links (mit ; trennen)"),
+            self.tr("Links / @Benutzernamen (mit ; trennen)"),
             self.tr("Nach Datum holen"),
             self.tr("Kanal (optional)"),
         ])
@@ -91,7 +91,7 @@ class ScheduleEditorTab(QWidget):
             model.setHeaderData(2, Qt.Orientation.Horizontal, self.tr("Endzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
             model.setHeaderData(3, Qt.Orientation.Horizontal, self.tr("Titel des Abschnitts"), Qt.ItemDataRole.ToolTipRole)
             model.setHeaderData(4, Qt.Orientation.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(5, Qt.Orientation.Horizontal, self.tr("Telegram-Links; mehrere mit ; trennen"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(5, Qt.Orientation.Horizontal, self.tr("Telegram-Links oder @Benutzernamen; mehrere mit ; trennen"), Qt.ItemDataRole.ToolTipRole)
             model.setHeaderData(6, Qt.Orientation.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden"), Qt.ItemDataRole.ToolTipRole)
             model.setHeaderData(7, Qt.Orientation.Horizontal, self.tr("Spezifischer Kanal für diesen Abschnitt (optional)"), Qt.ItemDataRole.ToolTipRole)
         lay.addWidget(self.table)
@@ -156,7 +156,7 @@ class ScheduleEditorTab(QWidget):
             self.tr("Bis\n(HH:MM[:SS])"),
             self.tr("Titel"),
             self.tr("Untertitel (optional)"),
-            self.tr("Links (mit ; trennen)"),
+            self.tr("Links / @Benutzernamen (mit ; trennen)"),
             self.tr("Nach Datum holen"),
             self.tr("Kanal (optional)"),
         ])

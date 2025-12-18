@@ -61,7 +61,8 @@ def _normalize_links(raw: Any) -> List[str]:
     if raw is None:
         return []
     if isinstance(raw, str):
-        parts = [seg.strip() for seg in raw.split(";")]
+        normalized = raw.replace(";", ",")
+        parts = [seg.strip() for seg in normalized.split(",")]
     elif isinstance(raw, Iterable):
         parts = [str(seg).strip() for seg in raw]
     else:
@@ -117,11 +118,12 @@ class ScheduleDocument:
             "subheading": section.subheading,
             "links": _links_to_string(section.links),
             "fetch_by_date": bool(section.fetch_by_date),
+            "startTime": section.start_time,
+            "endTime": section.end_time,
         }
-        # Zeitfenster immer explizit mitschreiben, damit das Schema klar ist.
-        # Falls None, werden die Defaults (ganzer Tag) beim erneuten Laden gesetzt.
-        data["startTime"] = section.start_time
-        data["endTime"] = section.end_time
+        # Kanal aus der Kanal-Spalte mit speichern, falls gesetzt
+        if section.channel is not None:
+            data["channel"] = section.channel
         return data
 
 
@@ -164,6 +166,7 @@ def load_schedule_document(path: Any) -> ScheduleDocument:
             end_time=end_norm,
             links=links,
             fetch_by_date=fetch_flag,
+            channel=raw.get("channel") or None,
         )
         sections.append(section)
     return ScheduleDocument(document_title=title, default_channel=default_channel, sections=sections)
@@ -261,5 +264,4 @@ def blocks_to_schedule(
             )
             sections.append(section)
     return ScheduleDocument(document_title=doc_title, default_channel=default_channel, sections=sections)
-
 
