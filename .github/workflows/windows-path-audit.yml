@@ -1,0 +1,40 @@
+name: Windows path audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: List Windows-incompatible paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bad_list="$(mktemp)"
+
+          git ls-tree -r --name-only HEAD \
+          | awk -F/ '
+              function upcase(s){ return toupper(s) }
+              {
+                full=$0
+                base=$NF
+
+                if (full ~ /[<>:"\\|?*]/) { print full; next }
+                if (base ~ /[. ]$/) { print full; next }
+
+                up=upcase(base)
+                sub(/\..*$/, "", up)
+                if (up=="CON"||up=="PRN"||up=="AUX"||up=="NUL" || up ~ /^COM[1-9]$/ || up ~ /^LPT[1-9]$/) { print full; next }
+              }' \
+          | sort -u > "$bad_list"
+
+          echo "COUNT:"
+          wc -l "$bad_list" | awk "{print \$1}"
+
+          echo ""
+          echo "LIST:"
+          cat "$bad_list"
