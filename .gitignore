@@ -39,3 +39,5 @@ media/
 # If needed, ignore large generated images under media/ (already covered above).
 WIP-CH-untracked.tar
 WIP-CH.patch
+
+.pip-cache/

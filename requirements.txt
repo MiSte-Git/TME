@@ -1,0 +1,9 @@
+Pillow
+PySide6
+PyYAML
+lottie
+odfpy
+telethon
+torch
+ui
+whisper

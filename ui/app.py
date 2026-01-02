@@ -22,7 +22,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
 from functools import partial
 from PySide6.QtWidgets import (
@@ -36,11 +36,30 @@ from pipeline.runner_schedule import run_schedule
 from ui.lettermap_tab import LettermapTab
 from ui.schedule_editor_tab import ScheduleEditorTab
 
-UI_STATE_FILE = Path("data/ui_state.json")
-THEME_STATE_FILE = Path("data/ui_theme.json")
-LANG_STATE_FILE = Path("data/ui_lang.json")
 TRANSLATIONS_DIR = Path(__file__).parent / "translations"
 
+APP_NAME = "TME"
+ORG_NAME = "MiSte"  # beliebig, aber fix lassen für stabile Pfade
+
+_CONFIG_DIR: Path | None = None
+
+def _config_dir() -> Path:
+    global _CONFIG_DIR
+    if _CONFIG_DIR is None:
+        if QApplication.instance() is None:
+            raise RuntimeError("_config_dir() called before QApplication exists")
+        _CONFIG_DIR = Path(QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation))
+        _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    return _CONFIG_DIR
+
+def _ui_state_file() -> Path:
+    return _config_dir() / "ui_state.json"
+
+def _theme_state_file() -> Path:
+    return _config_dir() / "ui_theme.json"
+
+def _lang_state_file() -> Path:
+    return _config_dir() / "ui_lang.json"
 
 class ScheduleWorker(QObject):
     finished = Signal(object)
@@ -463,9 +482,9 @@ class ScheduleTab(QWidget):
     def _load_state(self) -> None:
         self._loading_state = True
         try:
-            if not UI_STATE_FILE.exists():
-                return
-            data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
+            p = _theme_state_file()
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 return
             schedule_path = data.get("schedule")
@@ -780,12 +799,12 @@ def _load_theme_preference() -> str:
 
 def _save_theme_preference(theme: str) -> None:
     try:
+        p = _theme_state_file()
         data = {}
-        if THEME_STATE_FILE.exists():
-            data = json.loads(THEME_STATE_FILE.read_text(encoding="utf-8")) or {}
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8")) or {}
         data["theme"] = theme
-        THEME_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        THEME_STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
 
@@ -872,6 +891,9 @@ def _set_language(lang: str) -> None:
 
 def main() -> None:
     app = QApplication(sys.argv)
+    app.setOrganizationName(ORG_NAME)
+    app.setApplicationName(APP_NAME)
+
     # Use a modern, consistent style across platforms
     try:
         from PySide6.QtWidgets import QStyleFactory
