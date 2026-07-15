@@ -29,8 +29,14 @@ docs/_build/
 _archive/
 cache/
 output/
-data/debug/
+data/
 media/
+input/
+out/
+*.bak
+*.session
+*.code-workspace
+*.desktop
 
 # Git internals
 .git

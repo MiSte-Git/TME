@@ -1,9 +1,8 @@
-Pillow
-PySide6
-PyYAML
-lottie
-odfpy
-telethon
-torch
-ui
-whisper
+Pillow>=10.0
+PySide6>=6.5
+PyYAML>=6.0
+lottie>=0.6.11
+odfpy>=1.4.1
+telethon>=1.34
+torch>=2.1
+openai-whisper>=20231117

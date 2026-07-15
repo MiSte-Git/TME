@@ -329,7 +329,6 @@ async def run_by_ids(
     """
     # API-Creds aus Environment/Config beziehen (zentral)
     API_ID, API_HASH, PHONE = get_telegram_credentials()
-    print("[DEBUG TELEGRAM CREDS]", "api_id:", API_ID, "api_hash_len:", len(API_HASH))
 
     doc_title, groups = parse_groups_file(links_file)
 

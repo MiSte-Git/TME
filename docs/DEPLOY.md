@@ -83,6 +83,39 @@ PowerShell (als Benutzer mit Python/py installiert):
 
 Optionaler Installer: mit Inno Setup kann aus `dist\Telegram-ODT\` ein Installer gebaut werden (nicht im Repo enthalten).
 
+### Linux
+
+Für Linux gibt es kein PyInstaller-Bundle, stattdessen eine `.desktop`-Datei für die
+Desktop-Integration (Anwendungsmenü). Sie wird **nicht** eingecheckt, sondern bei Bedarf
+lokal generiert – die hinterlegten `Exec=`/`Path=`/`Icon=`-Pfade würden sonst auf das System
+zeigen, auf dem sie erzeugt wurde.
+
+Generieren/installieren (aus dem Repo-Root):
+
+```bash
+python3 scripts/generate_build_files.py
+```
+
+Unter Linux wird die `.desktop`-Datei automatisch mitgeneriert und nach
+`~/.local/share/applications/telegram-odt.desktop` geschrieben (inkl. Aufruf von
+`update-desktop-database`, falls installiert). `Exec=`/`TryExec=` zeigen dabei auf
+`.venv/bin/python3`, falls ein lokales venv existiert, sonst auf das im `PATH` gefundene
+`python3`.
+
+Auf anderen Plattformen ausgeführt (z. B. zum Testen) oder um die Generierung explizit
+zu steuern:
+
+```bash
+python3 scripts/generate_build_files.py --with-desktop-entry   # erzwingen
+python3 scripts/generate_build_files.py --no-desktop-entry     # überspringen
+```
+
+Wieder entfernen:
+
+```bash
+python3 scripts/generate_build_files.py --uninstall-desktop
+```
+
 ## Laufzeit-Hinweise
 
 - Credentials liegen außerhalb des Repos unter `~/.config/telegram-odt/` (oder per ENV). Die App fragt bei Bedarf einmalig nach.

@@ -134,5 +134,4 @@ if __name__ == "__main__":
     main()
 def _require_api_credentials() -> Tuple[int, str]:
     api_id, api_hash, phone = get_telegram_credentials()
-    print("[DEBUG TELEGRAM CREDS]", "api_id:", api_id, "api_hash_len:", len(api_hash))
     return api_id, api_hash

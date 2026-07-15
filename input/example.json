@@ -1,0 +1,25 @@
+{
+  "document_title": "Example Schedule",
+  "default_channel": "https://t.me/c/1234567890/1",
+  "sections": [
+    {
+      "date": "2026-01-01",
+      "title": "Example Section 1",
+      "subheading": "Example Topic - General",
+      "links": "@example_user",
+      "fetch_by_date": true,
+      "startTime": "00:00:00",
+      "endTime": "23:59:59",
+      "channel": "https://t.me/c/1234567890/100"
+    },
+    {
+      "date": "2026-01-02",
+      "title": "Example Section 2",
+      "subheading": "Example Topic - Announcements",
+      "links": "@example_user",
+      "fetch_by_date": true,
+      "startTime": "09:00:00",
+      "endTime": "18:00:00"
+    }
+  ]
+}

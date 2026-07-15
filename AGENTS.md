@@ -1,14 +1,21 @@
 # Agent guide for this repository
 
-- Language/runtime: Python 3.11+ (tested up to 3.13). Single-folder utility scripts; no package/module layout.
+- Language/runtime: Python 3.11+ (tested up to 3.13). Layout: `pipeline/` and `ui/` are
+  packages (core logic resp. PySide6 UI); root-level `.py` files (e.g. `schedule_json.py`)
+  are standalone utility modules, not entry points.
 - Entry points:
-  - schedule_to_odt.py → builds ODT by date blocks from JSON schedule files; optional OCR and Telegram inline translations.
-  - emoji_pipeline.py → utility CLI for by-date, by-ids and lettermap-related workflows.
-- Dependencies (install before running): python3 -m pip install telethon odfpy pillow pytesseract easyocr
+  - ui/app.py → Qt-based UI (Schedule-Tab, Lettermap-Tab); orchestrates the full
+    schedule → ODT pipeline, incl. optional inline translations.
+  - pipeline/emoji_pipeline.py → CLI for by-date, by-ids and lettermap-related workflows.
+  - schedule_json.py (root) → utility module (read/write helpers for schedule files),
+    imported by the entry points above; not runnable as a standalone CLI.
+- Dependencies (install before running): python3 -m pip install -r requirements.txt
+  (PySide6, PyYAML, lottie, odfpy, telethon, torch, openai-whisper, Pillow).
+  OCR (pytesseract/easyocr) is planned but not implemented — not a current dependency.
 - Build/run:
   - Syntax check (no deps): python3 -m compileall -q .
-  - Run by-date mode: python3 tg_by_date_to_odt_modes.py [inline|end|separate]
-  - Run grouped-links mode: python3 TelegramNachrichtenKopieren.py
+  - Run UI: python3 ui/app.py
+  - Run CLI pipeline: python3 pipeline/emoji_pipeline.py <subcommand> ... (see README.md for examples)
 - Tests/lint:
   - No tests configured in repo. If adding pytest: run all → pytest -q; single test → pytest -q path/to/test_file.py -k test_name
   - No linter/formatter configured. Prefer PEP 8; if adding tools, use ruff/black with default settings.
@@ -18,7 +25,8 @@
   - Custom emoji mapping in custom_emoji_user_map.json; archive experiments in _archive/ (not part of runtime).
 - External APIs:
   - Telethon (Telegram): messages.TranslateTextRequest for translations; GetCustomEmojiDocumentsRequest; optional channels.JoinChannelRequest.
-  - ODT generation via odfpy (styles, TOC, images); optional OCR via Tesseract/EasyOCR.
+  - ODT generation via odfpy (styles, TOC, images). OCR via Tesseract/EasyOCR is planned
+    (see README.md Roadmap) but not implemented yet.
 - Code style:
   - PEP 8 naming (snake_case funcs; UPPER_CASE constants); stdlib imports first, then third-party.
   - Prefer small, local changes; keep German user-facing messages as-is; handle timezones with zoneinfo.
