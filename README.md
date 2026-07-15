@@ -1,4 +1,6 @@
-# Emoji-ODT Pipeline
+# TME – Telegram-to-ODT Message Exporter
+
+![Telegram → LibreOffice](Telegram-LibreOffice.png)
 
 Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dokumenten – inklusive Übersetzungen, Bild- und Emoji-Einbettung. Der Fokus liegt auf dem komfortablen UI-Workflow (`python3 ui/app.py`), der alle Schritte von der Schedule-Datei bis zum fertigen ODT orchestriert.
 
@@ -74,4 +76,7 @@ Für Contributor:innen, die tiefer in Aufbau und Entstehung der Pipeline einstei
 - Vor Pull-Requests bitte sicherstellen, dass UI und CLI-Läufe mit einer Beispiel-Schedule erfolgreich sind.
 
 ## Lizenz
-Siehe beiliegende `LICENSE`-Datei.
+Copyright (C) 2026 MiSte-Git
+
+Dieses Projekt steht unter der GNU General Public License v3.0 (SPDX: `GPL-3.0-or-later`).
+Siehe beiliegende `LICENSE`-Datei für den vollständigen Lizenztext.
