@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 from pipeline.runner_schedule import run_schedule
 from ui.lettermap_tab import LettermapTab
 from ui.schedule_editor_tab import ScheduleEditorTab
+from ui.no_translate_words_tab import NoTranslateWordsTab
 
 TRANSLATIONS_DIR = Path(__file__).parent / "translations"
 
@@ -655,10 +656,12 @@ class MainWindow(QMainWindow):
         self.editor_tab = ScheduleEditorTab()
         self.lettermap_tab = LettermapTab()
         self.schedule_tab.set_lettermap_tab(self.lettermap_tab)
-        # Reorder: Schedule, Schedule-Editor, Lettermap (Experimentell)
+        self.no_translate_words_tab = NoTranslateWordsTab()
+        # Reorder: Schedule, Schedule-Editor, Lettermap (Experimentell), Ausnahmeliste
         self.tabs.addTab(self.schedule_tab, self.tr("Telegram-Export"))
         self.tabs.addTab(self.editor_tab, self.tr("Schedule-Editor"))
         self.tabs.addTab(self.lettermap_tab, self.tr("Lettermap (Experimentell)"))
+        self.tabs.addTab(self.no_translate_words_tab, self.tr("Nicht übersetzen"))
         # Wrap central with a top language bar
         from PySide6.QtWidgets import QWidget as _QW, QVBoxLayout as _QVL
         central = _QW()
@@ -798,6 +801,8 @@ class MainWindow(QMainWindow):
             self.tabs.setTabText(1, self.tr("Schedule-Editor"))
         if self.tabs.count() >= 3:
             self.tabs.setTabText(2, self.tr("Lettermap (Experimentell)"))
+        if self.tabs.count() >= 4:
+            self.tabs.setTabText(3, self.tr("Nicht übersetzen"))
         # Menüs
         self.view_menu.setTitle(self.tr("Ansicht"))
         if hasattr(self, "help_menu"):
@@ -823,6 +828,8 @@ class MainWindow(QMainWindow):
             self.lettermap_tab.retranslate()
         if hasattr(self, "editor_tab") and hasattr(self.editor_tab, "retranslate"):
             self.editor_tab.retranslate()
+        if hasattr(self, "no_translate_words_tab") and hasattr(self.no_translate_words_tab, "retranslate"):
+            self.no_translate_words_tab.retranslate()
 
     def _init_menus(self) -> None:
         menubar = self.menuBar()

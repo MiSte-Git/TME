@@ -20,6 +20,7 @@ from .odt_writer import write_odt_for_records
 from .recompose import _text_to_runs as lettermap_text_to_runs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
+from .no_translate_words import load_no_translate_words_set
 
 # YAML optional laden (keine neue Abhängigkeit erforderlich)
 try:
@@ -365,6 +366,8 @@ async def run_by_ids(
                 f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
             )
             translate = False
+
+    no_translate_words = load_no_translate_words_set() if effective_translation_provider != "telegram" else set()
 
     doc_title, groups = parse_groups_file(links_file)
 
@@ -816,6 +819,7 @@ async def run_by_ids(
                         source_runs = build_runs_from_twe(twe)
                         translated_runs, tr_result = await translate_runs(
                             source_runs, target_lang, translation_provider_obj, source_lang=source_lang,
+                            doc_to_letters=inv_map, no_translate_words=no_translate_words,
                         )
                         cost_tracker.add(tr_result)
                         for w in tr_result.warnings:

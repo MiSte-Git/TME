@@ -11,6 +11,11 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   DeepL, Google Translate oder ChatGPT/OpenAI (`translation.provider` in
   `config.yaml`, `--provider` im CLI, Dropdown im UI); grobe Kostenschätzung
   nach jedem Lauf mit externem Provider (siehe `docs/DEPLOY.md`)
+- Emoji-Wort-Erkennung: mit Buchstaben-Emojis geschriebene Wörter (laut
+  `data/letter_map.json`) werden bei externen Übersetzungs-Providern erkannt
+  und mitübersetzt (als Klartext, keine Rückübersetzung in Emoji-Sequenzen),
+  außer sie stehen auf der erweiterbaren Ausnahmeliste `data/no_translate_words.json`
+  (Tab „Nicht übersetzen" im UI, inkl. CSV-Import/Export)
 - Medien und Custom-Emojis als Bilder einbetten
 - Optional: Nachrichten mehrerer Kanäle chronologisch mischen statt blockweise pro
   Kanal ausgeben (`interleave_channels` in `config.yaml` bzw. Checkbox „Kanäle

@@ -52,6 +52,17 @@
     instead (best-effort, no hard guarantee) - see pipeline/translation/formatting.py
     and base.py docstrings for the mask/unmask design and why "telegram" isn't a
     TranslationProvider instance itself (it needs peer/message-id context, not just text).
+  - Emoji-word detection (pipeline/emoji_words.py): only relevant for the external
+    (non-telegram) provider path. Before mask_runs(), translate_runs() (service.py)
+    calls expand_translatable_emoji_words() to find maximal runs of consecutive
+    EmojiRuns whose document_id is a known letter (data/letter_map.json, inverted
+    doc_id->letter map already built as `inv_map` in runner_schedule.py/runner_by_ids.py).
+    Words not on the exception list data/no_translate_words.json (pipeline/no_translate_words.py,
+    UI tab "Nicht übersetzen") are replaced by a plain TextRun with the decoded text
+    so they flow through translation as real text; the translated result stays as
+    plain text afterward (deliberately not re-encoded back into emoji letters - see
+    emoji_words.py docstring). Words on the exception list, and all other custom
+    emojis, are left untouched and masked/restored 1:1 as before.
 - Code style:
   - PEP 8 naming (snake_case funcs; UPPER_CASE constants); stdlib imports first, then third-party.
   - Prefer small, local changes; keep German user-facing messages as-is; handle timezones with zoneinfo.

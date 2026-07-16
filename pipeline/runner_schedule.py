@@ -29,6 +29,7 @@ from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs
 from .message_collect import collect_messages_for_schedule
 from .message_store import MessageStore, channel_key_for_entity, render_records_from_store
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
+from .no_translate_words import load_no_translate_words_set
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
 from .runner_base_imports import (
     CollectedMessage,
@@ -354,6 +355,12 @@ async def run_schedule(
                 f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
             )
             translate = False
+
+    # Ausnahmeliste für Emoji-Wörter, die NICHT übersetzt werden sollen (siehe
+    # pipeline/emoji_words.py, data/no_translate_words.json). Nur relevant für
+    # externe Provider (deepl/google/chatgpt) - der Telegram-Pfad übersetzt
+    # ohnehin TextWithEntities nativ und läuft nicht über translate_runs().
+    no_translate_words = load_no_translate_words_set() if effective_translation_provider != "telegram" else set()
 
     # Inkrementelles Dokument-Update (Store-Modus): expliziter Parameter hat
     # Vorrang; ohne expliziten Wert greift config.yaml (incremental_mode,
@@ -1106,6 +1113,7 @@ async def run_schedule(
                             source_runs = build_runs_from_twe(twe)
                             translated_runs, tr_result = await translate_runs(
                                 source_runs, target_lang, translation_provider_obj, source_lang=source_lang,
+                                doc_to_letters=inv_map, no_translate_words=no_translate_words,
                             )
                             cost_tracker.add(tr_result)
                             for w in tr_result.warnings:
