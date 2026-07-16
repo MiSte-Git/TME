@@ -60,3 +60,28 @@ output:
   converter: libreoffice         # libreoffice | pandoc | null (Auto-Auswahl)
   out_dir: null                  # null = gleiche wie ODT, sonst Zielverzeichnis
   pandoc_reference_docx: null    # optional; nur für pandoc (z.B. ./tmpl/reference.docx)
+
+# Übersetzungs-Provider (austauschbar). Default "telegram" = bestehendes
+# Verhalten unverändert (Telegrams eigene TranslateTextRequest, kein API-Key
+# nötig). deepl/google/chatgpt sind externe Provider mit eigenem API-Key
+# (siehe docs/DEPLOY.md) und liefern eine grobe, klar als Schätzung
+# gekennzeichnete Kostenanzeige nach jedem Lauf.
+translation:
+  provider: telegram             # telegram | deepl | google | chatgpt
+  deepl:
+    api_url: null                 # null = automatisch (Free- vs. Pro-Tier anhand ":fx"-Key-Suffix)
+  google:
+    {}                            # reserviert für künftige Optionen
+  chatgpt:
+    model: gpt-4o-mini
+  # Grobe Schätzpreise in USD, NICHT live abgefragt; bei Bedarf hier überschreiben.
+  pricing:
+    telegram:
+      usd_per_million_chars: 0.0
+    deepl:
+      usd_per_million_chars: 20.0
+    google:
+      usd_per_million_chars: 20.0
+    chatgpt:
+      usd_per_million_input_tokens: 150.0
+      usd_per_million_output_tokens: 600.0

@@ -35,6 +35,51 @@ python3 ui/app.py
 - Alternativ werden auch `credentials.yaml`/`credentials.yml` oder eine `.env`-Datei in diesem Ordner akzeptiert.
 - Beim ersten Start fragt die App die Keys ab und legt diese JSON-Datei automatisch an (POSIX-Rechte 0600), falls keine Quelle gefunden wurde.
 
+## Übersetzungs-Provider (DeepL, Google Translate, ChatGPT)
+
+Standardmäßig übersetzt die App über Telegrams eigene Übersetzungsfunktion
+(`provider: telegram` in `config.yaml`) - dafür ist kein zusätzlicher API-Key
+nötig. Optional lassen sich externe Provider einstellen (`translation.provider`
+in `config.yaml` bzw. Dropdown "Übersetzungs-Provider" im UI, `--provider` im
+CLI). Jeder externe Provider braucht einen eigenen API-Key, abgelegt nach
+demselben Muster wie die Telegram-Keys:
+
+1) Umgebungsvariablen:
+
+```bash
+export DEEPL_API_KEY=your_deepl_key
+export GOOGLE_TRANSLATE_API_KEY=your_google_key
+export OPENAI_API_KEY=your_openai_key
+```
+
+2) Oder in derselben `~/.config/telegram-odt/credentials.json` wie die
+Telegram-Keys, als zusätzliche Felder:
+
+```json
+{
+  "api_id": 123456,
+  "api_hash": "your_api_hash",
+  "deepl_api_key": "your_deepl_key",
+  "google_translate_api_key": "your_google_key",
+  "openai_api_key": "your_openai_key"
+}
+```
+
+Es muss nur der Key des tatsächlich genutzten Providers gesetzt sein. Fehlt er,
+bricht die Übersetzung für den jeweiligen Lauf kontrolliert ab (Warnung statt
+Absturz) - das ODT/DOCX wird trotzdem erzeugt, nur ohne Übersetzung.
+
+Kostenanzeige: Nach jedem Lauf mit externem Provider wird eine grobe, klar als
+Schätzung gekennzeichnete Kostenübersicht ausgegeben (CLI-Ausgabe bzw.
+Fertig-Dialog im UI). Das ist **keine Live-Preisabfrage** beim Anbieter -
+Preistabellen liegen als Konstanten in `pipeline/translation/pricing.py` bzw.
+überschreibbar unter `translation.pricing` in `config.yaml`.
+
+Hinweis zu Formatierung: DeepL und Google erhalten Zeilenumbrüche, Fett/Kursiv/
+etc. sowie eingebettete Custom-Emojis API-seitig zuverlässig (Tag-Handling).
+Bei ChatGPT ist das Best-Effort per Prompt-Anweisung, ohne API-seitige
+Garantie - siehe `pipeline/translation/formatting.py` für Details.
+
 ## Übersetzungsdateien (*.qm)
 
 - UI-Texte sind lokalisiert. Die kompilierten Qt-Übersetzungen (`ui/translations/app_*.qm`) werden mit ausgeliefert.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Tuple, Dict, Callable, Awaitable, Optional
+from typing import Any, List, Tuple, Dict, Callable, Awaitable, Optional
 from datetime import datetime
 from dataclasses import dataclass
 import asyncio
@@ -19,6 +19,7 @@ from .runs import RunsRecord, build_runs_from_twe, ImageRun, EmojiRun, TextRun, 
 from .odt_writer import write_odt_for_records
 from .recompose import _text_to_runs as lettermap_text_to_runs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
+from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 
 # YAML optional laden (keine neue Abhängigkeit erforderlich)
 try:
@@ -45,6 +46,10 @@ _DOCX_OPTIONS: Dict[str, object] = {
     "out_dir": None,
     "pandoc_reference_docx": None,
 }
+
+# --- Übersetzungs-Provider Defaults ---
+_TRANSLATION_PROVIDER_DEFAULT = "telegram"
+_TRANSLATION_CFG: Dict[str, Any] = {}
 
 
 @dataclass
@@ -218,6 +223,12 @@ def _apply_config_overrides(cfg_path: Path = Path("config.yaml")) -> None:
                 _DOCX_OPTIONS["pandoc_reference_docx"] = None
     except Exception:
         pass
+    try:
+        tr_cfg = data.get("translation") if isinstance(data, dict) else {}
+        if isinstance(tr_cfg, dict):
+            globals()["_TRANSLATION_CFG"] = tr_cfg
+    except Exception:
+        pass
 
 
 # Konfigurationswerte (falls vorhanden) anwenden
@@ -322,6 +333,8 @@ async def run_by_ids(
     target_lang: str = "de",
     include_images: bool = True,
     include_emojis: bool = True,
+    source_lang: str | None = None,
+    translation_provider: str | None = None,
 ) -> RunByIdsResult:
     """
     Baut pro #Gruppe erst Originale und – falls translate=True – danach die Übersetzungen als eigenen Block ("Titel - DE").
@@ -329,6 +342,29 @@ async def run_by_ids(
     """
     # API-Creds aus Environment/Config beziehen (zentral)
     API_ID, API_HASH, PHONE = get_telegram_credentials()
+
+    # Übersetzungs-Provider bestimmen: expliziter Parameter (z.B. --provider)
+    # hat Vorrang; ohne expliziten Wert greift config.yaml (translation.provider,
+    # Default "telegram" -> bestehendes Verhalten unverändert, kein API-Key nötig).
+    _valid_providers = {"telegram", "deepl", "google", "chatgpt"}
+    if isinstance(translation_provider, str) and translation_provider.strip().lower() in _valid_providers:
+        effective_translation_provider = translation_provider.strip().lower()
+    else:
+        effective_translation_provider = str(_TRANSLATION_CFG.get("provider") or _TRANSLATION_PROVIDER_DEFAULT).strip().lower()
+        if effective_translation_provider not in _valid_providers:
+            effective_translation_provider = _TRANSLATION_PROVIDER_DEFAULT
+
+    translation_provider_obj = None
+    cost_tracker = TranslationCostTracker()
+    if translate and effective_translation_provider != "telegram":
+        try:
+            translation_provider_obj = get_provider(effective_translation_provider, _TRANSLATION_CFG)
+        except TranslationError as exc:
+            print(
+                f"Warnung: Übersetzungs-Provider '{effective_translation_provider}' nicht verfügbar "
+                f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
+            )
+            translate = False
 
     doc_title, groups = parse_groups_file(links_file)
 
@@ -767,12 +803,24 @@ async def run_by_ids(
                     if not msg or not isinstance(msg, types.Message) or not ((msg.message or "").strip()):
                         continue
                     twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
-                    tr = await _fetch_translation(client, entity, msg.id, twe, target_lang)
-                    if tr is None:
-                        continue
-                    tr_non_null = tr
-                    await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
-                    runs_tr = build_runs_from_twe(tr_non_null)
+                    runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] | None = None
+                    if effective_translation_provider == "telegram":
+                        tr = await _fetch_translation(client, entity, msg.id, twe, target_lang)
+                        if tr is None:
+                            continue
+                        tr_non_null = tr
+                        await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
+                        runs_tr = build_runs_from_twe(tr_non_null)
+                    else:
+                        await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, twe))
+                        source_runs = build_runs_from_twe(twe)
+                        translated_runs, tr_result = await translate_runs(
+                            source_runs, target_lang, translation_provider_obj, source_lang=source_lang,
+                        )
+                        cost_tracker.add(tr_result)
+                        for w in tr_result.warnings:
+                            print(f"Warnung (Übersetzung, {effective_translation_provider}): {w}")
+                        runs_tr = translated_runs
                     ce_map = get_custom_emoji_cache()
                     new_runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
                     for rr in runs_tr:
@@ -790,6 +838,8 @@ async def run_by_ids(
                             new_runs_tr.append(rr)
                     runs_tr = new_runs_tr
                     records.append(RunsRecord(chat=f"{title} - {lang_up}", message_id=getattr(msg, "id", 0), runs=runs_tr))
+                except TranslationError as exc:
+                    print(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {getattr(msg, 'id', '?')} fehlgeschlagen: {exc}")
                 except Exception:
                     continue
 
@@ -833,5 +883,9 @@ async def run_by_ids(
             print(f"Hinweis: {len(missing_letters)} nicht zugeordnete Zeichen → {rep_path}")
     except Exception:
         pass
+
+    if cost_tracker.has_data():
+        for line in cost_tracker.summary_lines():
+            print(f"Übersetzungskosten: {line}")
 
     return RunByIdsResult(odt=out_path, docx=docx_path)

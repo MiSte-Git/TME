@@ -21,6 +21,7 @@ def run_by_date(
     translation_mode: Optional[str] = None,
     target_lang: Optional[str] = None,
     local_tz: Optional[str] = None,
+    translation_provider: Optional[str] = None,
 ) -> None:
     """Run the schedule flow using :func:`run_schedule`.
 
@@ -45,6 +46,8 @@ def run_by_date(
         kwargs["target_lang"] = str(target_lang)
     if local_tz is not None:
         kwargs["local_tz_override"] = str(local_tz)
+    if translation_provider is not None:
+        kwargs["translation_provider"] = str(translation_provider)
 
     asyncio.run(run_schedule(**kwargs))
 

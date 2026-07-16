@@ -27,6 +27,7 @@ from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .speech_to_text import transcribe_voice, SpeechToTextError
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
+from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
 from .runner_base_imports import (
     CollectedMessage,
@@ -274,6 +275,7 @@ class ScheduleRunResult:
     docx_path: Path | None = None
     docx_translation_path: Path | None = None
     docx_error: str | None = None
+    translation_cost_summary: List[str] | None = None
 
     def __str__(self) -> str:  # pragma: no cover - convenience
         return str(self.odt_path)
@@ -291,6 +293,7 @@ async def run_schedule(
     source_lang: str | None = None,
     output_format: Optional[str] = None,
     chronological_merge: Optional[bool] = None,
+    translation_provider: Optional[str] = None,
     config_path: Path = Path("config.yaml"),
     local_tz_override: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
@@ -325,6 +328,30 @@ async def run_schedule(
         effective_chronological_merge = chronological_merge
     else:
         effective_chronological_merge = bool(cfg.get("interleave_channels", False)) if isinstance(cfg, dict) else False
+
+    # Übersetzungs-Provider bestimmen: expliziter Parameter (z.B. --provider/UI)
+    # hat Vorrang; ohne expliziten Wert greift config.yaml (translation.provider,
+    # Default "telegram" -> bestehendes Verhalten unverändert, kein API-Key nötig).
+    translation_cfg = cfg.get("translation") if isinstance(cfg, dict) and isinstance(cfg.get("translation"), dict) else {}
+    _valid_providers = {"telegram", "deepl", "google", "chatgpt"}
+    if isinstance(translation_provider, str) and translation_provider.strip().lower() in _valid_providers:
+        effective_translation_provider = translation_provider.strip().lower()
+    else:
+        effective_translation_provider = str(translation_cfg.get("provider") or "telegram").strip().lower()
+        if effective_translation_provider not in _valid_providers:
+            effective_translation_provider = "telegram"
+
+    translation_provider_obj = None
+    cost_tracker = TranslationCostTracker()
+    if translate and effective_translation_provider != "telegram":
+        try:
+            translation_provider_obj = get_provider(effective_translation_provider, translation_cfg)
+        except TranslationError as exc:
+            _notify(
+                f"Warnung: Übersetzungs-Provider '{effective_translation_provider}' nicht verfügbar "
+                f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
+            )
+            translate = False
 
     # Determine language codes for filenames
     cfg_source = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "").strip()
@@ -1034,11 +1061,24 @@ async def run_schedule(
                 if translate and msg and ((msg.message or "").strip()):
                     try:
                         twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
-                        tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
-                        if tr is not None:
-                            tr_non_null = tr
-                            await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
-                            runs_tr = build_runs_from_twe(tr_non_null)
+                        runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] | None = None
+                        if effective_translation_provider == "telegram":
+                            tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
+                            if tr is not None:
+                                tr_non_null = tr
+                                await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
+                                runs_tr = build_runs_from_twe(tr_non_null)
+                        else:
+                            await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, twe))
+                            source_runs = build_runs_from_twe(twe)
+                            translated_runs, tr_result = await translate_runs(
+                                source_runs, target_lang, translation_provider_obj, source_lang=source_lang,
+                            )
+                            cost_tracker.add(tr_result)
+                            for w in tr_result.warnings:
+                                _notify(f"Warnung (Übersetzung, {effective_translation_provider}): {w}")
+                            runs_tr = translated_runs
+                        if runs_tr is not None:
                             ce_map = get_custom_emoji_cache()
                             new_runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
                             for rr in runs_tr:
@@ -1071,6 +1111,8 @@ async def run_schedule(
                                 pending_inline_translations.append(translation_record)
                             else:
                                 translations_acc.append(translation_record)
+                    except TranslationError as exc:
+                        _notify(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {msg.id} fehlgeschlagen: {exc}")
                     except Exception:
                         pass
             previous_title = item.title
@@ -1157,6 +1199,11 @@ async def run_schedule(
                 if err_extra:
                     docx_errors.append(err_extra)
 
+        cost_summary_lines = cost_tracker.summary_lines() if cost_tracker.has_data() else None
+        if cost_summary_lines:
+            for line in cost_summary_lines:
+                _notify(f"Übersetzungskosten: {line}")
+
         _notify("Fertig.")
         return ScheduleRunResult(
             odt_path=out_path,
@@ -1164,6 +1211,7 @@ async def run_schedule(
             docx_path=docx_path,
             docx_translation_path=docx_translation_path,
             docx_error="; ".join(docx_errors) if docx_errors else None,
+            translation_cost_summary=cost_summary_lines,
         )
     finally:
         if client is not None:

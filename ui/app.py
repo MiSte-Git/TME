@@ -80,6 +80,7 @@ class ScheduleWorker(QObject):
         source_lang: str = "de",
         output_format: str = "odt",
         chronological_merge: bool = False,
+        translation_provider: str = "telegram",
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -93,6 +94,7 @@ class ScheduleWorker(QObject):
         self.source_lang = source_lang
         self.output_format = output_format
         self.chronological_merge = chronological_merge
+        self.translation_provider = translation_provider
 
     def run(self) -> None:
         try:
@@ -125,6 +127,7 @@ class ScheduleWorker(QObject):
                 "source_lang": self.source_lang,
                 "output_format": self.output_format,
                 "chronological_merge": self.chronological_merge,
+                "translation_provider": self.translation_provider,
                 "config_path": Path("config.yaml"),
                 "progress_cb": cast(Callable[[str], None], _cb),
                 "skip_lettermap_ui": True,
@@ -172,6 +175,12 @@ class ScheduleTab(QWidget):
         opt_lay.setSpacing(8)
         self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
+        self.lbl_provider = QLabel(self.tr("Übersetzungs-Provider:"))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem(self.tr("Telegram (kostenlos)"), "telegram")
+        self.provider_combo.addItem("DeepL", "deepl")
+        self.provider_combo.addItem("Google Translate", "google")
+        self.provider_combo.addItem("ChatGPT (OpenAI)", "chatgpt")
         # Quellsprachen-Auswahl für Dateiname (entspricht Sprachleiste)
         self.src_lang_combo = QComboBox(); self.src_lang_combo.addItems(["de", "en", "fr", "it", "ru", "pl", "es", "hr", "nl", "fi"])
         self.lang_edit = QLineEdit(); self.lang_edit.setPlaceholderText("de")
@@ -190,6 +199,8 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.cb_translate)
         opt_lay.addWidget(self.lbl_mode)
         opt_lay.addWidget(self.mode_combo)
+        opt_lay.addWidget(self.lbl_provider)
+        opt_lay.addWidget(self.provider_combo)
         opt_lay.addWidget(self.lbl_src_lang)
         opt_lay.addWidget(self.src_lang_combo)
         opt_lay.addWidget(self.lbl_lang)
@@ -305,6 +316,13 @@ class ScheduleTab(QWidget):
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
         self.cb_lettermap.setText(self.tr("Lettermapping aktivieren"))
         self.cb_interleave.setText(self.tr("Kanäle chronologisch mischen"))
+        self.lbl_provider.setText(self.tr("Übersetzungs-Provider:"))
+        _prov_current = self.provider_combo.currentData()
+        self.provider_combo.setItemText(0, self.tr("Telegram (kostenlos)"))
+        if _prov_current is not None:
+            _pidx = self.provider_combo.findData(_prov_current)
+            if _pidx >= 0:
+                self.provider_combo.setCurrentIndex(_pidx)
         self.lbl_format.setText(self.tr("Ausgabeformat:"))
         _fmt_current = self.format_combo.currentData()
         self.format_combo.setItemText(0, self.tr("Nur ODT"))
@@ -372,6 +390,7 @@ class ScheduleTab(QWidget):
             source_lang=source_lang,
             output_format=str(self.format_combo.currentData() or "odt"),
             chronological_merge=self.cb_interleave.isChecked(),
+            translation_provider=str(self.provider_combo.currentData() or "telegram"),
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -426,6 +445,7 @@ class ScheduleTab(QWidget):
         docx_path = getattr(result, "docx_path", None)
         docx_translation_path = getattr(result, "docx_translation_path", None)
         docx_error = getattr(result, "docx_error", None)
+        translation_cost_summary = getattr(result, "translation_cost_summary", None)
         lines: list[str] = []
         if odt_path is not None:
             try:
@@ -448,6 +468,10 @@ class ScheduleTab(QWidget):
             lines.append(self.tr("Übersetzungs-DOCX erzeugt: {path}").format(path=docx_translation_path))
         if docx_error:
             lines.append(self.tr("Warnung: DOCX-Konvertierung fehlgeschlagen: {err}").format(err=docx_error))
+        if translation_cost_summary:
+            lines.append(self.tr("Übersetzungskosten (Schätzung):"))
+            for line in translation_cost_summary:
+                lines.append(f"  {line}")
         msg = "\n".join(lines)
         self.status_label.setText(self.tr("Fertig."))
         # Merke Ausgabe-Pfad und zeige Button
@@ -522,6 +546,7 @@ class ScheduleTab(QWidget):
         self.cb_lettermap.toggled.connect(lambda _checked: self._save_state())
         self.cb_interleave.toggled.connect(lambda _checked: self._save_state())
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
+        self.provider_combo.currentIndexChanged.connect(lambda _i: self._save_state())
 
     def _load_state(self) -> None:
         self._loading_state = True
@@ -570,6 +595,11 @@ class ScheduleTab(QWidget):
             interleave = data.get("chronological_merge")
             if isinstance(interleave, bool):
                 self.cb_interleave.setChecked(interleave)
+            provider = data.get("translation_provider")
+            if isinstance(provider, str):
+                pidx = self.provider_combo.findData(provider)
+                if pidx >= 0:
+                    self.provider_combo.setCurrentIndex(pidx)
         except Exception:
             pass
         finally:
@@ -589,6 +619,7 @@ class ScheduleTab(QWidget):
             "lettermap_enabled": self.cb_lettermap.isChecked(),
             "output_format": self.format_combo.currentData(),
             "chronological_merge": self.cb_interleave.isChecked(),
+            "translation_provider": self.provider_combo.currentData(),
         }
         try:
             p = _ui_state_file()

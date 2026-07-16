@@ -33,6 +33,14 @@
   - Telethon (Telegram): messages.TranslateTextRequest for translations; GetCustomEmojiDocumentsRequest; optional channels.JoinChannelRequest.
   - ODT generation via odfpy (styles, TOC, images). OCR via Tesseract/EasyOCR is planned
     (see README.md Roadmap) but not implemented yet.
+  - Pluggable translation providers (pipeline/translation/): "telegram" (default, wraps
+    the Telethon call above, no extra API key) plus deepl/google/chatgpt, each a plain
+    REST call via stdlib urllib (no SDK dependency added). Selected via config.yaml's
+    translation.provider, --provider on the CLI, or the UI dropdown. deepl/google use
+    API-native tag-preserving translation modes; chatgpt relies on a prompt instruction
+    instead (best-effort, no hard guarantee) - see pipeline/translation/formatting.py
+    and base.py docstrings for the mask/unmask design and why "telegram" isn't a
+    TranslationProvider instance itself (it needs peer/message-id context, not just text).
 - Code style:
   - PEP 8 naming (snake_case funcs; UPPER_CASE constants); stdlib imports first, then third-party.
   - Prefer small, local changes; keep German user-facing messages as-is; handle timezones with zoneinfo.

@@ -34,6 +34,8 @@ def main() -> None:
     s1.add_argument("--mode", default=None, help="inline|end|separate")
     s1.add_argument("--translate", type=int, choices=[0,1], default=None)
     s1.add_argument("--lang", default=None)
+    s1.add_argument("--provider", default=None, choices=["telegram", "deepl", "google", "chatgpt"],
+                     help="Übersetzungs-Provider; Default aus config.yaml (translation.provider)")
 
     s2 = sub.add_parser("grouped-links", help="TelegramNachrichtenKopieren.py ausführen")
     s2.add_argument("--links", required=True, type=Path)
@@ -46,6 +48,8 @@ def main() -> None:
     s3.add_argument("--lang", default="de")
     s3.add_argument("--no-images", action="store_true", help="Bilder nicht einbetten")
     s3.add_argument("--no-emojis", action="store_true", help="Custom-Emojis nicht als Bilder einbetten; als Text/Platzhalter ausgeben")
+    s3.add_argument("--provider", default=None, choices=["telegram", "deepl", "google", "chatgpt"],
+                     help="Übersetzungs-Provider; Default aus config.yaml (translation.provider)")
 
     s4 = sub.add_parser("collect-letters", help="Custom-Emoji PNGs sammeln und nach custom_emoji_export/ kopieren; assets.json aktualisieren")
     s4.add_argument("--links", required=True, type=Path)
@@ -84,6 +88,7 @@ def main() -> None:
             translation_mode=args.mode,
             target_lang=args.lang,
             local_tz=cfg.get("local_tz"),
+            translation_provider=args.provider,
         )
     elif args.cmd == "grouped-links":
         raise SystemExit(
@@ -101,6 +106,7 @@ def main() -> None:
             target_lang=args.lang,
             include_images=(not args.no_images),
             include_emojis=(not args.no_emojis),
+            translation_provider=args.provider,
         )
         # run_by_ids ist async → ausführen
         import asyncio

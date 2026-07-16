@@ -7,6 +7,10 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
 ## Features
 - Schedule-Dateien (TXT oder JSON) einlesen, Nachrichten abrufen und als ODT exportieren
 - Optional Übersetzungen anhängen (inline, am Ende oder als separates Dokument)
+- Austauschbarer Übersetzungs-Provider: Telegram (Default, kein API-Key nötig),
+  DeepL, Google Translate oder ChatGPT/OpenAI (`translation.provider` in
+  `config.yaml`, `--provider` im CLI, Dropdown im UI); grobe Kostenschätzung
+  nach jedem Lauf mit externem Provider (siehe `docs/DEPLOY.md`)
 - Medien und Custom-Emojis als Bilder einbetten
 - Optional: Nachrichten mehrerer Kanäle chronologisch mischen statt blockweise pro
   Kanal ausgeben (`interleave_channels` in `config.yaml` bzw. Checkbox „Kanäle

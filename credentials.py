@@ -67,6 +67,47 @@ def get_telegram_credentials() -> Tuple[int, str, Optional[str]]:
     raise RuntimeError("TELEGRAM_API_ID oder TELEGRAM_API_HASH nicht gesetzt und keine gültige credentials.json gefunden")
 
 
+def _read_credentials_json() -> dict:
+    cfg_path = _credentials_json_path()
+    if not cfg_path.is_file():
+        return {}
+    try:
+        data = json.loads(cfg_path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _get_provider_api_key(env_var: str, json_key: str) -> Optional[str]:
+    """Liest einen einzelnen API-Key nach demselben Muster wie Telegram-Credentials:
+    1) Umgebungsvariable, 2) Fallback credentials.json (~/.config/telegram-odt/).
+    Gibt None zurück statt zu werfen - fehlender Key ist für Übersetzungs-Provider
+    kein Programmfehler, sondern wird dort als TranslationError gemeldet.
+    """
+    env_val = os.environ.get(env_var)
+    if env_val and env_val.strip():
+        return env_val.strip()
+    data = _read_credentials_json()
+    val = str(data.get(json_key, "")).strip()
+    return val or None
+
+
+def get_deepl_api_key() -> Optional[str]:
+    """DeepL API-Key: ENV DEEPL_API_KEY oder credentials.json-Feld 'deepl_api_key'."""
+    return _get_provider_api_key("DEEPL_API_KEY", "deepl_api_key")
+
+
+def get_google_translate_api_key() -> Optional[str]:
+    """Google-Translate API-Key: ENV GOOGLE_TRANSLATE_API_KEY oder
+    credentials.json-Feld 'google_translate_api_key'."""
+    return _get_provider_api_key("GOOGLE_TRANSLATE_API_KEY", "google_translate_api_key")
+
+
+def get_openai_api_key() -> Optional[str]:
+    """OpenAI API-Key: ENV OPENAI_API_KEY oder credentials.json-Feld 'openai_api_key'."""
+    return _get_provider_api_key("OPENAI_API_KEY", "openai_api_key")
+
+
 def save_telegram_credentials(api_id: int, api_hash: str, phone: Optional[str] = None) -> None:
     """
     Speichert die übergebenen Credentials als Fallback in credentials.json
