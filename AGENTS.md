@@ -21,6 +21,12 @@
   - No linter/formatter configured. Prefer PEP 8; if adding tools, use ruff/black with default settings.
 - Structure & data:
   - Input schedules: JSON schedule files; outputs: *.odt; media files saved under media/ and embedded into ODT.
+  - Message ordering: by default, messages are grouped block-wise per schedule section
+    (one H1 heading each, sorted chronologically only within that section). Set
+    config.yaml's interleave_channels: true (or the UI checkbox) to merge messages
+    from all sections/channels into a single chronologically sorted sequence instead;
+    each message then carries a "Kanal: <name>" label in its header. See
+    pipeline/message_collect.py's _merge_chronologically for the sort/tiebreak logic.
   - Telegram session persists in tg_session.session (created on first run).
   - Custom emoji mapping in custom_emoji_user_map.json; archive experiments in _archive/ (not part of runtime).
 - External APIs:

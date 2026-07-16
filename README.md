@@ -8,6 +8,9 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
 - Schedule-Dateien (TXT oder JSON) einlesen, Nachrichten abrufen und als ODT exportieren
 - Optional Übersetzungen anhängen (inline, am Ende oder als separates Dokument)
 - Medien und Custom-Emojis als Bilder einbetten
+- Optional: Nachrichten mehrerer Kanäle chronologisch mischen statt blockweise pro
+  Kanal ausgeben (`interleave_channels` in `config.yaml` bzw. Checkbox „Kanäle
+  chronologisch mischen" im UI; Kanalname bleibt als Label pro Nachricht sichtbar)
 - Automatisches Nachladen fehlender Emoji-PNGs und Reporting
 - Übergreifender CLI-Einstieg (`pipeline/emoji_pipeline.py`) für Skript-Workflows
 

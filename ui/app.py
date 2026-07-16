@@ -79,6 +79,7 @@ class ScheduleWorker(QObject):
         lettermap_enabled: bool = False,
         source_lang: str = "de",
         output_format: str = "odt",
+        chronological_merge: bool = False,
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -91,6 +92,7 @@ class ScheduleWorker(QObject):
         self.lettermap_enabled = lettermap_enabled
         self.source_lang = source_lang
         self.output_format = output_format
+        self.chronological_merge = chronological_merge
 
     def run(self) -> None:
         try:
@@ -122,6 +124,7 @@ class ScheduleWorker(QObject):
                 "include_emojis": self.include_emojis,
                 "source_lang": self.source_lang,
                 "output_format": self.output_format,
+                "chronological_merge": self.chronological_merge,
                 "config_path": Path("config.yaml"),
                 "progress_cb": cast(Callable[[str], None], _cb),
                 "skip_lettermap_ui": True,
@@ -175,6 +178,7 @@ class ScheduleTab(QWidget):
         self.cb_images = QCheckBox(self.tr("Bilder einbetten")); self.cb_images.setChecked(True)
         self.cb_emojis = QCheckBox(self.tr("Custom Emojis einbetten")); self.cb_emojis.setChecked(True)
         self.cb_lettermap = QCheckBox(self.tr("Lettermapping aktivieren")); self.cb_lettermap.setChecked(False)
+        self.cb_interleave = QCheckBox(self.tr("Kanäle chronologisch mischen")); self.cb_interleave.setChecked(False)
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
         self.lbl_src_lang = QLabel(self.tr("Quellsprache (Dateiname):"))
@@ -193,6 +197,7 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.cb_images)
         opt_lay.addWidget(self.cb_emojis)
         opt_lay.addWidget(self.cb_lettermap)
+        opt_lay.addWidget(self.cb_interleave)
         opt_lay.addWidget(self.lbl_format)
         opt_lay.addWidget(self.format_combo)
         lay.addLayout(opt_lay)
@@ -299,6 +304,7 @@ class ScheduleTab(QWidget):
         self.cb_images.setText(self.tr("Bilder einbetten"))
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
         self.cb_lettermap.setText(self.tr("Lettermapping aktivieren"))
+        self.cb_interleave.setText(self.tr("Kanäle chronologisch mischen"))
         self.lbl_format.setText(self.tr("Ausgabeformat:"))
         _fmt_current = self.format_combo.currentData()
         self.format_combo.setItemText(0, self.tr("Nur ODT"))
@@ -365,6 +371,7 @@ class ScheduleTab(QWidget):
             lettermap_enabled=self.cb_lettermap.isChecked(),
             source_lang=source_lang,
             output_format=str(self.format_combo.currentData() or "odt"),
+            chronological_merge=self.cb_interleave.isChecked(),
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -513,6 +520,7 @@ class ScheduleTab(QWidget):
         self.cb_images.toggled.connect(lambda _checked: self._save_state())
         self.cb_emojis.toggled.connect(lambda _checked: self._save_state())
         self.cb_lettermap.toggled.connect(lambda _checked: self._save_state())
+        self.cb_interleave.toggled.connect(lambda _checked: self._save_state())
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
 
     def _load_state(self) -> None:
@@ -559,6 +567,9 @@ class ScheduleTab(QWidget):
                 idx = self.format_combo.findData(output_format)
                 if idx >= 0:
                     self.format_combo.setCurrentIndex(idx)
+            interleave = data.get("chronological_merge")
+            if isinstance(interleave, bool):
+                self.cb_interleave.setChecked(interleave)
         except Exception:
             pass
         finally:
@@ -577,6 +588,7 @@ class ScheduleTab(QWidget):
             "include_emojis": self.cb_emojis.isChecked(),
             "lettermap_enabled": self.cb_lettermap.isChecked(),
             "output_format": self.format_combo.currentData(),
+            "chronological_merge": self.cb_interleave.isChecked(),
         }
         try:
             p = _ui_state_file()

@@ -19,6 +19,7 @@ class CollectedMessage:
     link: Optional[str] = None
     topic_id: Optional[int] = None  # gewünschtes Topic laut Section/Schedule
     actual_topic_id: Optional[int] = None  # tatsächlich erkannter Thread der Nachricht
+    channel_label: Optional[str] = None  # section.title; für Kanal-Label beim chronologischen Interleaving
 
 
 def _format_heading(date_iso: str, title: str) -> str:

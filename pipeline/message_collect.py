@@ -137,6 +137,28 @@ def _sort_collected_messages(msgs: List[CollectedMessage]) -> List[CollectedMess
     return sorted(msgs, key=_key)
 
 
+def _merge_chronologically(sections_payload: List[List[CollectedMessage]]) -> List[CollectedMessage]:
+    """Mischt alle Section-Nachrichten channel-übergreifend in eine einzige,
+    nach message.date aufsteigend sortierte Sequenz.
+
+    Sortierschlüssel: (Zeitstempel, Schedule-Reihenfolge der Section, Message-ID).
+    Die Section-Reihenfolge dient als stabiler Tiebreaker bei exakt gleichem
+    Zeitstempel über Kanäle hinweg; die Message-ID greift nur innerhalb
+    derselben Section (dort ist sie bereits eindeutig aufsteigend).
+    Ein einzelner sort() über die geflachte Liste genügt (O(n log n)).
+    """
+    indexed: List[tuple[datetime, int, int, CollectedMessage]] = []
+    for section_index, msgs in enumerate(sections_payload):
+        for cm in msgs:
+            dt = getattr(cm.message, "date", None)
+            if not isinstance(dt, datetime):
+                dt = datetime.min.replace(tzinfo=timezone.utc)
+            mid = getattr(cm.message, "id", 0) or 0
+            indexed.append((dt, section_index, mid, cm))
+    indexed.sort(key=lambda t: (t[0], t[1], t[2]))
+    return [cm for _, _, _, cm in indexed]
+
+
 async def _resolve_user_id(client: TelegramClient, username: str) -> Optional[int]:
     uname = username.strip().lstrip("@")
     if not uname:
@@ -154,6 +176,7 @@ async def collect_messages_for_schedule(
     client: TelegramClient,
     schedule: ScheduleDocument,
     local_tz: Optional[str],
+    chronological_merge: bool = False,
 ) -> Tuple[List[CollectedMessage], Set[str], list[dict[str, Any]]]:
     from zoneinfo import ZoneInfo
 
@@ -194,6 +217,7 @@ async def collect_messages_for_schedule(
     for section in schedule.sections:
         heading = _format_heading(section.date.strftime("%Y-%m-%d"), section.title)
         subheading = section.subheading or None
+        channel_label = section.title.strip() or heading
         seen_message_keys: set[tuple[Any, Any]] = set()
         section_acc: List[CollectedMessage] = []
         base_count = 0
@@ -225,6 +249,7 @@ async def collect_messages_for_schedule(
                 link=link,
                 topic_id=topic_id,
                 actual_topic_id=actual_topic_id,
+                channel_label=channel_label,
             )
             section_acc.append(cm)
             if is_reply:
@@ -557,9 +582,12 @@ async def collect_messages_for_schedule(
         if DEBUG_FETCH:
             print(f"Abschnitt '{heading}': basis={base_count}, replies={reply_count}, total={len(section_sorted)}")
 
-    collected_flat: List[CollectedMessage] = []
-    for sec in sections_payload:
-        collected_flat.extend(sec)
+    if chronological_merge:
+        collected_flat = _merge_chronologically(sections_payload)
+    else:
+        collected_flat = []
+        for sec in sections_payload:
+            collected_flat.extend(sec)
     if DEBUG_FETCH:
         print(f"Gesamt: {sum(len(sec) for sec in sections_payload)} Nachrichten in {len(sections_payload)} Abschnitten für ODT.")
 

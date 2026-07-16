@@ -290,6 +290,7 @@ async def run_schedule(
     include_emojis: bool = True,
     source_lang: str | None = None,
     output_format: Optional[str] = None,
+    chronological_merge: Optional[bool] = None,
     config_path: Path = Path("config.yaml"),
     local_tz_override: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
@@ -316,6 +317,14 @@ async def run_schedule(
     else:
         effective_output_format = "both" if _rbi._DOCX_OPTIONS.get("make_docx") else "odt"
     want_docx = effective_output_format in ("docx", "both")
+
+    # Channel-übergreifendes chronologisches Interleaving: expliziter Parameter
+    # (z.B. aus UI) hat Vorrang; ohne expliziten Wert greift config.yaml
+    # (interleave_channels, Default false -> bestehendes Verhalten unverändert).
+    if isinstance(chronological_merge, bool):
+        effective_chronological_merge = chronological_merge
+    else:
+        effective_chronological_merge = bool(cfg.get("interleave_channels", False)) if isinstance(cfg, dict) else False
 
     # Determine language codes for filenames
     cfg_source = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "").strip()
@@ -440,7 +449,10 @@ async def run_schedule(
                 pass
 
         _notify("Nachrichten werden gesammelt…")
-        collected, used_doc_ids, resume_hints = await collect_messages_for_schedule(client, schedule, local_tz)
+        collected, used_doc_ids, resume_hints = await collect_messages_for_schedule(
+            client, schedule, local_tz, chronological_merge=effective_chronological_merge,
+        )
+        interleave_chat_label = schedule.document_title or out_basename
         if resume_hints:
             for rh in resume_hints:
                 hint = rh.get("hint", {}) if isinstance(rh, dict) else {}
@@ -816,6 +828,9 @@ async def run_schedule(
 
             link_url = item.link or _build_message_link(item.entity, msg, topic_id=item.topic_id)
 
+            if effective_chronological_merge and item.channel_label:
+                header_runs.append(TextRun(kind="TextRun", text=f"Kanal: {item.channel_label}", bold=True))
+                header_runs.append(LineBreak(kind="LineBreak"))
             header_runs.append(TextRun(kind="TextRun", text=header_text))
             header_runs.append(LineBreak(kind="LineBreak"))
             if link_url:
@@ -1013,7 +1028,8 @@ async def run_schedule(
                     base_meta["header_runs"] = header_runs
                 if link_url:
                     base_meta["link"] = link_url
-                records.append(RunsRecord(chat=item.title, message_id=msg.id, runs=runs_list, meta=base_meta or None))
+                chat_label = interleave_chat_label if effective_chronological_merge else item.title
+                records.append(RunsRecord(chat=chat_label, message_id=msg.id, runs=runs_list, meta=base_meta or None))
 
                 if translate and msg and ((msg.message or "").strip()):
                     try:
@@ -1046,7 +1062,7 @@ async def run_schedule(
                             if link_url:
                                 tr_meta["link"] = link_url
                             translation_record = RunsRecord(
-                                chat=f"{item.title} - {lang_up}",
+                                chat=f"{chat_label} - {lang_up}",
                                 message_id=msg.id,
                                 runs=new_runs_tr,
                                 meta=tr_meta or None,

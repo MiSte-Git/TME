@@ -36,6 +36,12 @@ lettermap_open_ui_on_missing: true
 lettermap_continue_without_mapping: false
 debug_dump_entities: true
 
+# Channel-übergreifendes chronologisches Interleaving (Default: aus).
+# true = Nachrichten aller Sections/Kanäle werden nach message.date global
+# gemischt statt blockweise pro Section ausgegeben; Kanalname erscheint dann
+# als Label vor jeder Nachricht. Per UI-Checkbox/Parameter überschreibbar.
+interleave_channels: false
+
 # Telegram-Client (optional)
 telegram_client:
   timeout: 20            # Sekunden für RPC-Timeout
