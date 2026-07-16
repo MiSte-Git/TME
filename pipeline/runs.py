@@ -123,16 +123,83 @@ class RunsRecord:
     meta: Dict[str, Any] | None = None
 
 
+_RUN_KIND_CLASSES = {
+    "TextRun": TextRun,
+    "EmojiRun": EmojiRun,
+    "LineBreak": LineBreak,
+    "ImageRun": ImageRun,
+}
+
+
+def run_to_dict(r: Run) -> Dict[str, Any]:
+    return asdict(r)
+
+
+def run_from_dict(d: Dict[str, Any]) -> Run:
+    kind = d.get("kind")
+    cls = _RUN_KIND_CLASSES.get(kind)
+    if cls is None:
+        raise ValueError(f"Unbekannte Run-kind: {kind!r}")
+    # Nur bekannte Felder übernehmen (robust gegenüber älteren/neueren Store-Versionen)
+    valid_fields = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
+    kwargs = {k: v for k, v in d.items() if k in valid_fields}
+    return cls(**kwargs)  # type: ignore[return-value]
+
+
+def _meta_to_dict(meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    """Wandelt meta in ein JSON-taugliches Dict; Run-Listen (z.B. header_runs)
+    werden dabei rekursiv wie rec.runs serialisiert."""
+    if not meta:
+        return None
+    out: Dict[str, Any] = {}
+    for k, v in meta.items():
+        if isinstance(v, list) and v and all(hasattr(x, "kind") for x in v):
+            out[k] = [run_to_dict(x) for x in v]
+        else:
+            out[k] = v
+    return out or None
+
+
+def _meta_from_dict(meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    if not meta:
+        return None
+    out: Dict[str, Any] = {}
+    for k, v in meta.items():
+        if isinstance(v, list) and v and all(isinstance(x, dict) and x.get("kind") in _RUN_KIND_CLASSES for x in v):
+            out[k] = [run_from_dict(x) for x in v]
+        else:
+            out[k] = v
+    return out or None
+
+
+def record_to_dict(rec: RunsRecord) -> Dict[str, Any]:
+    data: Dict[str, Any] = {
+        "chat": rec.chat,
+        "message_id": rec.message_id,
+        "runs": [run_to_dict(r) for r in rec.runs],
+    }
+    meta_dict = _meta_to_dict(rec.meta)
+    if meta_dict:
+        data["meta"] = meta_dict
+    return data
+
+
+def record_from_dict(data: Dict[str, Any]) -> RunsRecord:
+    return RunsRecord(
+        chat=str(data.get("chat", "")),
+        message_id=int(data.get("message_id", 0)),
+        runs=[run_from_dict(r) for r in (data.get("runs") or [])],
+        meta=_meta_from_dict(data.get("meta")),
+    )
+
+
 def save_runs_json(dst_dir: Path, rec: RunsRecord) -> Path:
     dst_dir.mkdir(parents=True, exist_ok=True)
     p = dst_dir / f"{rec.chat}_{rec.message_id}.json"
-    # asdict kann bei Union nicht automatisch arbeiten → manuell mappen
-    data = {
-        "chat": rec.chat,
-        "message_id": rec.message_id,
-        "runs": [asdict(r) for r in rec.runs],
-    }
-    if rec.meta:
-        data["meta"] = rec.meta
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    p.write_text(json.dumps(record_to_dict(rec), ensure_ascii=False, indent=2), encoding="utf-8")
     return p
+
+
+def load_runs_json(path: Path) -> RunsRecord:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return record_from_dict(data)

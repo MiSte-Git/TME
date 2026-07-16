@@ -27,6 +27,7 @@ from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .speech_to_text import transcribe_voice, SpeechToTextError
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
+from .message_store import MessageStore, channel_key_for_entity, render_records_from_store
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
 from .runner_base_imports import (
@@ -294,6 +295,7 @@ async def run_schedule(
     output_format: Optional[str] = None,
     chronological_merge: Optional[bool] = None,
     translation_provider: Optional[str] = None,
+    incremental_mode: Optional[bool] = None,
     config_path: Path = Path("config.yaml"),
     local_tz_override: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
@@ -352,6 +354,22 @@ async def run_schedule(
                 f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
             )
             translate = False
+
+    # Inkrementelles Dokument-Update (Store-Modus): expliziter Parameter hat
+    # Vorrang; ohne expliziten Wert greift config.yaml (incremental_mode,
+    # Default false -> bestehendes Verhalten unverändert: Vollgenerierung mit
+    # Zeitstempel-Dateiname, kein Store).
+    if isinstance(incremental_mode, bool):
+        effective_incremental_mode = incremental_mode
+    else:
+        effective_incremental_mode = bool(cfg.get("incremental_mode", False)) if isinstance(cfg, dict) else False
+
+    store: Optional[MessageStore] = None
+    if effective_incremental_mode:
+        store = MessageStore.load(schedule_path.stem)
+        for w in store.load_warnings:
+            _notify(f"Warnung (Message-Store): {w}")
+        _notify(f"Store-Modus aktiv: {len(store)} bereits bekannte Nachricht(en) im Store ({schedule_path.stem}).")
 
     # Determine language codes for filenames
     cfg_source = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "").strip()
@@ -476,8 +494,9 @@ async def run_schedule(
                 pass
 
         _notify("Nachrichten werden gesammelt…")
-        collected, used_doc_ids, resume_hints = await collect_messages_for_schedule(
+        collected, used_doc_ids, resume_hints, section_stats = await collect_messages_for_schedule(
             client, schedule, local_tz, chronological_merge=effective_chronological_merge,
+            min_id_by_fingerprint=(store.min_ids_by_fingerprint() if store is not None else None),
         )
         interleave_chat_label = schedule.document_title or out_basename
         if resume_hints:
@@ -494,7 +513,10 @@ async def run_schedule(
 
         out_dir = output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        # Im Store-Modus kein Zeitstempel im Dateinamen: dieselbe Datei wird
+        # bei jedem Lauf komplett neu geschrieben (fortgeschrieben), nicht
+        # jedes Mal eine neue erzeugt - das ist der Sinn des Store-Ansatzes.
+        ts_part = "" if effective_incremental_mode else f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
         # Add language code suffix to filename:
         # - separate mode (main file has only source language): _{SRC}
         # - other modes with translate=True: _{SRC}-{TGT}
@@ -504,7 +526,7 @@ async def run_schedule(
             code_suffix = f"_{source_up}"
         else:
             code_suffix = f"_{source_up}-{lang_up}" if translate else f"_{source_up}"
-        out_path = out_dir / f"{out_basename}_{ts}{code_suffix}.odt"
+        out_path = out_dir / f"{out_basename}{ts_part}{code_suffix}.odt"
 
         safe_img_dir = Path("media/odt_safe"); safe_img_dir.mkdir(parents=True, exist_ok=True)
         img_idx = 1
@@ -785,6 +807,7 @@ async def run_schedule(
         if mode_norm not in ("inline", "end", "separate"):
             mode_norm = "inline"
         lang_up = target_lang.upper()
+        skipped_via_store = 0
 
         for item in collected:
 
@@ -793,6 +816,14 @@ async def run_schedule(
                     records.extend(pending_inline_translations)
                     pending_inline_translations.clear()
             msg = item.message
+            channel_key = channel_key_for_entity(item.entity) if store is not None else None
+            if store is not None and store.has_message(channel_key, msg.id):
+                # Bereits aus einem früheren Lauf im Store bekannt: kein erneutes
+                # Herunterladen von Medien/Übersetzen - spart insbesondere
+                # wiederholte Übersetzungskosten bei jedem inkrementellen Lauf.
+                skipped_via_store += 1
+                previous_title = item.title
+                continue
             header_runs: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
             runs_list: List[TextRun | EmojiRun | LineBreak | ImageRun] = []
 
@@ -1056,7 +1087,9 @@ async def run_schedule(
                 if link_url:
                     base_meta["link"] = link_url
                 chat_label = interleave_chat_label if effective_chronological_merge else item.title
-                records.append(RunsRecord(chat=chat_label, message_id=msg.id, runs=runs_list, meta=base_meta or None))
+                original_record = RunsRecord(chat=chat_label, message_id=msg.id, runs=runs_list, meta=base_meta or None)
+                records.append(original_record)
+                translation_record_for_store: Optional[RunsRecord] = None
 
                 if translate and msg and ((msg.message or "").strip()):
                     try:
@@ -1107,6 +1140,7 @@ async def run_schedule(
                                 runs=new_runs_tr,
                                 meta=tr_meta or None,
                             )
+                            translation_record_for_store = translation_record
                             if mode_norm == "inline":
                                 pending_inline_translations.append(translation_record)
                             else:
@@ -1115,12 +1149,24 @@ async def run_schedule(
                         _notify(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {msg.id} fehlgeschlagen: {exc}")
                     except Exception:
                         pass
+
+                if store is not None:
+                    store.add_message(channel_key, msg.id, getattr(msg, "date", None), original_record, translation_record_for_store)
             previous_title = item.title
 
         if translate and mode_norm == "end" and translations_acc:
             records.extend(translations_acc)
         if pending_inline_translations:
             records.extend(pending_inline_translations)
+
+        if store is not None:
+            _notify(f"Store-Modus: {skipped_via_store} bereits bekannte Nachricht(en) übersprungen, {len(collected) - skipped_via_store} neu verarbeitet.")
+            for fp, stats in section_stats.items():
+                store.update_section_state(fp, stats["channel_key"], stats["last_message_id"], stats["last_message_date"])
+            try:
+                store.save()
+            except Exception as exc:
+                _notify(f"Warnung: Message-Store konnte nicht gespeichert werden ({exc}); bereits verarbeitete neue Nachrichten werden beim nächsten Lauf erneut geholt.")
 
 
         if missing_png_tracker:
@@ -1129,6 +1175,14 @@ async def run_schedule(
             rep_png.write_text(json.dumps({"missing_pngs": final_sorted}, ensure_ascii=False, indent=2), encoding="utf-8")
             if missing_png_tracker != initial_missing_pngs:
                 _notify(f"Hinweis: {len(final_sorted)} Emoji-PNGs fehlen weiterhin → {rep_png}")
+
+        if store is not None:
+            # Komplettes Dokument aus dem sortierten Store neu rendern statt
+            # nur die Live-Ergebnisse dieses Laufs zu schreiben - so tauchen
+            # auch alle in früheren Läufen bereits verarbeiteten Nachrichten
+            # wieder auf (TOC/Seitenzahlen lösen sich dabei automatisch mit,
+            # da write_odt_for_records ohnehin immer alles neu schreibt).
+            records, translations_acc = render_records_from_store(store, effective_chronological_merge, mode_norm)
 
         doc_title_base = schedule.document_title
         if resume_hints:
@@ -1146,12 +1200,12 @@ async def run_schedule(
         write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
 
         extra_path: Optional[Path] = None
-        if translate and mode_norm == "separate" and translations_acc:
+        if mode_norm == "separate" and translations_acc:
             tr_title = f"{schedule.document_title} - {lang_up}" if schedule.document_title else f"{out_basename} - {lang_up}"
             if resume_hints:
                 stop_id = (resume_hints[0].get("hint", {}) or {}).get("last_ok_id")
                 tr_title = f"{tr_title} (Teil-Export, Stop bei msg_id {stop_id})"
-            extra_path = out_dir / f"{out_basename}_{ts}_{lang_up}.odt"
+            extra_path = out_dir / f"{out_basename}{ts_part}_{lang_up}.odt"
             _notify("Übersetzungs-ODT wird geschrieben…")
             write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)
 

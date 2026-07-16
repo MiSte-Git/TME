@@ -29,6 +29,17 @@
     pipeline/message_collect.py's _merge_chronologically for the sort/tiebreak logic.
   - Telegram session persists in tg_session.session (created on first run).
   - Custom emoji mapping in custom_emoji_user_map.json; archive experiments in _archive/ (not part of runtime).
+  - Incremental mode (config.yaml's incremental_mode: true, or the UI checkbox
+    "Inkrementelles Update (Store)"): a persistent per-schedule message store
+    lives under data/message_store/<schedule_stem>.json (pipeline/message_store.py),
+    keyed by (channel_key, message_id) plus per-section fetch state (last
+    message id/date per (channel, date, time-window) fingerprint). On each run,
+    only new messages per section are fetched (Telethon min_id, threaded through
+    message_filters.fetch_messages_for_section_day); the output document is
+    always fully re-rendered from the store (render_records_from_store), never
+    appended - no timestamp in the filename in this mode, the same file is
+    overwritten. Corrupted/unreadable store files are backed up (*.corrupt-*)
+    and replaced with an empty store rather than crashing.
 - External APIs:
   - Telethon (Telegram): messages.TranslateTextRequest for translations; GetCustomEmojiDocumentsRequest; optional channels.JoinChannelRequest.
   - ODT generation via odfpy (styles, TOC, images). OCR via Tesseract/EasyOCR is planned

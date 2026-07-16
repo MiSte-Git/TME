@@ -42,6 +42,16 @@ debug_dump_entities: true
 # als Label vor jeder Nachricht. Per UI-Checkbox/Parameter überschreibbar.
 interleave_channels: false
 
+# Inkrementelles Dokument-Update (Default: aus). true = Nachrichten werden
+# in einem persistenten Message-Store unter data/message_store/<schedule>.json
+# gesammelt (inkl. bereits übersetzter Runs, damit nichts doppelt übersetzt/
+# bezahlt wird); pro Kanal+Zeitfenster wird nur ab der zuletzt bekannten
+# Message-ID neu geholt (Telethon min_id). Das Dokument wird bei jedem Lauf
+# komplett aus dem Store neu geschrieben (nicht angehängt) - deshalb ohne
+# Zeitstempel im Dateinamen, dieselbe Datei wird fortgeschrieben. Per
+# UI-Checkbox/Parameter überschreibbar.
+incremental_mode: false
+
 # Telegram-Client (optional)
 telegram_client:
   timeout: 20            # Sekunden für RPC-Timeout

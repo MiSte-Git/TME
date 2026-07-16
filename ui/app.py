@@ -81,6 +81,7 @@ class ScheduleWorker(QObject):
         output_format: str = "odt",
         chronological_merge: bool = False,
         translation_provider: str = "telegram",
+        incremental_mode: bool = False,
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -95,6 +96,7 @@ class ScheduleWorker(QObject):
         self.output_format = output_format
         self.chronological_merge = chronological_merge
         self.translation_provider = translation_provider
+        self.incremental_mode = incremental_mode
 
     def run(self) -> None:
         try:
@@ -128,6 +130,7 @@ class ScheduleWorker(QObject):
                 "output_format": self.output_format,
                 "chronological_merge": self.chronological_merge,
                 "translation_provider": self.translation_provider,
+                "incremental_mode": self.incremental_mode,
                 "config_path": Path("config.yaml"),
                 "progress_cb": cast(Callable[[str], None], _cb),
                 "skip_lettermap_ui": True,
@@ -188,6 +191,7 @@ class ScheduleTab(QWidget):
         self.cb_emojis = QCheckBox(self.tr("Custom Emojis einbetten")); self.cb_emojis.setChecked(True)
         self.cb_lettermap = QCheckBox(self.tr("Lettermapping aktivieren")); self.cb_lettermap.setChecked(False)
         self.cb_interleave = QCheckBox(self.tr("Kanäle chronologisch mischen")); self.cb_interleave.setChecked(False)
+        self.cb_incremental = QCheckBox(self.tr("Inkrementelles Update (Store)")); self.cb_incremental.setChecked(False)
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
         self.lbl_src_lang = QLabel(self.tr("Quellsprache (Dateiname):"))
@@ -209,6 +213,7 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.cb_emojis)
         opt_lay.addWidget(self.cb_lettermap)
         opt_lay.addWidget(self.cb_interleave)
+        opt_lay.addWidget(self.cb_incremental)
         opt_lay.addWidget(self.lbl_format)
         opt_lay.addWidget(self.format_combo)
         lay.addLayout(opt_lay)
@@ -316,6 +321,7 @@ class ScheduleTab(QWidget):
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
         self.cb_lettermap.setText(self.tr("Lettermapping aktivieren"))
         self.cb_interleave.setText(self.tr("Kanäle chronologisch mischen"))
+        self.cb_incremental.setText(self.tr("Inkrementelles Update (Store)"))
         self.lbl_provider.setText(self.tr("Übersetzungs-Provider:"))
         _prov_current = self.provider_combo.currentData()
         self.provider_combo.setItemText(0, self.tr("Telegram (kostenlos)"))
@@ -391,6 +397,7 @@ class ScheduleTab(QWidget):
             output_format=str(self.format_combo.currentData() or "odt"),
             chronological_merge=self.cb_interleave.isChecked(),
             translation_provider=str(self.provider_combo.currentData() or "telegram"),
+            incremental_mode=self.cb_incremental.isChecked(),
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -545,6 +552,7 @@ class ScheduleTab(QWidget):
         self.cb_emojis.toggled.connect(lambda _checked: self._save_state())
         self.cb_lettermap.toggled.connect(lambda _checked: self._save_state())
         self.cb_interleave.toggled.connect(lambda _checked: self._save_state())
+        self.cb_incremental.toggled.connect(lambda _checked: self._save_state())
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
         self.provider_combo.currentIndexChanged.connect(lambda _i: self._save_state())
 
@@ -600,6 +608,9 @@ class ScheduleTab(QWidget):
                 pidx = self.provider_combo.findData(provider)
                 if pidx >= 0:
                     self.provider_combo.setCurrentIndex(pidx)
+            incremental = data.get("incremental_mode")
+            if isinstance(incremental, bool):
+                self.cb_incremental.setChecked(incremental)
         except Exception:
             pass
         finally:
@@ -620,6 +631,7 @@ class ScheduleTab(QWidget):
             "output_format": self.format_combo.currentData(),
             "chronological_merge": self.cb_interleave.isChecked(),
             "translation_provider": self.provider_combo.currentData(),
+            "incremental_mode": self.cb_incremental.isChecked(),
         }
         try:
             p = _ui_state_file()

@@ -80,6 +80,7 @@ async def fetch_messages_for_section_day(
     end_time_str: Optional[str],
     *,
     topic_id: Optional[int] = None,
+    min_id: int = 0,
 ) -> FetchMessagesResult:
     """Lädt Nachrichten für einen Tag/Topic robust in Batches und bricht
     kontrolliert beim ersten nicht behebbaren Fehler ab.
@@ -88,6 +89,12 @@ async def fetch_messages_for_section_day(
     - Timeout/RPC/BadRequest bekommen Backoff-Retries.
     - Bei nicht behebbaren Fehlern: Abbruch + resume_hint + error_info,
       keine stillen Batch-Skips.
+    - min_id (Telethon iter_messages-Parameter, direkt durchgereicht): liefert
+      nur Nachrichten mit id > min_id. Für den inkrementellen Store-Modus
+      (siehe message_store.py) wird hier der zuletzt bekannte Stand pro
+      Section übergeben, damit der Server bereits bekannte Nachrichten gar
+      nicht erst zurückschickt, statt sie clientseitig zu filtern. 0 (Default)
+      = keine Untergrenze, bestehendes Verhalten unverändert.
     """
     tz_name = local_tz or "Europe/Zurich"  # ggf. an DEFAULT_LOCAL_TZ angleichen
     try:
@@ -111,6 +118,8 @@ async def fetch_messages_for_section_day(
     }
     if topic_id is not None:
         iter_kwargs["reply_to"] = int(topic_id)
+    if min_id:
+        iter_kwargs["min_id"] = int(min_id)
 
     stats = {
         "skipped_messages": 0,

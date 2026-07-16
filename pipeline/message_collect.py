@@ -29,6 +29,7 @@ from .runner_base_imports import (
 )
 from .topic_utils import extract_topic_from_section
 from .fetch import parse_topic_from_link
+from .message_store import channel_key_for_entity, section_fingerprint
 
 DEBUG_FETCH = True  # Debug-Ausgaben für Sammellogik (für aktuelle Analyse auf True)
 
@@ -177,7 +178,20 @@ async def collect_messages_for_schedule(
     schedule: ScheduleDocument,
     local_tz: Optional[str],
     chronological_merge: bool = False,
-) -> Tuple[List[CollectedMessage], Set[str], list[dict[str, Any]]]:
+    min_id_by_fingerprint: Optional[Dict[str, int]] = None,
+) -> Tuple[List[CollectedMessage], Set[str], list[dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """
+    min_id_by_fingerprint: für den inkrementellen Store-Modus (siehe
+    message_store.py) - fingerprint -> zuletzt bekannte message_id einer
+    Section; wird als Telethon min_id an fetch_messages_for_section_day
+    durchgereicht, damit der Server bereits bekannte Nachrichten gar nicht
+    erst zurückschickt. None/leer = kein Filter, bestehendes Verhalten.
+
+    Rückgabe zusätzlich zu den bisherigen drei Werten: section_stats
+    (fingerprint -> {channel_key, last_message_id, last_message_date}) mit
+    dem höchsten in dieser Section tatsächlich gesehenen Stand, damit der
+    Aufrufer den Store fortschreiben kann.
+    """
     from zoneinfo import ZoneInfo
 
     tz_name = local_tz or DEFAULT_LOCAL_TZ or "UTC"
@@ -189,6 +203,8 @@ async def collect_messages_for_schedule(
     sections_payload: List[List[CollectedMessage]] = []
     used_doc_ids: Set[str] = set()
     resume_hints: list[dict[str, Any]] = []
+    section_stats: Dict[str, Dict[str, Any]] = {}
+    min_id_by_fingerprint = min_id_by_fingerprint or {}
     debug_dir = Path("data/debug")
     if _DEBUG_DUMP_ENTITIES:
         debug_dir.mkdir(parents=True, exist_ok=True)
@@ -399,6 +415,9 @@ async def collect_messages_for_schedule(
         start_time_str = start_time_val or start_dt.strftime("%H:%M:%S")
         end_time_str = end_time_val or end_dt.strftime("%H:%M:%S")
 
+        section_fp = section_fingerprint(chan_val, section.date.isoformat(), start_time_str, end_time_str, topic_id)
+        section_min_id = min_id_by_fingerprint.get(section_fp, 0)
+
         if DEBUG_FETCH:
             print(
                 "DEBUG _collect_messages_for_schedule:",
@@ -426,6 +445,7 @@ async def collect_messages_for_schedule(
             start_time_str=start_time_str,
             end_time_str=end_time_str,
             topic_id=topic_id,
+            min_id=section_min_id,
         )
 
         if DEBUG_FETCH:
@@ -579,6 +599,17 @@ async def collect_messages_for_schedule(
         # Chronologisch sortiert pro Section an die ODT-Ausgabe übergeben.
         section_sorted = _sort_collected_messages(section_acc)
         sections_payload.append(section_sorted)
+
+        if section_sorted:
+            newest = section_sorted[-1]
+            newest_id = int(getattr(newest.message, "id", 0) or 0)
+            newest_date = getattr(newest.message, "date", None)
+            if newest_id > section_min_id:
+                section_stats[section_fp] = {
+                    "channel_key": channel_key_for_entity(entity),
+                    "last_message_id": newest_id,
+                    "last_message_date": newest_date,
+                }
         if DEBUG_FETCH:
             print(f"Abschnitt '{heading}': basis={base_count}, replies={reply_count}, total={len(section_sorted)}")
 
@@ -591,4 +622,4 @@ async def collect_messages_for_schedule(
     if DEBUG_FETCH:
         print(f"Gesamt: {sum(len(sec) for sec in sections_payload)} Nachrichten in {len(sections_payload)} Abschnitten für ODT.")
 
-    return collected_flat, used_doc_ids, resume_hints
+    return collected_flat, used_doc_ids, resume_hints, section_stats

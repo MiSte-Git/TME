@@ -15,6 +15,11 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
 - Optional: Nachrichten mehrerer Kanäle chronologisch mischen statt blockweise pro
   Kanal ausgeben (`interleave_channels` in `config.yaml` bzw. Checkbox „Kanäle
   chronologisch mischen" im UI; Kanalname bleibt als Label pro Nachricht sichtbar)
+- Optional: inkrementelles Dokument-Update über einen persistenten Message-Store
+  (`incremental_mode` in `config.yaml` bzw. Checkbox „Inkrementelles Update
+  (Store)" im UI) - pro Lauf werden nur neue Nachrichten je Kanal/Zeitfenster
+  geholt (inkl. bereits übersetzter Runs, keine doppelten Übersetzungskosten),
+  das Dokument wird komplett aus dem Store neu geschrieben statt angehängt
 - Automatisches Nachladen fehlender Emoji-PNGs und Reporting
 - Übergreifender CLI-Einstieg (`pipeline/emoji_pipeline.py`) für Skript-Workflows
 
