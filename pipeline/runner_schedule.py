@@ -23,6 +23,7 @@ from . import runner_by_ids as _rbi
 from .assets import get_custom_emoji_cache, load_custom_emoji_alts, load_assets
 from .fetch import ensure_join_channel, parse_channel, parse_link
 from .odt_writer import write_odt_for_records
+from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .speech_to_text import transcribe_voice, SpeechToTextError
 from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
@@ -264,6 +265,20 @@ def _build_day_time_range(date_obj, start_time_str: str | None, end_time_str: st
     end_dt = datetime.combine(date_obj, et, tzinfo=tz)
     return start_dt, end_dt
 
+
+@dataclass
+class ScheduleRunResult:
+    """Rückgabewert für run_schedule; enthält alle erzeugten Artefakte."""
+    odt_path: Path
+    odt_translation_path: Path | None = None
+    docx_path: Path | None = None
+    docx_translation_path: Path | None = None
+    docx_error: str | None = None
+
+    def __str__(self) -> str:  # pragma: no cover - convenience
+        return str(self.odt_path)
+
+
 async def run_schedule(
     schedule_path: Path,
     out_basename: str,
@@ -274,12 +289,13 @@ async def run_schedule(
     include_images: bool = True,
     include_emojis: bool = True,
     source_lang: str | None = None,
+    output_format: Optional[str] = None,
     config_path: Path = Path("config.yaml"),
     local_tz_override: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
     skip_lettermap_ui: bool = False,
     wait_for_mapping_cb: Optional[Callable[[], None]] = None,
-) -> Path | tuple[Path, Path]:
+) -> ScheduleRunResult:
     def _notify(msg: str) -> None:
         if progress_cb:
             try:
@@ -291,6 +307,15 @@ async def run_schedule(
 
     _apply_config_overrides(config_path)
     cfg = _load_config(config_path)
+
+    # Ausgabeformat bestimmen: expliziter Parameter (z.B. aus UI) hat Vorrang;
+    # ohne expliziten Wert greift die bestehende Config-Option output.make_docx.
+    _valid_output_formats = {"odt", "docx", "both"}
+    if isinstance(output_format, str) and output_format.strip().lower() in _valid_output_formats:
+        effective_output_format = output_format.strip().lower()
+    else:
+        effective_output_format = "both" if _rbi._DOCX_OPTIONS.get("make_docx") else "odt"
+    want_docx = effective_output_format in ("docx", "both")
 
     # Determine language codes for filenames
     cfg_source = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "").strip()
@@ -1081,8 +1106,49 @@ async def run_schedule(
         except Exception:
             pass
 
+        docx_path: Optional[Path] = None
+        docx_translation_path: Optional[Path] = None
+        docx_errors: List[str] = []
+        if want_docx:
+            _notify("DOCX wird erzeugt…")
+            prefer_raw = _rbi._DOCX_OPTIONS.get("converter")
+            prefer = str(prefer_raw) if isinstance(prefer_raw, str) and prefer_raw.strip() else None
+            out_dir_cfg = _rbi._DOCX_OPTIONS.get("out_dir")
+            docx_outdir = Path(out_dir_cfg).expanduser() if isinstance(out_dir_cfg, str) and out_dir_cfg.strip() else out_path.parent
+            ref_doc_cfg = _rbi._DOCX_OPTIONS.get("pandoc_reference_docx")
+            ref_doc = Path(ref_doc_cfg).expanduser() if isinstance(ref_doc_cfg, str) and ref_doc_cfg.strip() else None
+
+            def _convert_to_docx_safe(odt_file: Path, label: str) -> tuple[Optional[Path], Optional[str]]:
+                # ODT bleibt in jedem Fall erhalten; Fehler brechen den Lauf nicht ab.
+                try:
+                    docx_file = convert_odt_to_docx(odt_file, outdir=docx_outdir, prefer=prefer, reference_docx=ref_doc)
+                    _notify(f"{label}-DOCX erzeugt: {docx_file}")
+                    return docx_file, None
+                except (DocxConversionError, FileNotFoundError) as exc:
+                    err = str(exc)
+                    _notify(f"Warnung: {label}-DOCX-Konvertierung fehlgeschlagen: {err}")
+                    return None, err
+                except Exception as exc:
+                    err = f"Unerwarteter Fehler: {exc}"
+                    _notify(f"Warnung: {label}-DOCX-Konvertierung fehlgeschlagen: {err}")
+                    return None, err
+
+            docx_path, err_main = _convert_to_docx_safe(out_path, "Original")
+            if err_main:
+                docx_errors.append(err_main)
+            if extra_path is not None:
+                docx_translation_path, err_extra = _convert_to_docx_safe(extra_path, "Übersetzung")
+                if err_extra:
+                    docx_errors.append(err_extra)
+
         _notify("Fertig.")
-        return (out_path, extra_path) if extra_path else out_path
+        return ScheduleRunResult(
+            odt_path=out_path,
+            odt_translation_path=extra_path,
+            docx_path=docx_path,
+            docx_translation_path=docx_translation_path,
+            docx_error="; ".join(docx_errors) if docx_errors else None,
+        )
     finally:
         if client is not None:
             try:

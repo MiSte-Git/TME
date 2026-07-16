@@ -78,6 +78,7 @@ class ScheduleWorker(QObject):
         mapping_event: threading.Event,
         lettermap_enabled: bool = False,
         source_lang: str = "de",
+        output_format: str = "odt",
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -89,6 +90,7 @@ class ScheduleWorker(QObject):
         self._mapping_event = mapping_event
         self.lettermap_enabled = lettermap_enabled
         self.source_lang = source_lang
+        self.output_format = output_format
 
     def run(self) -> None:
         try:
@@ -119,6 +121,7 @@ class ScheduleWorker(QObject):
                 "include_images": self.include_images,
                 "include_emojis": self.include_emojis,
                 "source_lang": self.source_lang,
+                "output_format": self.output_format,
                 "config_path": Path("config.yaml"),
                 "progress_cb": cast(Callable[[str], None], _cb),
                 "skip_lettermap_ui": True,
@@ -175,6 +178,11 @@ class ScheduleTab(QWidget):
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
         self.lbl_src_lang = QLabel(self.tr("Quellsprache (Dateiname):"))
+        self.lbl_format = QLabel(self.tr("Ausgabeformat:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItem(self.tr("Nur ODT"), "odt")
+        self.format_combo.addItem(self.tr("Nur DOCX"), "docx")
+        self.format_combo.addItem(self.tr("ODT + DOCX"), "both")
         opt_lay.addWidget(self.cb_translate)
         opt_lay.addWidget(self.lbl_mode)
         opt_lay.addWidget(self.mode_combo)
@@ -185,6 +193,8 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.cb_images)
         opt_lay.addWidget(self.cb_emojis)
         opt_lay.addWidget(self.cb_lettermap)
+        opt_lay.addWidget(self.lbl_format)
+        opt_lay.addWidget(self.format_combo)
         lay.addLayout(opt_lay)
 
         run_lay = QHBoxLayout()
@@ -289,6 +299,15 @@ class ScheduleTab(QWidget):
         self.cb_images.setText(self.tr("Bilder einbetten"))
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
         self.cb_lettermap.setText(self.tr("Lettermapping aktivieren"))
+        self.lbl_format.setText(self.tr("Ausgabeformat:"))
+        _fmt_current = self.format_combo.currentData()
+        self.format_combo.setItemText(0, self.tr("Nur ODT"))
+        self.format_combo.setItemText(1, self.tr("Nur DOCX"))
+        self.format_combo.setItemText(2, self.tr("ODT + DOCX"))
+        if _fmt_current is not None:
+            _idx = self.format_combo.findData(_fmt_current)
+            if _idx >= 0:
+                self.format_combo.setCurrentIndex(_idx)
         self.btn_run.setText(self.tr("Telegram-Export → ODT erzeugen"))
         self.btn_open_output.setText(self.tr("Ausgabeordner öffnen"))
         self.btn_continue.setText(self.tr("Fortsetzen"))
@@ -345,6 +364,7 @@ class ScheduleTab(QWidget):
             mapping_event=self._mapping_event,
             lettermap_enabled=self.cb_lettermap.isChecked(),
             source_lang=source_lang,
+            output_format=str(self.format_combo.currentData() or "odt"),
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -393,30 +413,45 @@ class ScheduleTab(QWidget):
         self._mapping_event.set()
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
-        msg: str
         main_out: Path | None = None
-        if isinstance(result, tuple):
-            main_path, extra_path = result
+        odt_path = getattr(result, "odt_path", None)
+        odt_translation_path = getattr(result, "odt_translation_path", None)
+        docx_path = getattr(result, "docx_path", None)
+        docx_translation_path = getattr(result, "docx_translation_path", None)
+        docx_error = getattr(result, "docx_error", None)
+        lines: list[str] = []
+        if odt_path is not None:
             try:
-                main_out = Path(str(main_path)) if main_path else None
+                main_out = Path(str(odt_path))
             except Exception:
                 main_out = None
-            if extra_path:
-                msg = self.tr("ODTs erzeugt: {main}\n{extra}").format(main=main_path, extra=extra_path)
-            else:
-                msg = self.tr("ODT erzeugt: {main}").format(main=main_path)
+            lines.append(self.tr("ODT erzeugt: {path}").format(path=odt_path))
         else:
+            # Rückwärtskompatibler Fallback, falls result kein ScheduleRunResult ist.
             try:
                 main_out = Path(str(result)) if result else None
             except Exception:
                 main_out = None
-            msg = self.tr("ODT erzeugt: {path}").format(path=result)
+            lines.append(self.tr("ODT erzeugt: {path}").format(path=result))
+        if odt_translation_path:
+            lines.append(self.tr("Übersetzungs-ODT erzeugt: {path}").format(path=odt_translation_path))
+        if docx_path:
+            lines.append(self.tr("DOCX erzeugt: {path}").format(path=docx_path))
+        if docx_translation_path:
+            lines.append(self.tr("Übersetzungs-DOCX erzeugt: {path}").format(path=docx_translation_path))
+        if docx_error:
+            lines.append(self.tr("Warnung: DOCX-Konvertierung fehlgeschlagen: {err}").format(err=docx_error))
+        msg = "\n".join(lines)
         self.status_label.setText(self.tr("Fertig."))
         # Merke Ausgabe-Pfad und zeige Button
         self._last_output_path = main_out
         self.btn_open_output.setVisible(True)
         self.btn_open_output.setEnabled(True)
-        QMessageBox.information(self, self.tr("Fertig"), msg)
+        title = self.tr("Fertig (mit Warnung)") if docx_error else self.tr("Fertig")
+        if docx_error:
+            QMessageBox.warning(self, title, msg)
+        else:
+            QMessageBox.information(self, title, msg)
         self.progress.setVisible(False)
 
     def _on_worker_error(self, message: str) -> None:
@@ -478,11 +513,13 @@ class ScheduleTab(QWidget):
         self.cb_images.toggled.connect(lambda _checked: self._save_state())
         self.cb_emojis.toggled.connect(lambda _checked: self._save_state())
         self.cb_lettermap.toggled.connect(lambda _checked: self._save_state())
+        self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
 
     def _load_state(self) -> None:
         self._loading_state = True
         try:
-            p = _theme_state_file()
+            p = _ui_state_file()
+            data: dict = {}
             if p.exists():
                 data = json.loads(p.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
@@ -517,6 +554,11 @@ class ScheduleTab(QWidget):
             lm_en = data.get("lettermap_enabled")
             if isinstance(lm_en, bool):
                 self.cb_lettermap.setChecked(lm_en)
+            output_format = data.get("output_format")
+            if isinstance(output_format, str):
+                idx = self.format_combo.findData(output_format)
+                if idx >= 0:
+                    self.format_combo.setCurrentIndex(idx)
         except Exception:
             pass
         finally:
@@ -534,10 +576,12 @@ class ScheduleTab(QWidget):
             "include_images": self.cb_images.isChecked(),
             "include_emojis": self.cb_emojis.isChecked(),
             "lettermap_enabled": self.cb_lettermap.isChecked(),
+            "output_format": self.format_combo.currentData(),
         }
         try:
-            UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            UI_STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            p = _ui_state_file()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
             pass
 
