@@ -25,6 +25,10 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   (Store)" im UI) - pro Lauf werden nur neue Nachrichten je Kanal/Zeitfenster
   geholt (inkl. bereits übersetzter Runs, keine doppelten Übersetzungskosten),
   das Dokument wird komplett aus dem Store neu geschrieben statt angehängt
+- Optional: Layout „Übersetzung neben Original" (`layout: side_by_side` in
+  `config.yaml` bzw. Dropdown im UI) - Original und Übersetzung als
+  zweispaltige Tabellenzeile pro Nachricht statt hintereinander; fehlt eine
+  Übersetzung, zeigt die Zelle einen Platzhaltertext
 - Automatisches Nachladen fehlender Emoji-PNGs und Reporting
 - Übergreifender CLI-Einstieg (`pipeline/emoji_pipeline.py`) für Skript-Workflows
 

@@ -22,12 +22,12 @@ from telethon import TelegramClient, types
 from . import runner_by_ids as _rbi
 from .assets import get_custom_emoji_cache, load_custom_emoji_alts, load_assets
 from .fetch import ensure_join_channel, parse_channel, parse_link
-from .odt_writer import write_odt_for_records
+from .odt_writer import write_odt_for_records, write_odt_for_record_pairs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .speech_to_text import transcribe_voice, SpeechToTextError
-from .runs import EmojiRun, ImageRun, LineBreak, RunsRecord, TextRun, build_runs_from_twe
+from .runs import EmojiRun, ImageRun, LineBreak, RecordPair, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
-from .message_store import MessageStore, channel_key_for_entity, render_records_from_store
+from .message_store import MessageStore, channel_key_for_entity, render_records_from_store, render_record_pairs_from_store
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .no_translate_words import load_no_translate_words_set
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
@@ -297,6 +297,7 @@ async def run_schedule(
     chronological_merge: Optional[bool] = None,
     translation_provider: Optional[str] = None,
     incremental_mode: Optional[bool] = None,
+    layout: Optional[str] = None,
     config_path: Path = Path("config.yaml"),
     local_tz_override: Optional[str] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
@@ -331,6 +332,19 @@ async def run_schedule(
         effective_chronological_merge = chronological_merge
     else:
         effective_chronological_merge = bool(cfg.get("interleave_channels", False)) if isinstance(cfg, dict) else False
+
+    # Layout: "linear" (bisheriges Verhalten, Default) oder "side_by_side"
+    # (Original|Übersetzung als zweispaltige Tabellenzeile pro Nachricht).
+    # translation_mode (inline/end/separate) wird bei side_by_side ignoriert -
+    # die Platzierung "nebeneinander" ergibt sich aus den Tabellenspalten.
+    _valid_layouts = {"linear", "side_by_side"}
+    if isinstance(layout, str) and layout.strip().lower() in _valid_layouts:
+        effective_layout = layout.strip().lower()
+    else:
+        effective_layout = str(cfg.get("layout") or "linear").strip().lower() if isinstance(cfg, dict) else "linear"
+        if effective_layout not in _valid_layouts:
+            effective_layout = "linear"
+    want_side_by_side = effective_layout == "side_by_side"
 
     # Übersetzungs-Provider bestimmen: expliziter Parameter (z.B. --provider/UI)
     # hat Vorrang; ohne expliziten Wert greift config.yaml (translation.provider,
@@ -800,6 +814,7 @@ async def run_schedule(
         records: List[RunsRecord] = []
         translations_acc: List[RunsRecord] = []
         pending_inline_translations: List[RunsRecord] = []
+        record_pairs: List[RecordPair] = []
         previous_title: Optional[str] = None
         mode_norm = (translation_mode or "inline").strip().lower()
 
@@ -1160,6 +1175,8 @@ async def run_schedule(
 
                 if store is not None:
                     store.add_message(channel_key, msg.id, getattr(msg, "date", None), original_record, translation_record_for_store)
+                if want_side_by_side:
+                    record_pairs.append(RecordPair(original=original_record, translation=translation_record_for_store))
             previous_title = item.title
 
         if translate and mode_norm == "end" and translations_acc:
@@ -1190,7 +1207,10 @@ async def run_schedule(
             # auch alle in früheren Läufen bereits verarbeiteten Nachrichten
             # wieder auf (TOC/Seitenzahlen lösen sich dabei automatisch mit,
             # da write_odt_for_records ohnehin immer alles neu schreibt).
-            records, translations_acc = render_records_from_store(store, effective_chronological_merge, mode_norm)
+            if want_side_by_side:
+                record_pairs = render_record_pairs_from_store(store, effective_chronological_merge)
+            else:
+                records, translations_acc = render_records_from_store(store, effective_chronological_merge, mode_norm)
 
         doc_title_base = schedule.document_title
         if resume_hints:
@@ -1205,10 +1225,16 @@ async def run_schedule(
         }
 
         _notify("ODT wird geschrieben…")
-        write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
+        if want_side_by_side:
+            write_odt_for_record_pairs(
+                record_pairs, out_path, styles, doc_title=doc_title_base,
+                original_label=f"Original ({source_up})", translation_label=f"Übersetzung ({lang_up})",
+            )
+        else:
+            write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
 
         extra_path: Optional[Path] = None
-        if mode_norm == "separate" and translations_acc:
+        if not want_side_by_side and mode_norm == "separate" and translations_acc:
             tr_title = f"{schedule.document_title} - {lang_up}" if schedule.document_title else f"{out_basename} - {lang_up}"
             if resume_hints:
                 stop_id = (resume_hints[0].get("hint", {}) or {}).get("last_ok_id")

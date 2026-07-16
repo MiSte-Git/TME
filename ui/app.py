@@ -83,6 +83,7 @@ class ScheduleWorker(QObject):
         chronological_merge: bool = False,
         translation_provider: str = "telegram",
         incremental_mode: bool = False,
+        layout: str = "linear",
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -98,6 +99,7 @@ class ScheduleWorker(QObject):
         self.chronological_merge = chronological_merge
         self.translation_provider = translation_provider
         self.incremental_mode = incremental_mode
+        self.layout = layout
 
     def run(self) -> None:
         try:
@@ -132,6 +134,7 @@ class ScheduleWorker(QObject):
                 "chronological_merge": self.chronological_merge,
                 "translation_provider": self.translation_provider,
                 "incremental_mode": self.incremental_mode,
+                "layout": self.layout,
                 "config_path": Path("config.yaml"),
                 "progress_cb": cast(Callable[[str], None], _cb),
                 "skip_lettermap_ui": True,
@@ -201,6 +204,10 @@ class ScheduleTab(QWidget):
         self.format_combo.addItem(self.tr("Nur ODT"), "odt")
         self.format_combo.addItem(self.tr("Nur DOCX"), "docx")
         self.format_combo.addItem(self.tr("ODT + DOCX"), "both")
+        self.lbl_layout = QLabel(self.tr("Layout:"))
+        self.layout_combo = QComboBox()
+        self.layout_combo.addItem(self.tr("Linear"), "linear")
+        self.layout_combo.addItem(self.tr("Übersetzung neben Original"), "side_by_side")
         opt_lay.addWidget(self.cb_translate)
         opt_lay.addWidget(self.lbl_mode)
         opt_lay.addWidget(self.mode_combo)
@@ -217,6 +224,8 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.cb_incremental)
         opt_lay.addWidget(self.lbl_format)
         opt_lay.addWidget(self.format_combo)
+        opt_lay.addWidget(self.lbl_layout)
+        opt_lay.addWidget(self.layout_combo)
         lay.addLayout(opt_lay)
 
         run_lay = QHBoxLayout()
@@ -339,6 +348,14 @@ class ScheduleTab(QWidget):
             _idx = self.format_combo.findData(_fmt_current)
             if _idx >= 0:
                 self.format_combo.setCurrentIndex(_idx)
+        self.lbl_layout.setText(self.tr("Layout:"))
+        _layout_current = self.layout_combo.currentData()
+        self.layout_combo.setItemText(0, self.tr("Linear"))
+        self.layout_combo.setItemText(1, self.tr("Übersetzung neben Original"))
+        if _layout_current is not None:
+            _lidx = self.layout_combo.findData(_layout_current)
+            if _lidx >= 0:
+                self.layout_combo.setCurrentIndex(_lidx)
         self.btn_run.setText(self.tr("Telegram-Export → ODT erzeugen"))
         self.btn_open_output.setText(self.tr("Ausgabeordner öffnen"))
         self.btn_continue.setText(self.tr("Fortsetzen"))
@@ -399,6 +416,7 @@ class ScheduleTab(QWidget):
             chronological_merge=self.cb_interleave.isChecked(),
             translation_provider=str(self.provider_combo.currentData() or "telegram"),
             incremental_mode=self.cb_incremental.isChecked(),
+            layout=str(self.layout_combo.currentData() or "linear"),
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
@@ -556,6 +574,7 @@ class ScheduleTab(QWidget):
         self.cb_incremental.toggled.connect(lambda _checked: self._save_state())
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
         self.provider_combo.currentIndexChanged.connect(lambda _i: self._save_state())
+        self.layout_combo.currentIndexChanged.connect(lambda _i: self._save_state())
 
     def _load_state(self) -> None:
         self._loading_state = True
@@ -612,6 +631,11 @@ class ScheduleTab(QWidget):
             incremental = data.get("incremental_mode")
             if isinstance(incremental, bool):
                 self.cb_incremental.setChecked(incremental)
+            layout_val = data.get("layout")
+            if isinstance(layout_val, str):
+                lidx = self.layout_combo.findData(layout_val)
+                if lidx >= 0:
+                    self.layout_combo.setCurrentIndex(lidx)
         except Exception:
             pass
         finally:
@@ -633,6 +657,7 @@ class ScheduleTab(QWidget):
             "chronological_merge": self.cb_interleave.isChecked(),
             "translation_provider": self.provider_combo.currentData(),
             "incremental_mode": self.cb_incremental.isChecked(),
+            "layout": self.layout_combo.currentData(),
         }
         try:
             p = _ui_state_file()

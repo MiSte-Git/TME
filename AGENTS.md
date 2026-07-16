@@ -40,6 +40,23 @@
     appended - no timestamp in the filename in this mode, the same file is
     overwritten. Corrupted/unreadable store files are backed up (*.corrupt-*)
     and replaced with an empty store rather than crashing.
+  - Layout (config.yaml's layout: side_by_side, or the UI dropdown; default
+    "linear" = unchanged behavior): renders one two-column table row per
+    message (odt_writer.write_odt_for_record_pairs, odf.table) instead of
+    linear paragraphs - deliberately NOT a real ODT column layout
+    (fo:column-count), since that wouldn't keep original/translation row-
+    synchronized. Original+translation are paired explicitly via RecordPair
+    (pipeline/runs.py) by message_id; translation_mode (inline/end/separate)
+    is ignored in this layout since "side by side" already fixes the
+    placement. Missing translations show a placeholder text rather than an
+    empty or merged cell. Section headings stay outside any table (one table
+    per chat/section, closed and reopened on each heading change) so
+    TOC/outline levels behave identically to the linear writer. Image runs
+    get their width capped to the column width (~8.2cm) instead of the
+    linear default (10cm). render_runs_into_container/_render_run_into_paragraph
+    /_build_header_paragraph in odt_writer.py are the shared primitives used
+    by both the linear and side_by_side writers (extracted from what used to
+    be duplicated inline code).
 - External APIs:
   - Telethon (Telegram): messages.TranslateTextRequest for translations; GetCustomEmojiDocumentsRequest; optional channels.JoinChannelRequest.
   - ODT generation via odfpy (styles, TOC, images). OCR via Tesseract/EasyOCR is planned

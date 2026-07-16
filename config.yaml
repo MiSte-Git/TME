@@ -52,6 +52,16 @@ interleave_channels: false
 # UI-Checkbox/Parameter überschreibbar.
 incremental_mode: false
 
+# Dokument-Layout (Default: linear = bisheriges Verhalten unverändert).
+# side_by_side = Original und Übersetzung als zweispaltige Tabellenzeile pro
+# Nachricht (odf.table), NICHT echtes ODT-Spalten-Layout (fo:column-count) -
+# sonst blieben Original/Übersetzung nicht zeilensynchron. translation_mode
+# (inline/end/separate) wird bei side_by_side ignoriert, da die Platzierung
+# "nebeneinander" bereits durch die Tabellenspalten festgelegt ist. Fehlt eine
+# Übersetzung (Provider-Fehler o.ä.), zeigt die Zelle einen Platzhaltertext
+# statt leer zu bleiben. Per UI-Auswahl/Parameter überschreibbar.
+layout: linear                  # linear | side_by_side
+
 # Telegram-Client (optional)
 telegram_client:
   timeout: 20            # Sekunden für RPC-Timeout

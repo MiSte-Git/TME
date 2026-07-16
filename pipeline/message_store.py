@@ -41,7 +41,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from .runs import RunsRecord, record_from_dict, record_to_dict
+from .runs import RecordPair, RunsRecord, record_from_dict, record_to_dict
 
 _SCHEMA_VERSION = 1
 _STORE_DIR = Path("data/message_store")
@@ -278,11 +278,7 @@ def render_records_from_store(
       - "separate": Originale und Übersetzungen als zwei getrennte Listen
         (zweites Rückgabeelement = Übersetzungs-Dokument)
     """
-    all_msgs = list(store.all_messages())
-    if chronological_merge:
-        all_msgs.sort(key=lambda sm: (sm.date, sm.channel_key, sm.message_id))
-    else:
-        all_msgs.sort(key=lambda sm: (sm.record.chat, sm.date, sm.message_id))
+    all_msgs = _sorted_stored_messages(store, chronological_merge)
 
     main_records: List[RunsRecord] = []
     translation_records: List[RunsRecord] = []
@@ -297,6 +293,30 @@ def render_records_from_store(
         main_records.extend(translation_records)
         translation_records = []
     return main_records, translation_records
+
+
+def _sorted_stored_messages(store: MessageStore, chronological_merge: bool) -> List[StoredMessage]:
+    """Gemeinsame Sortierlogik für render_records_from_store() und
+    render_record_pairs_from_store() - siehe dort für die Begründung
+    (chat-Präfix-Trick bzw. chronologische Reihenfolge bei Interleaving)."""
+    all_msgs = list(store.all_messages())
+    if chronological_merge:
+        all_msgs.sort(key=lambda sm: (sm.date, sm.channel_key, sm.message_id))
+    else:
+        all_msgs.sort(key=lambda sm: (sm.record.chat, sm.date, sm.message_id))
+    return all_msgs
+
+
+def render_record_pairs_from_store(store: MessageStore, chronological_merge: bool) -> List[RecordPair]:
+    """Wie render_records_from_store(), aber für das side_by_side-Layout:
+    liefert Original+Übersetzung explizit gepaart pro Nachricht (der Store
+    hält beide ohnehin schon zusammen in einem StoredMessage - siehe
+    MessageStore.add_message), statt sie in getrennte Original-/
+    Übersetzungslisten aufzuteilen. Es gibt hier keinen mode_norm-Parameter:
+    die Platzierung "nebeneinander" ist beim side_by_side-Layout durch die
+    Tabellenspalten bereits festgelegt."""
+    all_msgs = _sorted_stored_messages(store, chronological_merge)
+    return [RecordPair(original=sm.record, translation=sm.translation_record) for sm in all_msgs]
 
 
 def _parse_iso(value: Any) -> Optional[datetime]:

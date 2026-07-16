@@ -123,6 +123,16 @@ class RunsRecord:
     meta: Dict[str, Any] | None = None
 
 
+@dataclass
+class RecordPair:
+    """Original + (optionale) Übersetzung derselben Nachricht, explizit
+    gepaart über message_id - Grundlage für das side_by_side-Layout
+    (odt_writer.write_odt_for_record_pairs). translation ist None, wenn keine
+    Übersetzung vorliegt (Provider-Fehler, Nachricht war schon in Zielsprache)."""
+    original: RunsRecord
+    translation: RunsRecord | None = None
+
+
 _RUN_KIND_CLASSES = {
     "TextRun": TextRun,
     "EmojiRun": EmojiRun,
