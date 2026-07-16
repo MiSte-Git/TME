@@ -875,8 +875,9 @@ def _apply_theme(app: QApplication, theme: str) -> None:
 
 def _load_theme_preference() -> str:
     try:
-        if THEME_STATE_FILE.exists():
-            data = json.loads(THEME_STATE_FILE.read_text(encoding="utf-8"))
+        p = _theme_state_file()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
             t = str(data.get("theme", "dark")).lower()
             return "light" if t == "light" else "dark"
     except Exception:
@@ -934,8 +935,9 @@ _SUPPORTED_LANGS = {"de","en","fr","it","ru","pl","es","hr","nl","fi"}
 
 def _load_language_preference() -> str:
     try:
-        if LANG_STATE_FILE.exists():
-            data = json.loads(LANG_STATE_FILE.read_text(encoding="utf-8"))
+        p = _lang_state_file()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
             l = str(data.get("lang", "de")).lower()
             return l if l in _SUPPORTED_LANGS else "de"
     except Exception:
@@ -950,9 +952,10 @@ def _load_language_preference() -> str:
 
 def _save_language_preference(lang: str) -> None:
     try:
+        p = _lang_state_file()
         data = {"lang": lang}
-        LANG_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        LANG_STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
 
