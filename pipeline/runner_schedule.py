@@ -447,11 +447,19 @@ async def run_schedule(
         effective_output_format, local_tz,
     )
     for sec in schedule.sections:
+        if sec.links:
+            resolution_kind = "links"
+        elif sec.channel:
+            resolution_kind = "channel"
+        elif schedule.default_channel:
+            resolution_kind = "default_channel"
+        else:
+            resolution_kind = "unresolved"
         sec_channel = _section_channel(sec) or schedule.default_channel
         sec_topic_id, _sec_topic_source = extract_topic_from_section(sec, schedule)
         logger.info(
-            "Section '%s': date=%s channel=%s window=%s-%s topic_id=%s",
-            sec.title, sec.date.isoformat(), sec_channel, sec.start_time, sec.end_time,
+            "Section '%s': date=%s channel=%s (resolved_via=%s) window=%s-%s topic_id=%s",
+            sec.title, sec.date.isoformat(), sec_channel, resolution_kind, sec.start_time, sec.end_time,
             sec_topic_id if sec_topic_id is not None else "-",
         )
 

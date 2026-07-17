@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -17,6 +17,7 @@ from .message_filters import (
     fetch_messages_for_section_day,
     filter_messages_for_topic,
     _extract_actual_topic_id,
+    _parse_time as _mf_parse_time,
 )
 from .runner_base_imports import (
     CollectedMessage,
@@ -30,8 +31,11 @@ from .runner_base_imports import (
 from .topic_utils import extract_topic_from_section
 from .fetch import parse_topic_from_link
 from .message_store import channel_key_for_entity, section_fingerprint
+from .logging_setup import get_logger
 
 DEBUG_FETCH = True  # Debug-Ausgaben für Sammellogik (für aktuelle Analyse auf True)
+
+logger = get_logger(__name__)
 
 async def _ensure_entity(client: TelegramClient, raw: Any) -> Any:
     entity = await _with_retries("get_entity", lambda: client.get_entity(raw))
@@ -378,9 +382,28 @@ async def collect_messages_for_schedule(
             raw = parse_channel(chan_val)
             entity = await _ensure_entity(client, raw)
             if not entity:
+                # _ensure_entity/_with_retries hat bereits alle Versuche unternommen
+                # und den Fehler auf stdout ausgegeben (aber verschluckt); ein
+                # zusätzlicher, ungeretryter Versuch dient hier nur dazu, den
+                # konkreten Fehlergrund (z.B. Zugriff verweigert, Username nicht
+                # gefunden) für das Log greifbar zu machen.
+                resolve_error = None
+                try:
+                    await client.get_entity(raw)
+                except Exception as exc:
+                    resolve_error = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    "Kanal-Auflösung fehlgeschlagen für Section '%s' (channel='%s'): %s",
+                    section.title, chan_val,
+                    resolve_error or "kein Zugriff/Kanal nicht gefunden (Grund unbekannt)",
+                )
                 print(f"Hinweis: Kanal '{chan_val}' konnte nicht geladen werden.")
                 default_entity_cache[key] = None
             else:
+                logger.info(
+                    "Kanal-Auflösung erfolgreich für Section '%s': channel='%s' -> entity_id=%s",
+                    section.title, chan_val, getattr(entity, "id", None),
+                )
                 default_entity_cache[key] = entity
 
         entity = default_entity_cache.get(key)
@@ -436,6 +459,24 @@ async def collect_messages_for_schedule(
                 f"username_filter={(user_entries or [])}"
             )
 
+        # Tatsächlich verwendetes Zeitfenster in UTC loggen (identische Umrechnung
+        # wie in fetch_messages_for_section_day), um Zeitzonen-Verschiebungen als
+        # Ursache für leere Ergebnisse sichtbar zu machen.
+        _win_tz_name = local_tz or "Europe/Zurich"
+        try:
+            _win_tzinfo = ZoneInfo(_win_tz_name)
+        except Exception:
+            _win_tzinfo = timezone.utc
+        _win_start_t = _mf_parse_time(start_time_str, time(0, 0, 0))
+        _win_end_t = _mf_parse_time(end_time_str, time(23, 59, 59))
+        _win_start_local = datetime.combine(section.date, _win_start_t, _win_tzinfo)
+        _win_end_local = datetime.combine(section.date, _win_end_t, _win_tzinfo)
+        logger.info(
+            "Section '%s': Zeitfenster lokal (tz=%s) %s .. %s -> UTC %s .. %s",
+            section.title, _win_tz_name, _win_start_local, _win_end_local,
+            _win_start_local.astimezone(timezone.utc), _win_end_local.astimezone(timezone.utc),
+        )
+
         # Nachrichten für den Tag + Zeitfenster holen
         result: FetchMessagesResult = await fetch_messages_for_section_day(
             client,
@@ -472,6 +513,27 @@ async def collect_messages_for_schedule(
             )
 
         msgs = result.messages
+        _kept_count = len(msgs) if msgs is not None else 0
+        _skipped_count = int((result.stats or {}).get("skipped_messages", 0))
+        _raw_count = _kept_count + _skipped_count
+        if _raw_count == 0:
+            logger.warning(
+                "Section '%s': Telegram lieferte 0 rohe Nachrichten für Kanal='%s' im angefragten Zeitraum "
+                "(day=%s, topic_id=%s) - Kanal/Datum prüfen.",
+                section.title, chan_val, day_str, topic_id,
+            )
+        elif _kept_count == 0:
+            logger.warning(
+                "Section '%s': %d rohe Nachricht(en) von Telegram erhalten, aber alle %d durch das "
+                "Zeitfenster (%s-%s) herausgefiltert - Zeitfenster/Zeitzone prüfen.",
+                section.title, _raw_count, _skipped_count, start_time_str, end_time_str,
+            )
+        else:
+            logger.info(
+                "Section '%s': %d rohe Nachricht(en) von Telegram, davon %d im Zeitfenster behalten "
+                "(%d durch Zeitfenster gefiltert).",
+                section.title, _raw_count, _kept_count, _skipped_count,
+            )
         if DEBUG_FETCH:
             base_raw_count = len(msgs) if msgs is not None else 0
             print(f"[DEBUG] Section '{section.title}': base date fetch (ohne User-Filter) -> {base_raw_count} messages")
@@ -487,6 +549,18 @@ async def collect_messages_for_schedule(
                 topic_source=topic_source,
                 schedule_default_channel=getattr(schedule, "default_channel", None),
             )
+            after = len(msgs)
+            if after == 0 and before > 0:
+                logger.warning(
+                    "Section '%s': Topic-Filter (message_filters.py) hat alle %d Nachricht(en) entfernt "
+                    "(topic_id=%s, topic_source=%s).",
+                    section.title, before, topic_id, topic_source,
+                )
+            else:
+                logger.info(
+                    "Section '%s': nach Topic-Filter (message_filters.py) -> %d von %d Nachricht(en) behalten.",
+                    section.title, after, before,
+                )
             if DEBUG_FETCH:
                 print(
                     "DEBUG _collect_messages_for_schedule: after topic filter:",
