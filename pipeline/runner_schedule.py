@@ -31,6 +31,8 @@ from .message_store import MessageStore, channel_key_for_entity, render_records_
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .no_translate_words import load_no_translate_words_set
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
+from .logging_setup import get_logger
+from .topic_utils import extract_topic_from_section
 from .runner_base_imports import (
     CollectedMessage,
     DEFAULT_LOCAL_TZ,
@@ -51,6 +53,8 @@ except Exception:  # pragma: no cover - optional dependency
 
 from zoneinfo import ZoneInfo
 
+
+logger = get_logger(__name__)
 
 DEBUG_FETCH = False
 
@@ -389,7 +393,12 @@ async def run_schedule(
     if effective_incremental_mode:
         store = MessageStore.load(schedule_path.stem)
         for w in store.load_warnings:
+            logger.warning("Message-Store (%s): %s", schedule_path.stem, w)
             _notify(f"Warnung (Message-Store): {w}")
+        logger.info(
+            "Message-Store geladen (%s): %d bereits bekannte Nachricht(en), %d Warnung(en).",
+            schedule_path.stem, len(store), len(store.load_warnings),
+        )
         _notify(f"Store-Modus aktiv: {len(store)} bereits bekannte Nachricht(en) im Store ({schedule_path.stem}).")
 
     # Determine language codes for filenames
@@ -429,6 +438,22 @@ async def run_schedule(
         raise RuntimeError(f"Default-Channel fehlt für Sektionen: {missing_list}")
 
     local_tz = local_tz_override or cfg.get("local_tz") or DEFAULT_LOCAL_TZ
+
+    logger.info(
+        "Effektive Lauf-Optionen: mode=%s side_by_side=%s chronological_merge=%s "
+        "translation_provider=%s target_lang=%s incremental_mode=%s output_format=%s local_tz=%s",
+        (translation_mode or "inline").strip().lower(), want_side_by_side, effective_chronological_merge,
+        effective_translation_provider, target_lang, effective_incremental_mode,
+        effective_output_format, local_tz,
+    )
+    for sec in schedule.sections:
+        sec_channel = _section_channel(sec) or schedule.default_channel
+        sec_topic_id, _sec_topic_source = extract_topic_from_section(sec, schedule)
+        logger.info(
+            "Section '%s': date=%s channel=%s window=%s-%s topic_id=%s",
+            sec.title, sec.date.isoformat(), sec_channel, sec.start_time, sec.end_time,
+            sec_topic_id if sec_topic_id is not None else "-",
+        )
 
     letter_map_path = Path("data/letter_map.json")
 
@@ -519,6 +544,10 @@ async def run_schedule(
             client, schedule, local_tz, chronological_merge=effective_chronological_merge,
             min_id_by_fingerprint=(store.min_ids_by_fingerprint() if store is not None else None),
         )
+        if not collected:
+            logger.warning("Nachrichtensammlung: 0 Nachrichten gefunden für Schedule '%s'.", schedule_path.stem)
+        else:
+            logger.info("Nachrichtensammlung: %d Nachricht(en) gefunden (collected).", len(collected))
         interleave_chat_label = schedule.document_title or out_basename
         if resume_hints:
             for rh in resume_hints:
@@ -1169,6 +1198,10 @@ async def run_schedule(
                             else:
                                 translations_acc.append(translation_record)
                     except TranslationError as exc:
+                        logger.warning(
+                            "Übersetzung (%s) für Nachricht %s fehlgeschlagen: %s",
+                            effective_translation_provider, msg.id, exc,
+                        )
                         _notify(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {msg.id} fehlgeschlagen: {exc}")
                     except Exception:
                         pass
@@ -1178,6 +1211,11 @@ async def run_schedule(
                 if want_side_by_side:
                     record_pairs.append(RecordPair(original=original_record, translation=translation_record_for_store))
             previous_title = item.title
+
+        logger.info(
+            "Nachrichtenverarbeitung: %d neu verarbeitet, %d via Store übersprungen (von %d gesammelt).",
+            len(collected) - skipped_via_store, skipped_via_store, len(collected),
+        )
 
         if translate and mode_norm == "end" and translations_acc:
             records.extend(translations_acc)
@@ -1224,6 +1262,19 @@ async def run_schedule(
             "graphic": {"inline_emoji": "G.InlineEmoji"},
         }
 
+        final_count = len(record_pairs) if want_side_by_side else len(records)
+        if final_count == 0:
+            logger.warning(
+                "0 finale %s für ODT-Ausgabe '%s' - Schedule/Zeitfenster/Kanal prüfen.",
+                "record_pairs" if want_side_by_side else "Records", out_path,
+            )
+            _notify(f"Warnung: 0 finale Einträge für '{out_path}' - es wird trotzdem ein (leeres) ODT geschrieben.")
+        else:
+            logger.info(
+                "Vor ODT-Schreibvorgang: %d finale %s für '%s'.",
+                final_count, "record_pairs" if want_side_by_side else "Records", out_path,
+            )
+
         _notify("ODT wird geschrieben…")
         if want_side_by_side:
             write_odt_for_record_pairs(
@@ -1232,6 +1283,7 @@ async def run_schedule(
             )
         else:
             write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
+        logger.info("ODT geschrieben: %s (%d Eintrag/Einträge).", out_path, final_count)
 
         extra_path: Optional[Path] = None
         if not want_side_by_side and mode_norm == "separate" and translations_acc:
@@ -1242,6 +1294,7 @@ async def run_schedule(
             extra_path = out_dir / f"{out_basename}{ts_part}_{lang_up}.odt"
             _notify("Übersetzungs-ODT wird geschrieben…")
             write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)
+            logger.info("Übersetzungs-ODT geschrieben: %s (%d Eintrag/Einträge).", extra_path, len(translations_acc))
 
         try:
             if missing_letters:
