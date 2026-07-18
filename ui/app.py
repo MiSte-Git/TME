@@ -27,9 +27,10 @@ from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices, QGuiAp
 from functools import partial
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFileDialog,
-    QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout, QGroupBox,
+    QPushButton, QLabel, QLineEdit,
     QTabWidget, QCheckBox, QMessageBox, QComboBox, QProgressBar,
-    QInputDialog, QScrollArea
+    QInputDialog
 )
 
 from pipeline.runner_schedule import run_schedule
@@ -190,11 +191,10 @@ class ScheduleTab(QWidget):
         pick_lay.addWidget(self.btn_pick)
         lay.addLayout(pick_lay)
 
-        opt_lay = QHBoxLayout()
-        opt_lay.setSpacing(8)
         self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
         self.lbl_provider = QLabel(self.tr("Übersetzungs-Provider:"))
+        self.lbl_provider.setWordWrap(True)
         self.provider_combo = QComboBox()
         self.provider_combo.addItem(self.tr("Telegram (kostenlos)"), "telegram")
         self.provider_combo.addItem("DeepL", "deepl")
@@ -211,6 +211,7 @@ class ScheduleTab(QWidget):
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
         self.lbl_src_lang = QLabel(self.tr("Quellsprache (Dateiname):"))
+        self.lbl_src_lang.setWordWrap(True)
         self.lbl_format = QLabel(self.tr("Ausgabeformat:"))
         self.format_combo = QComboBox()
         self.format_combo.addItem(self.tr("Nur ODT"), "odt")
@@ -220,41 +221,38 @@ class ScheduleTab(QWidget):
         self.layout_combo = QComboBox()
         self.layout_combo.addItem(self.tr("Linear"), "linear")
         self.layout_combo.addItem(self.tr("Übersetzung neben Original"), "side_by_side")
-        opt_lay.addWidget(self.cb_translate)
-        opt_lay.addWidget(self.lbl_mode)
-        opt_lay.addWidget(self.mode_combo)
-        opt_lay.addWidget(self.lbl_provider)
-        opt_lay.addWidget(self.provider_combo)
-        opt_lay.addWidget(self.lbl_src_lang)
-        opt_lay.addWidget(self.src_lang_combo)
-        opt_lay.addWidget(self.lbl_lang)
-        opt_lay.addWidget(self.lang_edit)
-        opt_lay.addWidget(self.cb_images)
-        opt_lay.addWidget(self.cb_emojis)
-        opt_lay.addWidget(self.cb_lettermap)
-        opt_lay.addWidget(self.cb_interleave)
-        opt_lay.addWidget(self.cb_incremental)
-        opt_lay.addWidget(self.lbl_format)
-        opt_lay.addWidget(self.format_combo)
-        opt_lay.addWidget(self.lbl_layout)
-        opt_lay.addWidget(self.layout_combo)
-        # In ein Scroll-Widget einbetten: die vielen Options-Checkboxen/Combos in
-        # opt_lay summieren sich in einer einzigen QHBoxLayout-Zeile auf eine sehr
-        # breite minimumSizeHint (Qt kann eine Zeile nicht automatisch umbrechen),
-        # was das Hauptfenster beim Start unbrauchbar breit machte und Größenänderung
-        # per Fensterrand verhinderte. Der Scroll-Bereich entkoppelt die
-        # Fenstermindestgröße vom Inhalt; bei Bedarf lässt sich horizontal scrollen.
-        opt_container = QWidget()
-        opt_container.setLayout(opt_lay)
-        opt_scroll = QScrollArea()
-        opt_scroll.setWidget(opt_container)
-        opt_scroll.setWidgetResizable(True)
-        opt_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        opt_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        opt_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        opt_scroll.setMinimumHeight(opt_container.sizeHint().height() + 8)
-        opt_scroll.setMaximumHeight(opt_container.sizeHint().height() + 12)
-        lay.addWidget(opt_scroll)
+
+        # Optionsfelder thematisch in QGroupBox-Bereiche mit QFormLayout gruppiert,
+        # statt alle ~15 Felder in einer einzigen QHBoxLayout-Zeile aneinanderzureihen
+        # (das hatte zuvor eine sehr breite minimumSizeHint erzwungen). Jede
+        # Formular-Zeile ist nur so breit wie ihr eigener Inhalt.
+        self.group_translation = QGroupBox(self.tr("Übersetzung"))
+        form_translation = QFormLayout(self.group_translation)
+        form_translation.addRow(self.cb_translate)
+        form_translation.addRow(self.lbl_mode, self.mode_combo)
+        form_translation.addRow(self.lbl_provider, self.provider_combo)
+        form_translation.addRow(self.lbl_src_lang, self.src_lang_combo)
+        form_translation.addRow(self.lbl_lang, self.lang_edit)
+
+        self.group_output = QGroupBox(self.tr("Ausgabe"))
+        form_output = QFormLayout(self.group_output)
+        form_output.addRow(self.lbl_format, self.format_combo)
+        form_output.addRow(self.lbl_layout, self.layout_combo)
+        form_output.addRow(self.cb_interleave)
+        form_output.addRow(self.cb_incremental)
+
+        self.group_content = QGroupBox(self.tr("Inhalt"))
+        form_content = QFormLayout(self.group_content)
+        form_content.addRow(self.cb_images)
+        form_content.addRow(self.cb_emojis)
+        form_content.addRow(self.cb_lettermap)
+
+        opt_grid = QGridLayout()
+        opt_grid.setSpacing(8)
+        opt_grid.addWidget(self.group_translation, 0, 0, 2, 1)
+        opt_grid.addWidget(self.group_output, 0, 1)
+        opt_grid.addWidget(self.group_content, 1, 1)
+        lay.addLayout(opt_grid)
 
         run_lay = QHBoxLayout()
         run_lay.setSpacing(8)
@@ -366,6 +364,9 @@ class ScheduleTab(QWidget):
         self.cb_interleave.setText(self.tr("Kanäle chronologisch mischen"))
         self.cb_incremental.setText(self.tr("Inkrementelles Update (Store)"))
         self.lbl_provider.setText(self.tr("Übersetzungs-Provider:"))
+        self.group_translation.setTitle(self.tr("Übersetzung"))
+        self.group_output.setTitle(self.tr("Ausgabe"))
+        self.group_content.setTitle(self.tr("Inhalt"))
         _prov_current = self.provider_combo.currentData()
         self.provider_combo.setItemText(0, self.tr("Telegram (kostenlos)"))
         if _prov_current is not None:
@@ -742,8 +743,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Telegram → ODT mit Emoji & Übersetzung")
         # Verhindert, dass das Fenster kleiner als sinnvoll nutzbar wird, ohne eine
-        # größere Mindestgröße als nötig zu erzwingen (siehe auch opt_scroll in
-        # ScheduleTab, die die eigentliche Ursache der übergroßen minimumSizeHint behebt).
+        # größere Mindestgröße als nötig zu erzwingen (siehe auch die QGroupBox-
+        # Gruppierung in ScheduleTab, die die eigentliche Ursache der übergroßen
+        # minimumSizeHint behebt).
         self.setMinimumSize(700, 400)
         # App/Icon setzen, wenn vorhanden
         root = Path(__file__).resolve().parents[1]
