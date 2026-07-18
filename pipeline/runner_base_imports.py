@@ -10,6 +10,13 @@ from telethon import TelegramClient
 DEFAULT_LOCAL_TZ = "Europe/Zurich"
 
 
+class ScheduleCancelled(Exception):
+    """Wird geworfen, wenn ein laufender Schedule-Lauf per Cancellation-Flag
+    (z.B. Abbrechen-Button im UI) abgebrochen wurde. Getrennt von generischen
+    Fehlern, damit Aufrufer (z.B. ui/app.py) sauber zwischen "Fehler" und
+    "vom Nutzer abgebrochen" unterscheiden können."""
+
+
 @dataclass
 class CollectedMessage:
     title: str

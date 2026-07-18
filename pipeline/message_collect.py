@@ -22,6 +22,7 @@ from .message_filters import (
 from .runner_base_imports import (
     CollectedMessage,
     DEFAULT_LOCAL_TZ,
+    ScheduleCancelled,
     _build_message_link,
     _format_heading,
     _with_retries,
@@ -183,6 +184,7 @@ async def collect_messages_for_schedule(
     local_tz: Optional[str],
     chronological_merge: bool = False,
     min_id_by_fingerprint: Optional[Dict[str, int]] = None,
+    cancel_event: Optional[Any] = None,
 ) -> Tuple[List[CollectedMessage], Set[str], list[dict[str, Any]], Dict[str, Dict[str, Any]]]:
     """
     min_id_by_fingerprint: für den inkrementellen Store-Modus (siehe
@@ -190,6 +192,10 @@ async def collect_messages_for_schedule(
     Section; wird als Telethon min_id an fetch_messages_for_section_day
     durchgereicht, damit der Server bereits bekannte Nachrichten gar nicht
     erst zurückschickt. None/leer = kein Filter, bestehendes Verhalten.
+
+    cancel_event: optionales threading.Event (vom UI-Abbrechen-Button gesetzt).
+    Wird vor jeder Section geprüft; bei gesetztem Event wird der Lauf über
+    ScheduleCancelled sauber abgebrochen, statt weitere Sections zu holen.
 
     Rückgabe zusätzlich zu den bisherigen drei Werten: section_stats
     (fingerprint -> {channel_key, last_message_id, last_message_date}) mit
@@ -235,6 +241,9 @@ async def collect_messages_for_schedule(
         return chan_val, topic_id_val, source
 
     for section in schedule.sections:
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Nachrichtensammlung abgebrochen (Cancel-Event) vor Section '%s'.", section.title)
+            raise ScheduleCancelled("Abgebrochen während der Nachrichtensammlung.")
         heading = _format_heading(section.date.strftime("%Y-%m-%d"), section.title)
         subheading = section.subheading or None
         channel_label = section.title.strip() or heading

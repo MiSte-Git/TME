@@ -36,6 +36,7 @@ from .topic_utils import extract_topic_from_section
 from .runner_base_imports import (
     CollectedMessage,
     DEFAULT_LOCAL_TZ,
+    ScheduleCancelled,
     _build_message_link,
     _format_heading,
     _with_retries,
@@ -307,6 +308,7 @@ async def run_schedule(
     progress_cb: Optional[Callable[[str], None]] = None,
     skip_lettermap_ui: bool = False,
     wait_for_mapping_cb: Optional[Callable[[], None]] = None,
+    cancel_event: Optional[Any] = None,
 ) -> ScheduleRunResult:
     def _notify(msg: str) -> None:
         if progress_cb:
@@ -316,6 +318,12 @@ async def run_schedule(
                 pass
         else:
             print(msg)
+
+    def _check_cancelled() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            logger.warning("Schedule-Lauf abgebrochen (Cancel-Event gesetzt).")
+            _notify("Lauf wurde abgebrochen.")
+            raise ScheduleCancelled("Lauf wurde vom Nutzer abgebrochen.")
 
     _apply_config_overrides(config_path)
     cfg = _load_config(config_path)
@@ -556,10 +564,12 @@ async def run_schedule(
             except Exception:
                 pass
 
+        _check_cancelled()
         _notify("Nachrichten werden gesammelt…")
         collected, used_doc_ids, resume_hints, section_stats = await collect_messages_for_schedule(
             client, schedule, local_tz, chronological_merge=effective_chronological_merge,
             min_id_by_fingerprint=(store.min_ids_by_fingerprint() if store is not None else None),
+            cancel_event=cancel_event,
         )
         if not collected:
             logger.warning("Nachrichtensammlung: 0 Nachrichten gefunden für Schedule '%s'.", schedule_path.stem)
@@ -878,6 +888,7 @@ async def run_schedule(
         skipped_via_store = 0
 
         for item in collected:
+            _check_cancelled()
 
             if mode_norm == "inline" and previous_title is not None and item.title != previous_title:
                 if pending_inline_translations:
@@ -1279,6 +1290,7 @@ async def run_schedule(
             "graphic": {"inline_emoji": "G.InlineEmoji"},
         }
 
+        _check_cancelled()
         final_count = len(record_pairs) if want_side_by_side else len(records)
         if final_count == 0:
             logger.warning(

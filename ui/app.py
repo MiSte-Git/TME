@@ -33,6 +33,10 @@ from PySide6.QtWidgets import (
 )
 
 from pipeline.runner_schedule import run_schedule
+from pipeline.runner_base_imports import ScheduleCancelled
+from pipeline.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from ui.lettermap_tab import LettermapTab
 from ui.schedule_editor_tab import ScheduleEditorTab
 from ui.no_translate_words_tab import NoTranslateWordsTab
@@ -65,6 +69,7 @@ def _lang_state_file() -> Path:
 class ScheduleWorker(QObject):
     finished = Signal(object)
     error = Signal(str)
+    cancelled = Signal()
     status = Signal(str)
     waiting_for_mapping = Signal()
 
@@ -84,6 +89,7 @@ class ScheduleWorker(QObject):
         translation_provider: str = "telegram",
         incremental_mode: bool = False,
         layout: str = "linear",
+        cancel_event: threading.Event | None = None,
     ) -> None:
         super().__init__()
         self.schedule_path = schedule_path
@@ -100,6 +106,7 @@ class ScheduleWorker(QObject):
         self.translation_provider = translation_provider
         self.incremental_mode = incremental_mode
         self.layout = layout
+        self._cancel_event = cancel_event
 
     def run(self) -> None:
         try:
@@ -109,7 +116,9 @@ class ScheduleWorker(QObject):
             def _wait_for_mapping() -> None:
                 self.waiting_for_mapping.emit()
                 self._mapping_event.clear()
-                self._mapping_event.wait()
+                while not self._mapping_event.wait(timeout=0.5):
+                    if self._cancel_event is not None and self._cancel_event.is_set():
+                        raise ScheduleCancelled("Abgebrochen während des Wartens auf die Lettermap-Zuordnung.")
                 self.status.emit(self.tr("Fortsetze nach Mapping…"))
 
             # Lettermap toggling via runner_by_ids globals (no config merge needed)
@@ -138,6 +147,7 @@ class ScheduleWorker(QObject):
                 "config_path": Path("config.yaml"),
                 "progress_cb": cast(Callable[[str], None], _cb),
                 "skip_lettermap_ui": True,
+                "cancel_event": self._cancel_event,
             }
             if self.lettermap_enabled:
                 kwargs["wait_for_mapping_cb"] = cast(Callable[[], None], _wait_for_mapping)
@@ -152,6 +162,8 @@ class ScheduleWorker(QObject):
                 else:
                     raise
             self.finished.emit(result)
+        except ScheduleCancelled:
+            self.cancelled.emit()
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -233,6 +245,10 @@ class ScheduleTab(QWidget):
         self.btn_run = QPushButton(self.tr("Schedule → ODT erzeugen"))
         self.btn_run.clicked.connect(self.run_schedule_file)
         run_lay.addWidget(self.btn_run)
+        self.btn_cancel = QPushButton(self.tr("Abbrechen"))
+        self.btn_cancel.clicked.connect(self._on_cancel_clicked)
+        self.btn_cancel.setVisible(False)
+        run_lay.addWidget(self.btn_cancel)
         lay.addLayout(run_lay)
 
         self.progress = QProgressBar()
@@ -260,6 +276,7 @@ class ScheduleTab(QWidget):
         self.worker_thread: QThread | None = None
         self.worker: ScheduleWorker | None = None
         self._mapping_event = threading.Event()
+        self._cancel_event = threading.Event()
         self.lettermap_tab: LettermapTab | None = None
         self._loading_state = False
         self._last_output_path: Path | None = None
@@ -357,6 +374,7 @@ class ScheduleTab(QWidget):
             if _lidx >= 0:
                 self.layout_combo.setCurrentIndex(_lidx)
         self.btn_run.setText(self.tr("Telegram-Export → ODT erzeugen"))
+        self.btn_cancel.setText(self.tr("Abbrechen"))
         self.btn_open_output.setText(self.tr("Ausgabeordner öffnen"))
         self.btn_continue.setText(self.tr("Fortsetzen"))
         # placeholders
@@ -399,6 +417,9 @@ class ScheduleTab(QWidget):
         self.status_label.setText(self.tr("Starte…"))
         self.btn_continue.setVisible(False)
         self._mapping_event.clear()
+        self._cancel_event = threading.Event()
+        self.btn_cancel.setVisible(True)
+        self.btn_cancel.setEnabled(True)
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
 
@@ -417,22 +438,33 @@ class ScheduleTab(QWidget):
             translation_provider=str(self.provider_combo.currentData() or "telegram"),
             incremental_mode=self.cb_incremental.isChecked(),
             layout=str(self.layout_combo.currentData() or "linear"),
+            cancel_event=self._cancel_event,
         )
         self.worker_thread = QThread(self)
         self.worker.moveToThread(self.worker_thread)
         self.worker_thread.started.connect(self.worker.run)
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.error.connect(self._on_worker_error)
+        self.worker.cancelled.connect(self._on_worker_cancelled)
         self.worker.status.connect(self._on_worker_status)
         self.worker.waiting_for_mapping.connect(self._on_waiting_for_mapping)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.error.connect(self.worker_thread.quit)
+        self.worker.cancelled.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.error.connect(self.worker.deleteLater)
+        self.worker.cancelled.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
         self.worker_thread.finished.connect(self._on_thread_finished)
         self.worker_thread.start()
         self._save_state()
+
+    def _on_cancel_clicked(self) -> None:
+        logger.info("Nutzer hat Abbruch des laufenden Schedule-Laufs angefordert.")
+        self.btn_cancel.setEnabled(False)
+        self.status_label.setVisible(True)
+        self.status_label.setText(self.tr("Breche ab…"))
+        self._cancel_event.set()
 
     def _on_worker_status(self, message: str) -> None:
         self.status_label.setVisible(True)
@@ -461,6 +493,8 @@ class ScheduleTab(QWidget):
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
         self.btn_run.setEnabled(True)
+        self.btn_cancel.setVisible(False)
+        self.btn_cancel.setEnabled(False)
         self.btn_continue.setVisible(False)
         self._mapping_event.set()
         if self.lettermap_tab:
@@ -516,9 +550,27 @@ class ScheduleTab(QWidget):
         self.progress.setValue(0)
         self.progress.setVisible(False)
         self.btn_run.setEnabled(True)
+        self.btn_cancel.setVisible(False)
+        self.btn_cancel.setEnabled(False)
         self.status_label.setVisible(True)
         self.status_label.setText(self.tr("Fehler: ") + message)
         QMessageBox.critical(self, self.tr("Fehler"), message)
+        self.btn_continue.setVisible(False)
+        self._mapping_event.set()
+        if self.lettermap_tab:
+            self.lettermap_tab.on_mapping_finished()
+
+    def _on_worker_cancelled(self) -> None:
+        logger.info("Schedule-Lauf abgebrochen (Bestätigung vom Worker).")
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
+        self.progress.setVisible(False)
+        self.btn_run.setEnabled(True)
+        self.btn_cancel.setVisible(False)
+        self.btn_cancel.setEnabled(False)
+        self.status_label.setVisible(True)
+        self.status_label.setText(self.tr("Lauf abgebrochen."))
+        QMessageBox.information(self, self.tr("Abgebrochen"), self.tr("Der Lauf wurde abgebrochen."))
         self.btn_continue.setVisible(False)
         self._mapping_event.set()
         if self.lettermap_tab:
@@ -529,6 +581,8 @@ class ScheduleTab(QWidget):
         self.progress.setValue(0)
         self.worker_thread = None
         self.worker = None
+        self.btn_cancel.setVisible(False)
+        self.btn_cancel.setEnabled(False)
         self.btn_continue.setVisible(False)
         self._mapping_event.set()
         if self.lettermap_tab:
