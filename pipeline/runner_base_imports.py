@@ -78,4 +78,5 @@ from . import runner_by_ids as _rbi  # noqa: E402
 
 _with_retries = _rbi._with_retries
 ensure_join_channel = _rbi.ensure_join_channel  # falls dort definiert, sonst anpassen
+TelegramSessionInvalid = _rbi.TelegramSessionInvalid  # in runner_by_ids.py definiert (Zirkelbezug vermeiden)
 _DEBUG_DUMP_ENTITIES = False  # bei Bedarf auf True setzen

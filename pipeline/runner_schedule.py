@@ -37,6 +37,7 @@ from .runner_base_imports import (
     CollectedMessage,
     DEFAULT_LOCAL_TZ,
     ScheduleCancelled,
+    TelegramSessionInvalid,
     _build_message_link,
     _format_heading,
     _with_retries,
@@ -543,7 +544,7 @@ async def run_schedule(
         logger.error(error_msg)
         _notify(f"Fehler: {error_msg}")
         await client.disconnect()
-        raise RuntimeError(error_msg)
+        raise TelegramSessionInvalid(error_msg)
 
     try:
         if letter_to_doc and (_rbi._LM_IN_ORIGINAL or True):

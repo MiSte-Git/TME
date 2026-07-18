@@ -34,7 +34,8 @@ from PySide6.QtWidgets import (
 )
 
 from pipeline.runner_schedule import run_schedule
-from pipeline.runner_base_imports import ScheduleCancelled
+from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid
+from ui.login_dialog import LoginDialog
 from pipeline.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -71,6 +72,7 @@ class ScheduleWorker(QObject):
     finished = Signal(object)
     error = Signal(str)
     cancelled = Signal()
+    session_invalid = Signal(str)
     status = Signal(str)
     waiting_for_mapping = Signal()
 
@@ -165,6 +167,8 @@ class ScheduleWorker(QObject):
             self.finished.emit(result)
         except ScheduleCancelled:
             self.cancelled.emit()
+        except TelegramSessionInvalid as exc:
+            self.session_invalid.emit(str(exc))
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -263,6 +267,10 @@ class ScheduleTab(QWidget):
         self.btn_cancel.clicked.connect(self._on_cancel_clicked)
         self.btn_cancel.setVisible(False)
         run_lay.addWidget(self.btn_cancel)
+        self.btn_login = QPushButton(self.tr("Jetzt einloggen…"))
+        self.btn_login.clicked.connect(self._on_login_clicked)
+        self.btn_login.setVisible(False)
+        run_lay.addWidget(self.btn_login)
         lay.addLayout(run_lay)
 
         self.progress = QProgressBar()
@@ -392,6 +400,7 @@ class ScheduleTab(QWidget):
                 self.layout_combo.setCurrentIndex(_lidx)
         self.btn_run.setText(self.tr("Telegram-Export → ODT erzeugen"))
         self.btn_cancel.setText(self.tr("Abbrechen"))
+        self.btn_login.setText(self.tr("Jetzt einloggen…"))
         self.btn_open_output.setText(self.tr("Ausgabeordner öffnen"))
         self.btn_continue.setText(self.tr("Fortsetzen"))
         # placeholders
@@ -437,6 +446,7 @@ class ScheduleTab(QWidget):
         self._cancel_event = threading.Event()
         self.btn_cancel.setVisible(True)
         self.btn_cancel.setEnabled(True)
+        self.btn_login.setVisible(False)
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
 
@@ -463,14 +473,17 @@ class ScheduleTab(QWidget):
         self.worker.finished.connect(self._on_worker_finished)
         self.worker.error.connect(self._on_worker_error)
         self.worker.cancelled.connect(self._on_worker_cancelled)
+        self.worker.session_invalid.connect(self._on_session_invalid)
         self.worker.status.connect(self._on_worker_status)
         self.worker.waiting_for_mapping.connect(self._on_waiting_for_mapping)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.error.connect(self.worker_thread.quit)
         self.worker.cancelled.connect(self.worker_thread.quit)
+        self.worker.session_invalid.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.error.connect(self.worker.deleteLater)
         self.worker.cancelled.connect(self.worker.deleteLater)
+        self.worker.session_invalid.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
         self.worker_thread.finished.connect(self._on_thread_finished)
         self.worker_thread.start()
@@ -512,6 +525,7 @@ class ScheduleTab(QWidget):
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
+        self.btn_login.setVisible(False)
         self.btn_continue.setVisible(False)
         self._mapping_event.set()
         if self.lettermap_tab:
@@ -569,6 +583,7 @@ class ScheduleTab(QWidget):
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
+        self.btn_login.setVisible(False)
         self.status_label.setVisible(True)
         self.status_label.setText(self.tr("Fehler: ") + message)
         QMessageBox.critical(self, self.tr("Fehler"), message)
@@ -585,6 +600,7 @@ class ScheduleTab(QWidget):
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
+        self.btn_login.setVisible(False)
         self.status_label.setVisible(True)
         self.status_label.setText(self.tr("Lauf abgebrochen."))
         QMessageBox.information(self, self.tr("Abgebrochen"), self.tr("Der Lauf wurde abgebrochen."))
@@ -592,6 +608,33 @@ class ScheduleTab(QWidget):
         self._mapping_event.set()
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
+
+    def _on_session_invalid(self, message: str) -> None:
+        logger.warning("Telegram-Session ungültig gemeldet: %s", message)
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
+        self.progress.setVisible(False)
+        self.btn_run.setEnabled(True)
+        self.btn_cancel.setVisible(False)
+        self.btn_cancel.setEnabled(False)
+        self.status_label.setVisible(True)
+        self.status_label.setText(message)
+        self.btn_login.setVisible(True)
+        self.btn_login.setEnabled(True)
+        self.btn_continue.setVisible(False)
+        self._mapping_event.set()
+        if self.lettermap_tab:
+            self.lettermap_tab.on_mapping_finished()
+
+    def _on_login_clicked(self) -> None:
+        dialog = LoginDialog(self)
+        dialog.exec()
+        if dialog.login_result is not None:
+            self.btn_login.setVisible(False)
+            self.status_label.setVisible(True)
+            self.status_label.setText(
+                self.tr("Login erfolgreich - du kannst den Lauf jetzt erneut starten.")
+            )
 
     def _on_thread_finished(self) -> None:
         self.progress.setRange(0, 1)

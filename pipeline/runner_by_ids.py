@@ -25,6 +25,15 @@ from .logging_setup import get_logger
 
 logger = get_logger(__name__)
 
+
+class TelegramSessionInvalid(RuntimeError):
+    """Wird geworfen, wenn client.is_user_authorized() False liefert (Session
+    ungültig/abgelaufen). Bewusst hier definiert statt in runner_base_imports.py
+    importiert, da runner_base_imports.py selbst dieses Modul importiert
+    (_with_retries/ensure_join_channel) - ein Import in Gegenrichtung würde einen
+    Zirkelbezug erzeugen. runner_base_imports.py re-exportiert diese Klasse von
+    hier (siehe dort), damit andere Module sie einheitlich von dort beziehen können."""
+
 # YAML optional laden (keine neue Abhängigkeit erforderlich)
 try:
     import yaml  # type: ignore
@@ -501,7 +510,7 @@ async def run_by_ids(
         logger.error(error_msg)
         print(f"Fehler: {error_msg}")
         await client.disconnect()
-        raise RuntimeError(error_msg)
+        raise TelegramSessionInvalid(error_msg)
 
     try:
         # Falls Lettermapping irgendwo aktiv ist, versuche vorab alle letter_map doc_ids zu rendern
