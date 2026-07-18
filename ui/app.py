@@ -23,13 +23,13 @@ warnings.filterwarnings(
 )
 
 from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices, QGuiApplication
 from functools import partial
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QFileDialog,
     QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QTabWidget, QCheckBox, QMessageBox, QComboBox, QProgressBar,
-    QInputDialog
+    QInputDialog, QScrollArea
 )
 
 from pipeline.runner_schedule import run_schedule
@@ -238,7 +238,23 @@ class ScheduleTab(QWidget):
         opt_lay.addWidget(self.format_combo)
         opt_lay.addWidget(self.lbl_layout)
         opt_lay.addWidget(self.layout_combo)
-        lay.addLayout(opt_lay)
+        # In ein Scroll-Widget einbetten: die vielen Options-Checkboxen/Combos in
+        # opt_lay summieren sich in einer einzigen QHBoxLayout-Zeile auf eine sehr
+        # breite minimumSizeHint (Qt kann eine Zeile nicht automatisch umbrechen),
+        # was das Hauptfenster beim Start unbrauchbar breit machte und Größenänderung
+        # per Fensterrand verhinderte. Der Scroll-Bereich entkoppelt die
+        # Fenstermindestgröße vom Inhalt; bei Bedarf lässt sich horizontal scrollen.
+        opt_container = QWidget()
+        opt_container.setLayout(opt_lay)
+        opt_scroll = QScrollArea()
+        opt_scroll.setWidget(opt_container)
+        opt_scroll.setWidgetResizable(True)
+        opt_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        opt_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        opt_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        opt_scroll.setMinimumHeight(opt_container.sizeHint().height() + 8)
+        opt_scroll.setMaximumHeight(opt_container.sizeHint().height() + 12)
+        lay.addWidget(opt_scroll)
 
         run_lay = QHBoxLayout()
         run_lay.setSpacing(8)
@@ -725,6 +741,10 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Telegram → ODT mit Emoji & Übersetzung")
+        # Verhindert, dass das Fenster kleiner als sinnvoll nutzbar wird, ohne eine
+        # größere Mindestgröße als nötig zu erzwingen (siehe auch opt_scroll in
+        # ScheduleTab, die die eigentliche Ursache der übergroßen minimumSizeHint behebt).
+        self.setMinimumSize(700, 400)
         # App/Icon setzen, wenn vorhanden
         root = Path(__file__).resolve().parents[1]
         icon_path = root / "Telegram-LibreOffice.png"
@@ -1096,6 +1116,15 @@ def main() -> None:
     w = MainWindow()
     # Standardfensterhöhe um ca. 15 % erhöhen (von 420 auf 483)
     w.resize(900, 483)
+    # Explizit auf dem primären Bildschirm zentrieren statt sich auf das
+    # Qt-Standardverhalten zu verlassen, das bei Multi-Monitor-Setups
+    # inkonsistent sein kann (Fenster über zwei Bildschirme verteilt o.ä.).
+    screen = QGuiApplication.primaryScreen()
+    if screen is not None:
+        avail = screen.availableGeometry()
+        x = avail.x() + (avail.width() - w.width()) // 2
+        y = avail.y() + (avail.height() - w.height()) // 2
+        w.move(max(avail.x(), x), max(avail.y(), y))
     w.show()
     sys.exit(app.exec())
 
