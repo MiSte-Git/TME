@@ -21,6 +21,9 @@ from .recompose import _text_to_runs as lettermap_text_to_runs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .no_translate_words import load_no_translate_words_set
+from .logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 # YAML optional laden (keine neue Abhängigkeit erforderlich)
 try:
@@ -479,12 +482,28 @@ async def run_by_ids(
         return out
 
     # Etwas robustere Client-Parameter (kleine Zeitouts; Auto-Reconnect aktiv)
-    async with TelegramClient(
+    client = TelegramClient(
         "tg_session", API_ID, API_HASH,
         request_retries=_CLIENT_REQUEST_RETRIES,  # wir machen eigene Retries
         timeout=_CLIENT_TIMEOUT,
         auto_reconnect=_CLIENT_AUTO_RECONNECT,
-    ) as client:
+    )
+    # Bewusst explizites connect() statt "async with TelegramClient(...) as client:"
+    # (das würde intern client.start() aufrufen und bei ungültiger Session einen
+    # interaktiven Login-Prompt starten statt sauber mit einer klaren Meldung
+    # abzubrechen - siehe is_user_authorized()-Check unten).
+    await client.connect()
+    if not await client.is_user_authorized():
+        error_msg = (
+            "Telegram-Session ungültig oder abgelaufen. "
+            "Bitte über scripts/telegram_login.py neu einloggen."
+        )
+        logger.error(error_msg)
+        print(f"Fehler: {error_msg}")
+        await client.disconnect()
+        raise RuntimeError(error_msg)
+
+    try:
         # Falls Lettermapping irgendwo aktiv ist, versuche vorab alle letter_map doc_ids zu rendern
         if letter_to_doc and (_LM_IN_ORIGINAL or True):  # Prefetch ist günstig; hilft späteren Fallbacks
             try:
@@ -846,6 +865,8 @@ async def run_by_ids(
                     print(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {getattr(msg, 'id', '?')} fehlgeschlagen: {exc}")
                 except Exception:
                     continue
+    finally:
+        await client.disconnect()
 
     # Minimal-Styles (können aus config gelesen werden, hier Default-Namen)
     styles = {

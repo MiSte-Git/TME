@@ -527,6 +527,15 @@ async def run_schedule(
         auto_reconnect=_rbi._CLIENT_AUTO_RECONNECT,
     )
     await client.connect()
+    if not await client.is_user_authorized():
+        error_msg = (
+            "Telegram-Session ungültig oder abgelaufen. "
+            "Bitte über scripts/telegram_login.py neu einloggen."
+        )
+        logger.error(error_msg)
+        _notify(f"Fehler: {error_msg}")
+        await client.disconnect()
+        raise RuntimeError(error_msg)
 
     try:
         if letter_to_doc and (_rbi._LM_IN_ORIGINAL or True):
