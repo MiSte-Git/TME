@@ -1,7 +1,36 @@
 #requires -version 5.1
+[CmdletBinding()]
+param(
+  # Ohne -Release: schneller lokaler Test-Build als --onedir (Ordner statt
+  # gepackter Einzeldatei) mit wiederverwendetem PyInstaller-Analyse-Cache
+  # (kein --clean). Mit -Release: --onefile (Distributions-EXE) plus --clean
+  # fuer einen garantiert frischen, reproduzierbaren Build.
+  [switch]$Release,
+  # Erzwingt --clean auch fuer lokale --onedir-Builds (z.B. nach Aenderungen
+  # an Abhaengigkeiten/Hidden-Imports, wenn der Analyse-Cache veraltet sein koennte).
+  [switch]$Clean
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+function Test-DefenderRealtimeProtection {
+  # Best-effort-Erkennung; liefert $null (statt Fehler), wenn sich der Status
+  # nicht zuverlaessig ermitteln laesst (z.B. Drittanbieter-AV, fehlende Rechte).
+  try {
+    $status = Get-MpComputerStatus -ErrorAction Stop
+    return [bool]$status.RealTimeProtectionEnabled
+  } catch {
+    return $null
+  }
+}
+
+$DefenderActive = Test-DefenderRealtimeProtection
+if ($DefenderActive -eq $true) {
+  Write-Host "Hinweis: Windows Defender Echtzeitschutz scheint aktiv zu sein." -ForegroundColor Yellow
+  Write-Host "PyInstaller-Builds koennen dadurch spuerbar langsamer sein (jede geschriebene Datei wird gescannt)." -ForegroundColor Yellow
+  Write-Host "Tipp: 'C:\Projekte\TME' unter Windows-Sicherheit > Viren- & Bedrohungsschutz > Ausschluesse eintragen." -ForegroundColor Yellow
+}
 
 function Get-RepoRoot {
   $scriptDir = Split-Path -Parent $PSCommandPath
@@ -87,7 +116,7 @@ if ($env:TME_BUILD_TRANSLATIONS -eq "1" -and (Test-Path $TransBuild)) {
 Write-Host "Running syntax check (compileall)..."
 & $Py -m compileall -q . | Out-Host
 
-# --- Build EXE (onefile, windowed) ---
+# --- Build EXE (onedir standardmaessig / onefile mit -Release, windowed) ---
 $Entry = Join-Path $RepoRoot "ui\app.py"
 if (-not (Test-Path $Entry)) {
   throw "Entry point not found: $Entry"
@@ -98,11 +127,22 @@ $Icon = Join-Path $RepoRoot "ui\assets\app.ico"
 $IconArgs = @()
 if (Test-Path $Icon) { $IconArgs = @("--icon", $Icon) }
 
+$ModeArgs = if ($Release) { @("--onefile") } else { @("--onedir") }
+# --clean wirft den PyInstaller-Analyse-Cache (build\TME\) weg und erzwingt eine
+# komplette Neu-Analyse aller Imports - der groesste Zeitfaktor bei wiederholten
+# lokalen Builds. Fuer -Release immer sauber bauen; sonst nur auf Wunsch (-Clean).
+$UseClean = $Release -or $Clean
+$CleanArgs = if ($UseClean) { @("--clean") } else { @() }
+
+$ModeLabel = if ($Release) { "onefile (Release-Distribution)" } else { "onedir (schneller lokaler Test-Build)" }
+Write-Host "Build-Modus: $ModeLabel"
+Write-Host ("PyInstaller-Cache: " + $(if ($UseClean) { "wird verworfen (--clean)" } else { "wird wiederverwendet" }))
+
 Write-Host "Building EXE via PyInstaller..."
 & $Py -m PyInstaller `
   --noconfirm `
-  --clean `
-  --onefile `
+  @CleanArgs `
+  @ModeArgs `
   --windowed `
   --name "TME" `
   @IconArgs `
