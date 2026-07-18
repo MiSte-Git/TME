@@ -237,11 +237,14 @@ class ScheduleTab(QWidget):
         form_translation.addRow(self.lbl_provider, self.provider_combo)
         form_translation.addRow(self.lbl_src_lang, self.src_lang_combo)
         form_translation.addRow(self.lbl_lang, self.lang_edit)
+        # Layout (side_by_side) ist nur sinnvoll/wirksam, wenn überhaupt übersetzt
+        # wird - deshalb hier statt in "Ausgabe" und an cb_translate gekoppelt
+        # (siehe _on_translate_toggled).
+        form_translation.addRow(self.lbl_layout, self.layout_combo)
 
         self.group_output = QGroupBox(self.tr("Ausgabe"))
         form_output = QFormLayout(self.group_output)
         form_output.addRow(self.lbl_format, self.format_combo)
-        form_output.addRow(self.lbl_layout, self.layout_combo)
         form_output.addRow(self.cb_interleave)
         form_output.addRow(self.cb_incremental)
 
@@ -307,6 +310,7 @@ class ScheduleTab(QWidget):
  
         self._load_state()
         self._install_state_handlers()
+        self._on_translate_toggled(self.cb_translate.isChecked())
 
     def _credentials_present(self) -> bool:
         try:
@@ -675,9 +679,16 @@ class ScheduleTab(QWidget):
         except Exception:
             pass
 
+    def _on_translate_toggled(self, checked: bool) -> None:
+        # Layout "Übersetzung neben Original" (side_by_side) ist nur relevant/
+        # wirksam, wenn überhaupt übersetzt wird.
+        self.lbl_layout.setEnabled(checked)
+        self.layout_combo.setEnabled(checked)
+
     def _install_state_handlers(self) -> None:
         self.schedule_edit.editingFinished.connect(self._save_state)
         self.cb_translate.toggled.connect(lambda _checked: self._save_state())
+        self.cb_translate.toggled.connect(self._on_translate_toggled)
         self.mode_combo.currentTextChanged.connect(lambda _text: self._save_state())
         self.src_lang_combo.currentTextChanged.connect(lambda _text: self._save_state())
         self.lang_edit.editingFinished.connect(self._save_state)
