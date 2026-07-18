@@ -138,6 +138,18 @@ $ModeLabel = if ($Release) { "onefile (Release-Distribution)" } else { "onedir (
 Write-Host "Build-Modus: $ModeLabel"
 Write-Host ("PyInstaller-Cache: " + $(if ($UseClean) { "wird verworfen (--clean)" } else { "wird wiederverwendet" }))
 
+# keyring waehlt sein Backend zur Laufzeit dynamisch ueber importlib.metadata-
+# Entry-Points statt normaler import-Statements - PyInstallers statische
+# Analyse erkennt das nicht automatisch, daher explizite Hidden-Imports.
+$KeyringHiddenImports = @(
+  "--hidden-import", "keyring.backends.Windows",
+  "--hidden-import", "keyring.backends.macOS",
+  "--hidden-import", "keyring.backends.SecretService",
+  "--hidden-import", "keyring.backends.kwallet",
+  "--hidden-import", "keyring.backends.chainer",
+  "--hidden-import", "keyring.backends.fail"
+)
+
 Write-Host "Building EXE via PyInstaller..."
 & $Py -m PyInstaller `
   --noconfirm `
@@ -146,6 +158,7 @@ Write-Host "Building EXE via PyInstaller..."
   --windowed `
   --name "TME" `
   @IconArgs `
+  @KeyringHiddenImports `
   $Entry | Out-Host
 
 # --- Result ---

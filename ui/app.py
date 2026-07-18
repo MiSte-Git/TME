@@ -14,7 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from credentials import get_telegram_credentials, save_telegram_credentials
+from credentials import get_telegram_credentials, save_telegram_credentials, get_provider_api_key_source
+
+# provider_combo-Wert (ui/app.py) -> Provider-Id in credentials.py
+_TRANSLATION_PROVIDER_TO_CREDENTIALS_KEY = {"deepl": "deepl", "google": "google", "chatgpt": "openai"}
 
 warnings.filterwarnings(
     "ignore",
@@ -36,6 +39,7 @@ from PySide6.QtWidgets import (
 from pipeline.runner_schedule import run_schedule
 from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid
 from ui.login_dialog import LoginDialog
+from ui.api_keys_dialog import ApiKeysDialog
 from pipeline.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -358,6 +362,33 @@ class ScheduleTab(QWidget):
             return False
         return self._prompt_store_credentials()
 
+    def _ensure_provider_api_key(self, provider: str) -> bool:
+        """Warnt vor Start eines Laufs, falls für den gewählten Übersetzungs-
+        Provider kein API-Key hinterlegt ist (weder ENV noch Keyring noch
+        credentials.json) - statt erst mitten im Lauf mit einem API-Fehler zu
+        scheitern. "telegram" braucht keinen eigenen Key und ist immer ok."""
+        key_provider = _TRANSLATION_PROVIDER_TO_CREDENTIALS_KEY.get(provider)
+        if key_provider is None:
+            return True
+        if get_provider_api_key_source(key_provider) != "none":
+            return True
+        ans = QMessageBox.question(
+            self,
+            self.tr("API-Key fehlt"),
+            self.tr(
+                "Für den gewählten Übersetzungs-Provider ist kein API-Key hinterlegt "
+                "(weder Umgebungsvariable, OS-Keyring noch credentials.json). "
+                "Jetzt API-Keys verwalten?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if ans != QMessageBox.StandardButton.Yes:
+            return False
+        dialog = ApiKeysDialog(self)
+        dialog.exec()
+        return get_provider_api_key_source(key_provider) != "none"
+
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
             self.retranslate()
@@ -438,6 +469,9 @@ class ScheduleTab(QWidget):
         if not self._ensure_credentials():
             return
         translate = self.cb_translate.isChecked()
+        provider_val = str(self.provider_combo.currentData() or "telegram")
+        if translate and not self._ensure_provider_api_key(provider_val):
+            return
         target_lang = self.lang_edit.text().strip() or ("de" if translate else "de")
         source_lang = self.src_lang_combo.currentText().strip() or "de"
         self.btn_run.setEnabled(False)
@@ -924,6 +958,10 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _on_manage_api_keys(self) -> None:
+        dialog = ApiKeysDialog(self)
+        dialog.exec()
+
     def _show_api_help(self) -> None:
         xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
         cred_path = str(Path(xdg) / "telegram-odt" / "credentials.json")
@@ -960,6 +998,10 @@ class MainWindow(QMainWindow):
             self.tabs.setTabText(3, self.tr("Nicht übersetzen"))
         # Menüs
         self.view_menu.setTitle(self.tr("Ansicht"))
+        if hasattr(self, "settings_menu"):
+            self.settings_menu.setTitle(self.tr("Einstellungen"))
+            if hasattr(self, "action_api_keys"):
+                self.action_api_keys.setText(self.tr("API-Keys verwalten…"))
         if hasattr(self, "help_menu"):
             self.help_menu.setTitle(self.tr("Hilfe"))
             if hasattr(self, "action_api_help"):
@@ -1005,6 +1047,11 @@ class MainWindow(QMainWindow):
             self.action_dark.setChecked(True)
         self.action_light.triggered.connect(lambda: _set_theme("light"))
         self.action_dark.triggered.connect(lambda: _set_theme("dark"))
+        # Einstellungen
+        self.settings_menu = menubar.addMenu(self.tr("Einstellungen"))
+        self.action_api_keys = QAction(self.tr("API-Keys verwalten…"), self)
+        self.action_api_keys.triggered.connect(self._on_manage_api_keys)
+        self.settings_menu.addAction(self.action_api_keys)
         # Hilfe / Doku (ganz rechts)
         self.help_menu = menubar.addMenu(self.tr("Hilfe"))
         self.action_api_help = QAction(self.tr("Hinweis: Telegram API-Schlüssel"), self)

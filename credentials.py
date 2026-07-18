@@ -78,34 +78,155 @@ def _read_credentials_json() -> dict:
         return {}
 
 
+# Service-Name, unter dem alle Provider-Keys im OS-Keyring abgelegt werden
+# (Windows Credential Locker / macOS Keychain / Secret Service unter Linux).
+_KEYRING_SERVICE = "telegram-odt"
+
+# provider-id -> (ENV-Var-Name, Key-Name in credentials.json / Keyring-Username)
+_PROVIDER_KEYS: dict[str, Tuple[str, str]] = {
+    "deepl": ("DEEPL_API_KEY", "deepl_api_key"),
+    "google": ("GOOGLE_TRANSLATE_API_KEY", "google_translate_api_key"),
+    "openai": ("OPENAI_API_KEY", "openai_api_key"),
+}
+
+
+def _get_keyring_module():
+    """Importiert keyring erst bei Bedarf (nicht bei jedem credentials.py-Import),
+    und liefert None statt zu werfen, falls das Paket fehlt - dann greift der
+    bestehende credentials.json-Fallback unverändert."""
+    try:
+        import keyring  # type: ignore
+        return keyring
+    except Exception:
+        return None
+
+
+def _get_keyring_value(key_name: str) -> Optional[str]:
+    kr = _get_keyring_module()
+    if kr is None:
+        return None
+    try:
+        val = kr.get_password(_KEYRING_SERVICE, key_name)
+    except Exception:
+        # z.B. keyring.errors.NoKeyringError - auf headless Linux ohne laufenden
+        # Secret-Service-Daemon/D-Bus-Session ist kein Backend verfügbar.
+        return None
+    return val.strip() if isinstance(val, str) and val.strip() else None
+
+
+def _set_keyring_value(key_name: str, value: str) -> bool:
+    """Versucht, value im OS-Keyring zu speichern. Gibt True bei Erfolg zurück,
+    False falls kein nutzbares Keyring-Backend gefunden wurde (Aufrufer weicht
+    dann auf credentials.json aus)."""
+    kr = _get_keyring_module()
+    if kr is None:
+        return False
+    try:
+        kr.set_password(_KEYRING_SERVICE, key_name, value)
+        return True
+    except Exception:
+        return False
+
+
 def _get_provider_api_key(env_var: str, json_key: str) -> Optional[str]:
-    """Liest einen einzelnen API-Key nach demselben Muster wie Telegram-Credentials:
-    1) Umgebungsvariable, 2) Fallback credentials.json (~/.config/telegram-odt/).
+    """Liest einen einzelnen API-Key in dieser Priorität:
+    1) Umgebungsvariable, 2) OS-Keyring (falls Backend verfügbar),
+    3) Fallback credentials.json (~/.config/telegram-odt/).
     Gibt None zurück statt zu werfen - fehlender Key ist für Übersetzungs-Provider
     kein Programmfehler, sondern wird dort als TranslationError gemeldet.
     """
     env_val = os.environ.get(env_var)
     if env_val and env_val.strip():
         return env_val.strip()
+    kr_val = _get_keyring_value(json_key)
+    if kr_val:
+        return kr_val
     data = _read_credentials_json()
     val = str(data.get(json_key, "")).strip()
     return val or None
 
 
 def get_deepl_api_key() -> Optional[str]:
-    """DeepL API-Key: ENV DEEPL_API_KEY oder credentials.json-Feld 'deepl_api_key'."""
-    return _get_provider_api_key("DEEPL_API_KEY", "deepl_api_key")
+    """DeepL API-Key: ENV DEEPL_API_KEY, OS-Keyring oder credentials.json-Feld
+    'deepl_api_key'."""
+    return _get_provider_api_key(*_PROVIDER_KEYS["deepl"])
 
 
 def get_google_translate_api_key() -> Optional[str]:
-    """Google-Translate API-Key: ENV GOOGLE_TRANSLATE_API_KEY oder
+    """Google-Translate API-Key: ENV GOOGLE_TRANSLATE_API_KEY, OS-Keyring oder
     credentials.json-Feld 'google_translate_api_key'."""
-    return _get_provider_api_key("GOOGLE_TRANSLATE_API_KEY", "google_translate_api_key")
+    return _get_provider_api_key(*_PROVIDER_KEYS["google"])
 
 
 def get_openai_api_key() -> Optional[str]:
-    """OpenAI API-Key: ENV OPENAI_API_KEY oder credentials.json-Feld 'openai_api_key'."""
-    return _get_provider_api_key("OPENAI_API_KEY", "openai_api_key")
+    """OpenAI API-Key: ENV OPENAI_API_KEY, OS-Keyring oder credentials.json-Feld
+    'openai_api_key'."""
+    return _get_provider_api_key(*_PROVIDER_KEYS["openai"])
+
+
+def save_provider_api_key(provider: str, value: str) -> str:
+    """Speichert den API-Key für 'provider' (deepl|google|openai) persistent.
+
+    Versucht zuerst das OS-Keyring (verschlüsselt: Windows Credential Locker /
+    macOS Keychain / Secret Service unter Linux). Ist dort kein nutzbares
+    Backend vorhanden (z.B. headless Linux ohne Keyring-Daemon/D-Bus-Session),
+    wird als Fallback credentials.json im Klartext verwendet wie bisher.
+
+    Rückgabe: "keyring" oder "credentials_json_fallback" - je nachdem, wo der
+    Key tatsächlich gelandet ist, damit die UI den Nutzer entsprechend warnen
+    kann, falls es der unverschlüsselte Fallback war.
+    """
+    if provider not in _PROVIDER_KEYS:
+        raise ValueError(f"Unbekannter Provider: {provider!r}")
+    _, key_name = _PROVIDER_KEYS[provider]
+    value = value.strip()
+    if not value:
+        raise ValueError("Leerer API-Key kann nicht gespeichert werden")
+
+    if _set_keyring_value(key_name, value):
+        return "keyring"
+
+    cfg_path = _credentials_json_path()
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    data = _read_credentials_json()
+    data[key_name] = value
+    cfg_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return "credentials_json_fallback"
+
+
+def save_deepl_api_key(value: str) -> str:
+    """Analog zu save_telegram_credentials(): speichert den DeepL-Key
+    persistent (OS-Keyring, sonst credentials.json). Siehe save_provider_api_key."""
+    return save_provider_api_key("deepl", value)
+
+
+def save_google_translate_api_key(value: str) -> str:
+    """Analog zu save_telegram_credentials(): speichert den Google-Translate-Key
+    persistent (OS-Keyring, sonst credentials.json). Siehe save_provider_api_key."""
+    return save_provider_api_key("google", value)
+
+
+def save_openai_api_key(value: str) -> str:
+    """Analog zu save_telegram_credentials(): speichert den OpenAI-Key
+    persistent (OS-Keyring, sonst credentials.json). Siehe save_provider_api_key."""
+    return save_provider_api_key("openai", value)
+
+
+def get_provider_api_key_source(provider: str) -> str:
+    """Liefert, woher der aktuell aktive Key für 'provider' (deepl|google|openai)
+    stammt: "env" | "keyring" | "credentials_json" | "none" - für die
+    Backend-Anzeige im API-Keys-Dialog."""
+    if provider not in _PROVIDER_KEYS:
+        raise ValueError(f"Unbekannter Provider: {provider!r}")
+    env_var, key_name = _PROVIDER_KEYS[provider]
+    if os.environ.get(env_var, "").strip():
+        return "env"
+    if _get_keyring_value(key_name):
+        return "keyring"
+    data = _read_credentials_json()
+    if str(data.get(key_name, "")).strip():
+        return "credentials_json"
+    return "none"
 
 
 def save_telegram_credentials(api_id: int, api_hash: str, phone: Optional[str] = None) -> None:
