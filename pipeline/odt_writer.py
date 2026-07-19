@@ -9,7 +9,11 @@ import os
 from urllib.parse import quote
 
 from odf.opendocument import OpenDocumentText
-from odf.text import P, Span, LineBreak, H, A, Bookmark, TableOfContent, TableOfContentSource, IndexBody, IndexTitle, PageNumber, PageCount
+from odf.text import (
+    P, Span, LineBreak, H, A, Bookmark, Tab, ReferenceMark, ReferenceRef,
+    TableOfContent, TableOfContentSource, IndexBody, IndexTitle, PageNumber, PageCount,
+)
+from odf.namespaces import TEXTNS
 import re
 from odf.draw import Frame, Image as DrawImage
 from odf.table import Table, TableColumn, TableRow, TableCell
@@ -17,13 +21,37 @@ from odf.table import Table, TableColumn, TableRow, TableCell
 from PIL import Image as PILImage  # nur für Dimensionen, optional
 from odf.style import (
     Style, TextProperties, ParagraphProperties, GraphicProperties, PageLayout, PageLayoutProperties,
-    MasterPage, Footer, TableProperties, TableColumnProperties, TableCellProperties,
+    MasterPage, Footer, TableProperties, TableColumnProperties, TableCellProperties, TabStop, TabStops,
 )
 
 from .runs import RunsRecord, RecordPair, TextRun, EmojiRun, LineBreak as LB, ImageRun
 
+# Seitenbreite abzüglich Rand (siehe _add_footer: 21cm Seite, je 2cm Rand
+# links/rechts) - nutzbare Breite für das side_by_side-Tabellenlayout und den
+# rechtsbündigen Seitenzahl-Tabstopp im Inhaltsverzeichnis.
+_PAGE_USABLE_WIDTH_CM = 17.0
 
-def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict[str, Any]:
+# side_by_side-Dokumente werden im Querformat geschrieben (siehe _add_footer),
+# damit die zwei Spalten (Original/Übersetzung) nicht auf Hochformat-Breite
+# gequetscht werden: 29,7cm Seitenbreite abzüglich je 2cm Rand links/rechts.
+_PAGE_USABLE_WIDTH_LANDSCAPE_CM = 25.7
+
+
+def _make_reference_ref(reference_format: str, ref_name: str) -> Any:
+    """ReferenceRef(**kwargs) mappt referenceformat/refname in dieser odfpy-
+    Version nicht auf die echten text:reference-format/text:ref-name-
+    Attribute (das Element fehlt in odfpy's allowed_attributes-Tabelle) -
+    Attribute werden daher direkt über setAttrNS gesetzt, um die kaputte
+    automatische Namespace-Zuordnung (sonst z.B. ns42:e="...") zu umgehen."""
+    ref = ReferenceRef()
+    ref.setAttrNS(TEXTNS, "reference-format", reference_format)
+    ref.setAttrNS(TEXTNS, "ref-name", ref_name)
+    return ref
+
+
+def _ensure_min_styles(
+    doc: OpenDocumentText, style_ids: Dict[str, Any], usable_width_cm: float = _PAGE_USABLE_WIDTH_CM,
+) -> Dict[str, Any]:
     """
     Legt minimale Styles mit den gewünschten Namen an, falls noch nicht vorhanden.
     style_ids erwartet keys: paragraph.base, text.base, graphic.inline_emoji
@@ -85,8 +113,14 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
     doc.styles.addElement(h2)
     out["H.Sub"] = "Heading_20_2"
 
+    # Rechtsbündiger Tabstopp mit Führungspunkten am rechten Satzspiegelrand
+    # für die Seitenzahl - Standardformat von Word/LibreOffice-TOCs.
+    toc1_pp = ParagraphProperties(marginbottom="0.1cm")
+    toc1_tabstops = TabStops()
+    toc1_tabstops.addElement(TabStop(type="right", leaderstyle="dotted", position=f"{usable_width_cm}cm"))
+    toc1_pp.addElement(toc1_tabstops)
     toc1 = Style(name="TOC.Lvl1", family="paragraph")
-    toc1.addElement(ParagraphProperties(marginbottom="0.1cm"))
+    toc1.addElement(toc1_pp)
     doc.styles.addElement(toc1)
     out["TOC.Lvl1"] = "TOC.Lvl1"
 
@@ -122,16 +156,6 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
     out["P.MessageSeparator"] = "P.MessageSeparator"
 
     return out
-
-
-# Seitenbreite abzüglich Rand (siehe _add_footer: 21cm Seite, je 2cm Rand
-# links/rechts) - nutzbare Breite für das side_by_side-Tabellenlayout.
-_PAGE_USABLE_WIDTH_CM = 17.0
-
-# side_by_side-Dokumente werden im Querformat geschrieben (siehe _add_footer),
-# damit die zwei Spalten (Original/Übersetzung) nicht auf Hochformat-Breite
-# gequetscht werden: 29,7cm Seitenbreite abzüglich je 2cm Rand links/rechts.
-_PAGE_USABLE_WIDTH_LANDSCAPE_CM = 25.7
 
 
 def _ensure_table_styles(doc: OpenDocumentText, style_names: Dict[str, Any], usable_width_cm: float = _PAGE_USABLE_WIDTH_CM) -> Dict[str, Any]:
@@ -407,35 +431,43 @@ def _add_heading_with_bookmark(
     text: str,
     stylename: Optional[str],
     bookmark_name: str,
-    toc_entries: List[Tuple[str, int, str]],
+    toc_entries: List[Tuple[str, int, str, str]],
 ) -> None:
     """Schreibt eine H()-Überschrift. Nur Ebene 1 (Section-Titel) bekommt ein
-    eingebettetes Punkt-Bookmark als Sprungziel und wird für _populate_toc
-    gesammelt - wie in Word/LibreOffice-Standard-TOCs landen tiefere Ebenen
-    (z.B. die H2-Kanalmarker beim chronologischen Mischen) nicht im
-    Inhaltsverzeichnis, bleiben im Dokument aber sichtbar. Text wird bewusst
-    über addText() statt des text=-Kwargs gesetzt, damit das Bookmark als
-    erstes Kind vor dem Textknoten liegt."""
+    eingebettetes Punkt-Bookmark (Sprungziel für den TOC-Klicklink) sowie ein
+    text:reference-mark (Quelle für das Seitenzahl-Feld im TOC-Eintrag, siehe
+    _populate_toc) und wird für _populate_toc gesammelt - wie in Word/
+    LibreOffice-Standard-TOCs landen tiefere Ebenen (z.B. die H2-Kanalmarker
+    beim chronologischen Mischen) nicht im Inhaltsverzeichnis, bleiben im
+    Dokument aber sichtbar. Text wird bewusst über addText() statt des
+    text=-Kwargs gesetzt, damit Bookmark/ReferenceMark als erste Kinder vor
+    dem Textknoten liegen."""
     clean_text = _sanitize_text(text)
     h = H(outlinelevel=level, stylename=stylename)
+    page_ref_name = f"{bookmark_name}_pn"
     if level == 1:
         h.addElement(Bookmark(name=bookmark_name))
+        h.addElement(ReferenceMark(name=page_ref_name))
     h.addText(clean_text)
     container.addElement(h)
     if level == 1:
-        toc_entries.append((clean_text, level, bookmark_name))
+        toc_entries.append((clean_text, level, bookmark_name, page_ref_name))
 
 
-def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tuple[str, int, str]]) -> None:
+def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tuple[str, int, str, str]]) -> None:
     """Füllt das per _add_toc angelegte Skelett mit echten Einträgen, sodass
     LibreOffice/Word das Verzeichnis bereits beim Öffnen befüllt zeigen -
-    ohne manuelles 'Index aktualisieren'. Jeder Eintrag ist ein interner
-    Link (href="#bookmark") auf das zugehörige, per
-    _add_heading_with_bookmark gesetzte Bookmark. Auf ein Seitenzahl-Feld
-    wird bewusst verzichtet: ohne echten Layout-Renderer lässt sich die
-    tatsächliche Seite beim Schreiben nicht zuverlässig ermitteln - der
-    klickbare Sprung zur Überschrift wiegt das auf."""
-    for text, _level, bookmark_name in entries:
+    ohne manuelles 'Index aktualisieren'. Jeder Eintrag ist ein interner Link
+    (href="#bookmark") auf das zugehörige, per _add_heading_with_bookmark
+    gesetzte Bookmark, gefolgt von einem rechtsbündigen Tabstopp mit
+    Führungspunkten (siehe TOC.Lvl1-Style) und einem text:reference-ref-Feld
+    (reference-format="page"), das auf das zugehörige text:reference-mark an
+    der Überschrift verweist. Das ist ein "lebendiges" Feld wie unsere
+    bestehenden Fußzeilen-Seitenzahlen (PageNumber/PageCount) - der Betrachter
+    löst es beim Layout/Öffnen selbst auf, ganz ohne "Index aktualisieren"
+    (verifiziert mit LibreOffice headless: korrekte Seitenzahl direkt nach
+    reinem Laden, ohne jeden Update-Aufruf)."""
+    for text, _level, bookmark_name, page_ref_name in entries:
         # entries enthält ausschließlich Ebene-1-Einträge (siehe
         # _add_heading_with_bookmark), daher immer derselbe Absatzstil.
         p = P(stylename=style_names.get("TOC.Lvl1"))
@@ -446,6 +478,8 @@ def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tu
         underline = Span(stylename=style_names.get("T.Underline"))
         bold.addElement(underline)
         underline.addElement(Span(text=text))
+        a.addElement(Tab())
+        a.addElement(_make_reference_ref("page", page_ref_name))
         body.addElement(p)
 
 
@@ -471,7 +505,7 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
     current_chat = None
     seen_subheading: Dict[str, bool] = {}
     seen_channel_labels: Dict[str, bool] = {}
-    toc_entries: List[Tuple[str, int, str]] = []
+    toc_entries: List[Tuple[str, int, str, str]] = []
     bookmark_counter = itertools.count(1)
     for rec in records:
         if rec.chat != current_chat:
@@ -553,7 +587,7 @@ def write_odt_for_record_pairs(
     (Layout-Konsistenz: jede Zeile bleibt zweispaltig).
     """
     doc = OpenDocumentText()
-    style_names = _ensure_min_styles(doc, styles or {})
+    style_names = _ensure_min_styles(doc, styles or {}, usable_width_cm=_PAGE_USABLE_WIDTH_LANDSCAPE_CM)
     style_names = _ensure_table_styles(doc, style_names, usable_width_cm=_PAGE_USABLE_WIDTH_LANDSCAPE_CM)
     col_width_cm = style_names["_side_by_side_col_width_cm"]
     # Zellpolsterung beidseitig abziehen, nie unter eine sinnvolle Mindestbreite fallen.
@@ -577,7 +611,7 @@ def write_odt_for_record_pairs(
     seen_channel_labels: Dict[str, bool] = {}
     current_table: Any = None
     table_idx = 0
-    toc_entries: List[Tuple[str, int, str]] = []
+    toc_entries: List[Tuple[str, int, str, str]] = []
     bookmark_counter = itertools.count(1)
 
     def _start_new_table() -> Any:
