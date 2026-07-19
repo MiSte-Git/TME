@@ -685,6 +685,12 @@ class ScheduleTab(QWidget):
         self._mapping_event.set()
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
+        # Direkt automatisch öffnen (statt nur den Button einzublenden, der
+        # leicht übersehen wird) - btn_login bleibt zusätzlich sichtbar, falls
+        # der Nutzer den Dialog wegklickt und ihn später erneut öffnen will.
+        # Löst nur hier aus (tatsächlicher Lauf mit TelegramSessionInvalid/
+        # TelegramCredentialsMissing), nicht bei jedem App-Start.
+        self._on_login_clicked()
 
     def _on_login_clicked(self) -> None:
         dialog = LoginDialog(self, need_credentials=self._login_needs_credentials)
