@@ -358,7 +358,6 @@ async def run_schedule(
         effective_layout = str(cfg.get("layout") or "linear").strip().lower() if isinstance(cfg, dict) else "linear"
         if effective_layout not in _valid_layouts:
             effective_layout = "linear"
-    want_side_by_side = effective_layout == "side_by_side"
 
     # Übersetzungs-Provider bestimmen: expliziter Parameter (z.B. --provider/UI)
     # hat Vorrang; ohne expliziten Wert greift config.yaml (translation.provider,
@@ -383,6 +382,13 @@ async def run_schedule(
                 f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
             )
             translate = False
+
+    # Ohne aktive Uebersetzung ergibt die Zweispalten-Tabelle (Original|
+    # Uebersetzung) keinen Sinn - immer linear schreiben, unabhaengig vom
+    # zuletzt gewaehlten/gespeicherten Layout-Dropdown-Wert. Erst NACH obigem
+    # Provider-Fallback ausgewertet, damit ein deaktivierter Provider (translate
+    # wird dort ggf. auf False gesetzt) ebenfalls korrekt auf linear zurueckfaellt.
+    want_side_by_side = effective_layout == "side_by_side" and translate
 
     # Ausnahmeliste für Emoji-Wörter, die NICHT übersetzt werden sollen (siehe
     # pipeline/emoji_words.py, data/no_translate_words.json). Nur relevant für
