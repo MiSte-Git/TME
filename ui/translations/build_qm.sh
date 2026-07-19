@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 CANDIDATES=(
   lrelease
   lrelease-qt6
+  pyside6-lrelease
   /usr/lib/qt6/bin/lrelease
   /usr/lib/qt5/bin/lrelease
   /usr/bin/lrelease-qt6
