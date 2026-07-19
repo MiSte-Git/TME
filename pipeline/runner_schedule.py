@@ -37,6 +37,7 @@ from .runner_base_imports import (
     CollectedMessage,
     DEFAULT_LOCAL_TZ,
     ScheduleCancelled,
+    TelegramCredentialsMissing,
     TelegramSessionInvalid,
     _build_message_link,
     _format_heading,
@@ -416,7 +417,17 @@ async def run_schedule(
     source_up = eff_source.upper()
     lang_up = target_lang.upper() if isinstance(target_lang, str) and target_lang else "DE"
 
-    api_id, api_hash, phone = get_telegram_credentials()
+    try:
+        api_id, api_hash, phone = get_telegram_credentials()
+    except RuntimeError as exc:
+        error_msg = (
+            "Telegram API-Zugangsdaten (TELEGRAM_API_ID/TELEGRAM_API_HASH) fehlen. "
+            "Bitte in der App über 'Jetzt einloggen…' hinterlegen oder als "
+            "Umgebungsvariablen setzen."
+        )
+        logger.error(error_msg)
+        _notify(f"Fehler: {error_msg}")
+        raise TelegramCredentialsMissing(error_msg) from exc
 
     _notify("Schedule wird geladen…")
     if schedule_path.suffix.lower() != ".json":

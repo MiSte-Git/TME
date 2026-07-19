@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QWidget, QMessageBox,
 )
 
-from credentials import get_telegram_credentials
+from credentials import get_telegram_credentials, save_telegram_credentials
 from pipeline.telegram_login import (
     LoginCancelled,
     TelegramLoginResult,
@@ -99,19 +99,27 @@ class LoginWorker(QObject):
 
 
 class LoginDialog(QDialog):
-    """Schrittweiser Telegram-Login (Telefonnummer -> Code -> ggf. 2FA-Passwort)
-    direkt im UI, als Ersatz für scripts/telegram_login.py auf der Konsole.
-    Der eigentliche Login läuft in einem Worker-Thread (siehe LoginWorker),
-    damit client.start() die Qt-Event-Loop nicht blockiert."""
+    """Schrittweiser Telegram-Login (ggf. zuerst API-Zugangsdaten -> dann
+    Telefonnummer -> Code -> ggf. 2FA-Passwort) direkt im UI, als Ersatz für
+    scripts/telegram_login.py auf der Konsole. Der eigentliche Login läuft in
+    einem Worker-Thread (siehe LoginWorker), damit client.start() die
+    Qt-Event-Loop nicht blockiert.
 
-    PAGE_PHONE = 0
-    PAGE_CODE = 1
-    PAGE_PASSWORD = 2
-    PAGE_WAIT = 3
-    PAGE_DONE = 4
-    PAGE_ERROR = 5
+    need_credentials=True zeigt vorgeschaltet eine Seite für API ID/API Hash
+    (TelegramCredentialsMissing - komplett fehlende Zugangsdaten); der
+    eigentliche Login-Worker startet erst, nachdem diese gespeichert wurden.
+    Bei need_credentials=False (TelegramSessionInvalid - Zugangsdaten
+    vorhanden, nur Session ungültig) startet der Worker sofort wie bisher."""
 
-    def __init__(self, parent=None) -> None:
+    PAGE_CREDENTIALS = 0
+    PAGE_PHONE = 1
+    PAGE_CODE = 2
+    PAGE_PASSWORD = 3
+    PAGE_WAIT = 4
+    PAGE_DONE = 5
+    PAGE_ERROR = 6
+
+    def __init__(self, parent=None, need_credentials: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Telegram-Login"))
         self.setModal(True)
@@ -125,6 +133,24 @@ class LoginDialog(QDialog):
         outer = QVBoxLayout(self)
         self.stack = QStackedWidget()
         outer.addWidget(self.stack)
+
+        page_credentials = QWidget()
+        v = QVBoxLayout(page_credentials)
+        lbl_credentials_hint = QLabel(self.tr(
+            "Telegram API-Zugangsdaten fehlen. Auf <a href='https://my.telegram.org'>my.telegram.org</a> "
+            "unter \"API development tools\" erstellst du eine Anwendung und erhältst API ID und API Hash:"
+        ))
+        lbl_credentials_hint.setWordWrap(True)
+        lbl_credentials_hint.setOpenExternalLinks(True)
+        v.addWidget(lbl_credentials_hint)
+        v.addWidget(QLabel(self.tr("API ID:")))
+        self.api_id_edit = QLineEdit()
+        self.api_id_edit.setPlaceholderText(self.tr("z.B. 12345678"))
+        v.addWidget(self.api_id_edit)
+        v.addWidget(QLabel(self.tr("API Hash:")))
+        self.api_hash_edit = QLineEdit()
+        v.addWidget(self.api_hash_edit)
+        self.stack.addWidget(page_credentials)
 
         page_phone = QWidget()
         v = QVBoxLayout(page_phone)
@@ -196,8 +222,12 @@ class LoginDialog(QDialog):
         btn_row.addWidget(self.btn_next)
         outer.addLayout(btn_row)
 
-        self.stack.setCurrentIndex(self.PAGE_PHONE)
-        self._start_login()
+        if need_credentials:
+            self.stack.setCurrentIndex(self.PAGE_CREDENTIALS)
+            self.api_id_edit.setFocus()
+        else:
+            self.stack.setCurrentIndex(self.PAGE_PHONE)
+            self._start_login()
 
     def _start_login(self) -> None:
         self._thread = QThread(self)
@@ -245,8 +275,40 @@ class LoginDialog(QDialog):
         self.btn_next.setEnabled(True)
         self.password_edit.setFocus()
 
+    def _on_credentials_submit(self) -> None:
+        api_id_text = self.api_id_edit.text().strip()
+        api_hash_text = self.api_hash_edit.text().strip()
+        if not api_id_text or not api_hash_text:
+            QMessageBox.warning(self, self.tr("Telegram-Login"), self.tr("Bitte API ID und API Hash eingeben."))
+            return
+        try:
+            api_id = int(api_id_text)
+        except ValueError:
+            QMessageBox.warning(self, self.tr("Telegram-Login"), self.tr("API ID muss eine Zahl sein."))
+            return
+        try:
+            save_telegram_credentials(api_id, api_hash_text)
+        except Exception as exc:
+            QMessageBox.critical(
+                self, self.tr("Telegram-Login"),
+                self.tr("Speichern fehlgeschlagen: {err}").format(err=exc),
+            )
+            return
+        logger.info("Telegram-API-Zugangsdaten gespeichert, fahre mit Login fort.")
+        try:
+            _, _, cfg_phone = get_telegram_credentials()
+        except Exception:
+            cfg_phone = None
+        if cfg_phone:
+            self.phone_edit.setText(cfg_phone)
+        self.stack.setCurrentIndex(self.PAGE_PHONE)
+        self._start_login()
+
     def _on_next_clicked(self) -> None:
         idx = self.stack.currentIndex()
+        if idx == self.PAGE_CREDENTIALS:
+            self._on_credentials_submit()
+            return
         if idx == self.PAGE_PHONE:
             value = self.phone_edit.text().strip()
             if not value:

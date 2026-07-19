@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from pipeline.runner_schedule import run_schedule
-from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid
+from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid, TelegramCredentialsMissing
 from ui.login_dialog import LoginDialog
 from ui.api_keys_dialog import ApiKeysDialog
 from pipeline.logging_setup import get_logger
@@ -77,6 +77,7 @@ class ScheduleWorker(QObject):
     error = Signal(str)
     cancelled = Signal()
     session_invalid = Signal(str)
+    credentials_missing = Signal(str)
     status = Signal(str)
     waiting_for_mapping = Signal()
 
@@ -171,6 +172,8 @@ class ScheduleWorker(QObject):
             self.finished.emit(result)
         except ScheduleCancelled:
             self.cancelled.emit()
+        except TelegramCredentialsMissing as exc:
+            self.credentials_missing.emit(str(exc))
         except TelegramSessionInvalid as exc:
             self.session_invalid.emit(str(exc))
         except Exception as exc:
@@ -309,6 +312,10 @@ class ScheduleTab(QWidget):
         self.lettermap_tab: LettermapTab | None = None
         self._loading_state = False
         self._last_output_path: Path | None = None
+        # Steuert, welcher Schritt "Jetzt einloggen…" zuerst zeigt: komplett
+        # fehlende API-Zugangsdaten (True) vs. nur ungültige Session (False) -
+        # siehe _on_credentials_missing/_on_session_invalid/_on_login_clicked.
+        self._login_needs_credentials = False
  
         lay.addStretch()
  
@@ -512,16 +519,19 @@ class ScheduleTab(QWidget):
         self.worker.error.connect(self._on_worker_error)
         self.worker.cancelled.connect(self._on_worker_cancelled)
         self.worker.session_invalid.connect(self._on_session_invalid)
+        self.worker.credentials_missing.connect(self._on_credentials_missing)
         self.worker.status.connect(self._on_worker_status)
         self.worker.waiting_for_mapping.connect(self._on_waiting_for_mapping)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.error.connect(self.worker_thread.quit)
         self.worker.cancelled.connect(self.worker_thread.quit)
         self.worker.session_invalid.connect(self.worker_thread.quit)
+        self.worker.credentials_missing.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.error.connect(self.worker.deleteLater)
         self.worker.cancelled.connect(self.worker.deleteLater)
         self.worker.session_invalid.connect(self.worker.deleteLater)
+        self.worker.credentials_missing.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
         self.worker_thread.finished.connect(self._on_thread_finished)
         self.worker_thread.start()
@@ -649,6 +659,18 @@ class ScheduleTab(QWidget):
 
     def _on_session_invalid(self, message: str) -> None:
         logger.warning("Telegram-Session ungültig gemeldet: %s", message)
+        self._login_needs_credentials = False
+        self._show_login_needed(message)
+
+    def _on_credentials_missing(self, message: str) -> None:
+        logger.warning("Telegram-API-Zugangsdaten fehlen: %s", message)
+        self._login_needs_credentials = True
+        self._show_login_needed(message)
+
+    def _show_login_needed(self, message: str) -> None:
+        # Gemeinsame UI-Reaktion für session_invalid/credentials_missing;
+        # welcher Dialog-Schritt beim Klick auf btn_login zuerst kommt,
+        # steuert self._login_needs_credentials (siehe _on_login_clicked).
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
         self.progress.setVisible(False)
@@ -665,7 +687,7 @@ class ScheduleTab(QWidget):
             self.lettermap_tab.on_mapping_finished()
 
     def _on_login_clicked(self) -> None:
-        dialog = LoginDialog(self)
+        dialog = LoginDialog(self, need_credentials=self._login_needs_credentials)
         dialog.exec()
         if dialog.login_result is not None:
             self.btn_login.setVisible(False)

@@ -17,6 +17,16 @@ class ScheduleCancelled(Exception):
     "vom Nutzer abgebrochen" unterscheiden können."""
 
 
+class TelegramCredentialsMissing(RuntimeError):
+    """Wird geworfen, wenn TELEGRAM_API_ID/TELEGRAM_API_HASH weder als
+    Umgebungsvariable noch in credentials.json vorhanden sind (komplett
+    fehlende Zugangsdaten) - getrennt von TelegramSessionInvalid (Zugangsdaten
+    vorhanden, aber Session ungültig/abgelaufen), damit die UI hierfür einen
+    vorgeschalteten Zugangsdaten-Dialog statt des Login-Code-Dialogs anbieten
+    kann. Anders als TelegramSessionInvalid keine Zirkelbezug-Problematik mit
+    runner_by_ids.py, daher direkt hier definiert statt von dort re-exportiert."""
+
+
 @dataclass
 class CollectedMessage:
     title: str
