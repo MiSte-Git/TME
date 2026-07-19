@@ -35,6 +35,7 @@ input/
 out/
 *.bak
 *.session
+*.session-journal
 *.code-workspace
 *.desktop
 
