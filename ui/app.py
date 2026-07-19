@@ -321,7 +321,7 @@ class ScheduleTab(QWidget):
  
         self._load_state()
         self._install_state_handlers()
-        self._on_translate_toggled(self.cb_translate.isChecked())
+        self._sync_layout_enabled(self.cb_translate.isChecked())
 
     def _credentials_present(self) -> bool:
         try:
@@ -741,11 +741,27 @@ class ScheduleTab(QWidget):
         except Exception:
             pass
 
-    def _on_translate_toggled(self, checked: bool) -> None:
+    def _sync_layout_enabled(self, checked: bool) -> None:
         # Layout "Übersetzung neben Original" (side_by_side) ist nur relevant/
         # wirksam, wenn überhaupt übersetzt wird.
         self.lbl_layout.setEnabled(checked)
         self.layout_combo.setEnabled(checked)
+
+    def _on_translate_toggled(self, checked: bool) -> None:
+        self._sync_layout_enabled(checked)
+        if checked:
+            # Frühzeitig auf fehlenden API-Key hinweisen, statt erst beim
+            # Start des Laufs (_ensure_provider_api_key bleibt dort zusätzlich
+            # als letzte Absicherung bestehen, siehe run_schedule_file).
+            self._ensure_provider_api_key(str(self.provider_combo.currentData() or "telegram"))
+
+    def _on_provider_changed(self, _index: int) -> None:
+        self._save_state()
+        if self.cb_translate.isChecked():
+            # Nur für den neu gewählten Provider prüfen, nicht für alle drei -
+            # _ensure_provider_api_key() kümmert sich bereits nur um genau
+            # diesen einen Provider.
+            self._ensure_provider_api_key(str(self.provider_combo.currentData() or "telegram"))
 
     def _install_state_handlers(self) -> None:
         self.schedule_edit.editingFinished.connect(self._save_state)
@@ -760,7 +776,7 @@ class ScheduleTab(QWidget):
         self.cb_interleave.toggled.connect(lambda _checked: self._save_state())
         self.cb_incremental.toggled.connect(lambda _checked: self._save_state())
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
-        self.provider_combo.currentIndexChanged.connect(lambda _i: self._save_state())
+        self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.layout_combo.currentIndexChanged.connect(lambda _i: self._save_state())
 
     def _load_state(self) -> None:
