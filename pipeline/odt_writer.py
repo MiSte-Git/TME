@@ -51,33 +51,44 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
     t_code = Style(name="T.Code", family="text"); t_code.addElement(TextProperties(fontname="Courier New")); doc.styles.addElement(t_code)
     t_spoiler = Style(name="T.Spoiler", family="text"); t_spoiler.addElement(TextProperties(color="#ffffff", backgroundcolor="#000000")); doc.styles.addElement(t_spoiler)
 
-    h1 = Style(name="H.Base", family="paragraph")
+    # Namen/Attribute folgen der ODF-Konvention für native Gliederungsstile
+    # ("Heading_20_1" = interner Name für Anzeigename "Heading 1", "_20_"
+    # kodiert das Leerzeichen). style:default-outline-level ist die
+    # eigentliche Verknüpfung Style<->Gliederungsebene - Word/LibreOffice
+    # erkennen Absätze mit diesen Styles dadurch unabhängig von unserer
+    # eigenen TOC-Erzeugung als Gliederungsebene in Navigator/Navigationsleiste
+    # (das reine text:outline-level am <text:h>-Element allein reicht dafür
+    # nicht überall, insb. nicht für Word-Kompatibilität).
+    h1 = Style(name="Heading_20_1", family="paragraph", displayname="Heading 1", defaultoutlinelevel="1")
     h1.addElement(ParagraphProperties(marginbottom="0.2cm"))
     h1.addElement(TextProperties(fontsize="14pt", fontweight="bold"))
     doc.styles.addElement(h1)
-    out["H.Base"] = "H.Base"
+    out["H.Base"] = "Heading_20_1"
 
-    h1_break = Style(name="H.Break", family="paragraph")
+    # Seitenumbruch-Variante von Heading 1 (ab der zweiten Section) - eigener
+    # Style-Name, da style:name je Familie eindeutig sein muss, aber über
+    # parent-style-name + eigenes default-outline-level weiterhin klar als
+    # Heading-1-Variante erkennbar.
+    h1_break = Style(
+        name="Heading_20_1_20_Break", family="paragraph",
+        displayname="Heading 1 (Seitenumbruch)", parentstylename="Heading_20_1",
+        defaultoutlinelevel="1",
+    )
     h1_break.addElement(ParagraphProperties(marginbottom="0.2cm", breakbefore="page"))
     h1_break.addElement(TextProperties(fontsize="14pt", fontweight="bold"))
     doc.styles.addElement(h1_break)
-    out["H.Break"] = "H.Break"
+    out["H.Break"] = "Heading_20_1_20_Break"
 
-    h2 = Style(name="H.Sub", family="paragraph")
+    h2 = Style(name="Heading_20_2", family="paragraph", displayname="Heading 2", defaultoutlinelevel="2")
     h2.addElement(ParagraphProperties(marginbottom="0.15cm"))
     h2.addElement(TextProperties(fontsize="12pt", fontweight="bold"))
     doc.styles.addElement(h2)
-    out["H.Sub"] = "H.Sub"
+    out["H.Sub"] = "Heading_20_2"
 
     toc1 = Style(name="TOC.Lvl1", family="paragraph")
     toc1.addElement(ParagraphProperties(marginbottom="0.1cm"))
     doc.styles.addElement(toc1)
     out["TOC.Lvl1"] = "TOC.Lvl1"
-
-    toc2 = Style(name="TOC.Lvl2", family="paragraph")
-    toc2.addElement(ParagraphProperties(marginbottom="0.1cm", marginleft="0.5cm"))
-    doc.styles.addElement(toc2)
-    out["TOC.Lvl2"] = "TOC.Lvl2"
 
     g = Style(name=out["G.InlineEmoji"], family="graphic")
     # Minimaler Grafikstil ohne weitere Properties für maximale Kompatibilität
@@ -374,7 +385,13 @@ def _add_toc(doc, styles_map) -> IndexBody:
     erst nach dem Schleifendurchlauf vollständig vor, die Body-Position im
     Dokument muss aber schon vorher (vor dem Inhalt) feststehen."""
     toc = TableOfContent(name="ToC", protected="true")
-    src = TableOfContentSource(outlinelevel=10, indexscope="document")
+    # outlinelevel=1: nur Ebene-1-Überschriften (Section-Titel) landen im
+    # Verzeichnis - wie in Word/LibreOffice-Standard-TOCs. Wirkt sich zwar
+    # nur auf ein natives "Index aktualisieren" aus (unsere eigene
+    # _populate_toc() unten liest das Attribut nicht), hält das Skelett aber
+    # konsistent mit den tatsächlich eingetragenen Ebenen (siehe
+    # _add_heading_with_bookmark: registriert ebenfalls nur Ebene 1).
+    src = TableOfContentSource(outlinelevel=1, indexscope="document")
     toc.addElement(src)
     body = IndexBody(); it = IndexTitle(name="ToCTitle"); it.addElement(P(text="Inhaltsverzeichnis")); body.addElement(it)
     toc.addElement(body); doc.text.addElement(toc)
@@ -392,16 +409,21 @@ def _add_heading_with_bookmark(
     bookmark_name: str,
     toc_entries: List[Tuple[str, int, str]],
 ) -> None:
-    """Schreibt eine H()-Überschrift mit eingebettetem Punkt-Bookmark als
-    Sprungziel und sammelt Text/Ebene/Bookmark-Name für _populate_toc.
-    Text wird bewusst über addText() statt des text=-Kwargs gesetzt, damit
-    das Bookmark als erstes Kind vor dem Textknoten liegt."""
+    """Schreibt eine H()-Überschrift. Nur Ebene 1 (Section-Titel) bekommt ein
+    eingebettetes Punkt-Bookmark als Sprungziel und wird für _populate_toc
+    gesammelt - wie in Word/LibreOffice-Standard-TOCs landen tiefere Ebenen
+    (z.B. die H2-Kanalmarker beim chronologischen Mischen) nicht im
+    Inhaltsverzeichnis, bleiben im Dokument aber sichtbar. Text wird bewusst
+    über addText() statt des text=-Kwargs gesetzt, damit das Bookmark als
+    erstes Kind vor dem Textknoten liegt."""
     clean_text = _sanitize_text(text)
     h = H(outlinelevel=level, stylename=stylename)
-    h.addElement(Bookmark(name=bookmark_name))
+    if level == 1:
+        h.addElement(Bookmark(name=bookmark_name))
     h.addText(clean_text)
     container.addElement(h)
-    toc_entries.append((clean_text, level, bookmark_name))
+    if level == 1:
+        toc_entries.append((clean_text, level, bookmark_name))
 
 
 def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tuple[str, int, str]]) -> None:
@@ -413,9 +435,10 @@ def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tu
     wird bewusst verzichtet: ohne echten Layout-Renderer lässt sich die
     tatsächliche Seite beim Schreiben nicht zuverlässig ermitteln - der
     klickbare Sprung zur Überschrift wiegt das auf."""
-    for text, level, bookmark_name in entries:
-        style_name = style_names.get(f"TOC.Lvl{level}", style_names.get("TOC.Lvl1"))
-        p = P(stylename=style_name)
+    for text, _level, bookmark_name in entries:
+        # entries enthält ausschließlich Ebene-1-Einträge (siehe
+        # _add_heading_with_bookmark), daher immer derselbe Absatzstil.
+        p = P(stylename=style_names.get("TOC.Lvl1"))
         a = A(href=f"#{bookmark_name}")
         p.addElement(a)
         bold = Span(stylename=style_names.get("T.Bold"))
