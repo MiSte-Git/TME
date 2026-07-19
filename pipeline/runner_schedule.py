@@ -1262,8 +1262,13 @@ async def run_schedule(
                             effective_translation_provider, msg.id, exc,
                         )
                         _notify(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {msg.id} fehlgeschlagen: {exc}")
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.error(
+                            "Unerwarteter Fehler bei Übersetzung (%s) für Nachricht %s: %s",
+                            effective_translation_provider, msg.id, exc,
+                            exc_info=True,
+                        )
+                        _notify(f"Unerwarteter Fehler bei Übersetzung ({effective_translation_provider}) für Nachricht {msg.id}: {exc}")
 
                 if store is not None:
                     store.add_message(channel_key, msg.id, getattr(msg, "date", None), original_record, translation_record_for_store)
