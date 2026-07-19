@@ -1315,7 +1315,10 @@ async def run_schedule(
                 "0 finale %s für ODT-Ausgabe '%s' - Schedule/Zeitfenster/Kanal prüfen.",
                 "record_pairs" if want_side_by_side else "Records", out_path,
             )
-            _notify(f"Warnung: 0 finale Einträge für '{out_path}' - es wird trotzdem ein (leeres) ODT geschrieben.")
+            _notify(
+                "Achtung: Für diesen Lauf wurden 0 Nachrichten gefunden - Kanal, Zeitfenster oder "
+                f"Telegram-Session prüfen. Es wird trotzdem ein (leeres) ODT geschrieben ('{out_path}')."
+            )
         else:
             logger.info(
                 "Vor ODT-Schreibvorgang: %d finale %s für '%s'.",
