@@ -447,6 +447,7 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
     # Einfache Struktur: H1 für Gruppe/Chat, danach Runs je Nachricht als Absätze
     current_chat = None
     seen_subheading: Dict[str, bool] = {}
+    seen_channel_labels: Dict[str, bool] = {}
     toc_entries: List[Tuple[str, int, str]] = []
     bookmark_counter = itertools.count(1)
     for rec in records:
@@ -463,6 +464,21 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
                     f"toc_bm_{next(bookmark_counter)}", toc_entries,
                 )
                 seen_subheading[rec.chat] = True
+        # channel_label (chronologisches Mischen, siehe runner_schedule.py):
+        # rec.chat bleibt für alle Nachrichten gleich, daher hier - anders
+        # als bei subheading oben - unabhängig vom chat-Wechsel geprüft. Das
+        # "erste Auftreten" wird bewusst erst hier, beim tatsächlichen
+        # Schreiben der finalen (ggf. aus dem Store neu sortierten) Liste
+        # ermittelt statt beim Sammeln der Nachrichten - sonst würde ein
+        # späterer inkrementeller Lauf (frischer, leerer Sichtbarkeits-Stand)
+        # denselben Kanal fälschlich erneut markieren.
+        channel_label = rec.meta.get("channel_label") if rec.meta else None
+        if channel_label and not seen_channel_labels.get(channel_label):
+            _add_heading_with_bookmark(
+                doc.text, 2, str(channel_label), style_names.get("H.Sub"),
+                f"toc_bm_{next(bookmark_counter)}", toc_entries,
+            )
+            seen_channel_labels[channel_label] = True
         link_text = rec.meta.get("link") if rec.meta else None
         header_runs = rec.meta.get("header_runs") if rec.meta else None
         p_header = _build_header_paragraph(doc, header_runs, link_text, style_names)
@@ -535,6 +551,7 @@ def write_odt_for_record_pairs(
 
     current_chat = None
     seen_subheading: Dict[str, bool] = {}
+    seen_channel_labels: Dict[str, bool] = {}
     current_table: Any = None
     table_idx = 0
     toc_entries: List[Tuple[str, int, str]] = []
@@ -565,6 +582,7 @@ def write_odt_for_record_pairs(
         if rec.chat != current_chat:
             if current_table is not None:
                 doc.text.addElement(current_table)
+                current_table = None
             heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
             _add_heading_with_bookmark(
                 doc.text, 1, str(rec.chat), heading_style,
@@ -577,6 +595,24 @@ def write_odt_for_record_pairs(
                     f"toc_bm_{next(bookmark_counter)}", toc_entries,
                 )
                 seen_subheading[rec.chat] = True
+        # channel_label (chronologisches Mischen): rec.chat bleibt über die
+        # gesamte Tabelle gleich, daher unabhängig vom chat-Wechsel geprüft;
+        # "erstes Auftreten" wird - wie in write_odt_for_records - erst hier
+        # beim Schreiben der finalen Liste ermittelt (siehe Kommentar dort),
+        # nicht beim Sammeln. Die laufende Tabelle wird davor abgeschlossen
+        # (Überschriften stehen bewusst außerhalb jeder Tabelle, siehe
+        # Docstring oben) und danach neu begonnen.
+        channel_label = rec.meta.get("channel_label") if rec.meta else None
+        if channel_label and not seen_channel_labels.get(channel_label):
+            if current_table is not None:
+                doc.text.addElement(current_table)
+                current_table = None
+            _add_heading_with_bookmark(
+                doc.text, 2, str(channel_label), style_names.get("H.Sub"),
+                f"toc_bm_{next(bookmark_counter)}", toc_entries,
+            )
+            seen_channel_labels[channel_label] = True
+        if current_table is None:
             current_table = _start_new_table()
 
         row = TableRow()
