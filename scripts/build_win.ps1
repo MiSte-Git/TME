@@ -113,8 +113,12 @@ if ($env:TME_BUILD_TRANSLATIONS -eq "1" -and (Test-Path $TransBuild)) {
 }
 
 # --- Syntax check ---
+# Nur den Projekt-Code pruefen, NICHT .venv/build/dist mitkompilieren - sonst
+# werden bei jedem Lauf unnoetig saemtliche Abhaengigkeiten (inkl. torch,
+# PyInstaller selbst etc.) mitkompiliert, was den Syntax-Check unnoetig
+# verlangsamt, ohne projektrelevante Fehler aufzudecken.
 Write-Host "Running syntax check (compileall)..."
-& $Py -m compileall -q . | Out-Host
+& $Py -m compileall -q . -x "[\\/](\.venv|build|dist)[\\/]" | Out-Host
 
 # --- Build EXE (onedir standardmaessig / onefile mit -Release, windowed) ---
 $Entry = Join-Path $RepoRoot "ui\app.py"
@@ -150,16 +154,38 @@ $KeyringHiddenImports = @(
   "--hidden-import", "keyring.backends.fail"
 )
 
+# Laufzeit-Ressourcen, die ui/app.py per Path(__file__).parent bzw. relativem
+# Pfad laedt und die PyInstaller nicht automatisch erkennt (keine Python-
+# Imports): Theme-QSS (inkl. des darin per relativem url() referenzierten
+# checkbox-check.svg), Qt-Uebersetzungen und das Fenster-Icon. Analog zu
+# TME_mac.spec, nur mit Windows-Pfadsyntax (";" statt ":" als Trenner
+# zwischen Quelle/Ziel bei --add-data).
+$DataArgs = @()
+$ThemeDark = Join-Path $RepoRoot "ui\theme_dark.qss"
+if (Test-Path $ThemeDark) { $DataArgs += @("--add-data", "$ThemeDark;ui") }
+$ThemeLight = Join-Path $RepoRoot "ui\theme_light.qss"
+if (Test-Path $ThemeLight) { $DataArgs += @("--add-data", "$ThemeLight;ui") }
+$CheckboxSvg = Join-Path $RepoRoot "ui\checkbox-check.svg"
+if (Test-Path $CheckboxSvg) { $DataArgs += @("--add-data", "$CheckboxSvg;ui") }
+$WindowIcon = Join-Path $RepoRoot "Telegram-LibreOffice.png"
+if (Test-Path $WindowIcon) { $DataArgs += @("--add-data", "$WindowIcon;.") }
+$TranslationsDir = Join-Path $RepoRoot "ui\translations"
+if (Test-Path $TranslationsDir) {
+  Get-ChildItem -Path $TranslationsDir -Filter "app_*.qm" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $DataArgs += @("--add-data", "$($_.FullName);ui\translations")
+  }
+}
+
 Write-Host "Building EXE via PyInstaller..."
-& $Py -m PyInstaller `
-  --noconfirm `
-  @CleanArgs `
-  @ModeArgs `
-  --windowed `
-  --name "TME" `
-  @IconArgs `
-  @KeyringHiddenImports `
-  $Entry | Out-Host
+# Alle Flags zu EINEM Array zusammenfassen und nur einmal splatten (@PyInstallerArgs).
+# Mehrere getrennte @Array-Splats in einer einzigen backtick-fortgesetzten
+# Aufrufzeile fuehren in diesem Skript (mit [switch]-Parametern im param()-Block)
+# reproduzierbar zu einem PowerShell-5.1-Marshalling-Fehler: PyInstaller erhaelt
+# dabei den Skriptpfad ($Entry) nicht als eigenes Argument und bricht mit
+# "unrecognized arguments: ...\ui\app.py" ab, noch bevor irgendein PyInstaller-
+# Log erscheint. Ein einzelnes zusammengesetztes Array umgeht das zuverlaessig.
+$PyInstallerArgs = @("--noconfirm") + $CleanArgs + $ModeArgs + @("--windowed", "--name", "TME") + $IconArgs + $KeyringHiddenImports + $DataArgs + @($Entry)
+& $Py -m PyInstaller @PyInstallerArgs | Out-Host
 
 # --- Result ---
 $DistDir = Join-Path $RepoRoot "dist"
