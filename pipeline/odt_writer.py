@@ -3,12 +3,13 @@ odt_writer: Runs → ODT schreiben mit benannten Style-IDs
 """
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+import itertools
 import os
 from urllib.parse import quote
 
 from odf.opendocument import OpenDocumentText
-from odf.text import P, Span, LineBreak, H, A, TableOfContent, TableOfContentSource, IndexBody, IndexTitle, PageNumber, PageCount
+from odf.text import P, Span, LineBreak, H, A, Bookmark, TableOfContent, TableOfContentSource, IndexBody, IndexTitle, PageNumber, PageCount
 import re
 from odf.draw import Frame, Image as DrawImage
 from odf.table import Table, TableColumn, TableRow, TableCell
@@ -67,6 +68,16 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
     h2.addElement(TextProperties(fontsize="12pt", fontweight="bold"))
     doc.styles.addElement(h2)
     out["H.Sub"] = "H.Sub"
+
+    toc1 = Style(name="TOC.Lvl1", family="paragraph")
+    toc1.addElement(ParagraphProperties(marginbottom="0.1cm"))
+    doc.styles.addElement(toc1)
+    out["TOC.Lvl1"] = "TOC.Lvl1"
+
+    toc2 = Style(name="TOC.Lvl2", family="paragraph")
+    toc2.addElement(ParagraphProperties(marginbottom="0.1cm", marginleft="0.5cm"))
+    doc.styles.addElement(toc2)
+    out["TOC.Lvl2"] = "TOC.Lvl2"
 
     g = Style(name=out["G.InlineEmoji"], family="graphic")
     # Minimaler Grafikstil ohne weitere Properties für maximale Kompatibilität
@@ -356,7 +367,12 @@ def _add_footer(doc, styles_map, landscape: bool = False):
     f.addElement(p); mp.addElement(f); doc.masterstyles.addElement(mp)
 
 
-def _add_toc(doc, styles_map):
+def _add_toc(doc, styles_map) -> IndexBody:
+    """Schreibt das TOC-Skelett und gibt die IndexBody zurück, damit der
+    Aufrufer sie nach dem Hauptinhalt mit echten Einträgen füllen kann
+    (siehe _populate_toc) - Text und outlinelevel der Überschriften liegen
+    erst nach dem Schleifendurchlauf vollständig vor, die Body-Position im
+    Dokument muss aber schon vorher (vor dem Inhalt) feststehen."""
     toc = TableOfContent(name="ToC", protected="true")
     src = TableOfContentSource(outlinelevel=10, indexscope="document")
     toc.addElement(src)
@@ -365,6 +381,49 @@ def _add_toc(doc, styles_map):
     pb_name = styles_map.get("P.PageBreak")
     if pb_name:
         doc.text.addElement(P(stylename=pb_name))
+    return body
+
+
+def _add_heading_with_bookmark(
+    container: Any,
+    level: int,
+    text: str,
+    stylename: Optional[str],
+    bookmark_name: str,
+    toc_entries: List[Tuple[str, int, str]],
+) -> None:
+    """Schreibt eine H()-Überschrift mit eingebettetem Punkt-Bookmark als
+    Sprungziel und sammelt Text/Ebene/Bookmark-Name für _populate_toc.
+    Text wird bewusst über addText() statt des text=-Kwargs gesetzt, damit
+    das Bookmark als erstes Kind vor dem Textknoten liegt."""
+    clean_text = _sanitize_text(text)
+    h = H(outlinelevel=level, stylename=stylename)
+    h.addElement(Bookmark(name=bookmark_name))
+    h.addText(clean_text)
+    container.addElement(h)
+    toc_entries.append((clean_text, level, bookmark_name))
+
+
+def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tuple[str, int, str]]) -> None:
+    """Füllt das per _add_toc angelegte Skelett mit echten Einträgen, sodass
+    LibreOffice/Word das Verzeichnis bereits beim Öffnen befüllt zeigen -
+    ohne manuelles 'Index aktualisieren'. Jeder Eintrag ist ein interner
+    Link (href="#bookmark") auf das zugehörige, per
+    _add_heading_with_bookmark gesetzte Bookmark. Auf ein Seitenzahl-Feld
+    wird bewusst verzichtet: ohne echten Layout-Renderer lässt sich die
+    tatsächliche Seite beim Schreiben nicht zuverlässig ermitteln - der
+    klickbare Sprung zur Überschrift wiegt das auf."""
+    for text, level, bookmark_name in entries:
+        style_name = style_names.get(f"TOC.Lvl{level}", style_names.get("TOC.Lvl1"))
+        p = P(stylename=style_name)
+        a = A(href=f"#{bookmark_name}")
+        p.addElement(a)
+        bold = Span(stylename=style_names.get("T.Bold"))
+        a.addElement(bold)
+        underline = Span(stylename=style_names.get("T.Underline"))
+        bold.addElement(underline)
+        underline.addElement(Span(text=text))
+        body.addElement(p)
 
 
 def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dict[str, Any], doc_title: str | None = None) -> Path:
@@ -382,19 +441,27 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
         tp.addElement(Span(text=str(doc_title), stylename=tstyle_text))
         doc.text.addElement(tp)
     # TOC + Footer wie im Originalskript
-    _add_toc(doc, style_names)
+    toc_body = _add_toc(doc, style_names)
     _add_footer(doc, style_names)
 
     # Einfache Struktur: H1 für Gruppe/Chat, danach Runs je Nachricht als Absätze
     current_chat = None
     seen_subheading: Dict[str, bool] = {}
+    toc_entries: List[Tuple[str, int, str]] = []
+    bookmark_counter = itertools.count(1)
     for rec in records:
         if rec.chat != current_chat:
             heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
-            doc.text.addElement(H(outlinelevel=1, text=_sanitize_text(str(rec.chat)), stylename=heading_style))
+            _add_heading_with_bookmark(
+                doc.text, 1, str(rec.chat), heading_style,
+                f"toc_bm_{next(bookmark_counter)}", toc_entries,
+            )
             current_chat = rec.chat
             if rec.meta and rec.meta.get("subheading") and not seen_subheading.get(rec.chat):
-                doc.text.addElement(H(outlinelevel=2, text=_sanitize_text(str(rec.meta["subheading"])), stylename=style_names.get("H.Sub")))
+                _add_heading_with_bookmark(
+                    doc.text, 2, str(rec.meta["subheading"]), style_names.get("H.Sub"),
+                    f"toc_bm_{next(bookmark_counter)}", toc_entries,
+                )
                 seen_subheading[rec.chat] = True
         link_text = rec.meta.get("link") if rec.meta else None
         header_runs = rec.meta.get("header_runs") if rec.meta else None
@@ -406,6 +473,8 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
         separator_style = style_names.get("P.MessageSeparator")
         if separator_style:
             doc.text.addElement(P(stylename=separator_style))
+
+    _populate_toc(toc_body, style_names, toc_entries)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
@@ -461,13 +530,15 @@ def write_odt_for_record_pairs(
         tp = P(stylename=tstyle)
         tp.addElement(Span(text=str(doc_title), stylename=tstyle_text))
         doc.text.addElement(tp)
-    _add_toc(doc, style_names)
+    toc_body = _add_toc(doc, style_names)
     _add_footer(doc, style_names, landscape=True)
 
     current_chat = None
     seen_subheading: Dict[str, bool] = {}
     current_table: Any = None
     table_idx = 0
+    toc_entries: List[Tuple[str, int, str]] = []
+    bookmark_counter = itertools.count(1)
 
     def _start_new_table() -> Any:
         nonlocal table_idx
@@ -495,10 +566,16 @@ def write_odt_for_record_pairs(
             if current_table is not None:
                 doc.text.addElement(current_table)
             heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
-            doc.text.addElement(H(outlinelevel=1, text=_sanitize_text(str(rec.chat)), stylename=heading_style))
+            _add_heading_with_bookmark(
+                doc.text, 1, str(rec.chat), heading_style,
+                f"toc_bm_{next(bookmark_counter)}", toc_entries,
+            )
             current_chat = rec.chat
             if rec.meta and rec.meta.get("subheading") and not seen_subheading.get(rec.chat):
-                doc.text.addElement(H(outlinelevel=2, text=_sanitize_text(str(rec.meta["subheading"])), stylename=style_names.get("H.Sub")))
+                _add_heading_with_bookmark(
+                    doc.text, 2, str(rec.meta["subheading"]), style_names.get("H.Sub"),
+                    f"toc_bm_{next(bookmark_counter)}", toc_entries,
+                )
                 seen_subheading[rec.chat] = True
             current_table = _start_new_table()
 
@@ -531,6 +608,8 @@ def write_odt_for_record_pairs(
 
     if current_table is not None:
         doc.text.addElement(current_table)
+
+    _populate_toc(toc_body, style_names, toc_entries)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
