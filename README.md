@@ -92,6 +92,8 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
 4. „Schedule → ODT erzeugen“ starten; Fortschritt, ggf. fehlende Mappings und Ergebnisdialog erscheinen direkt in der Oberfläche.
 5. UI merkt sich die letzten Einstellungen in `data/ui_state.json`. Existiert die zuletzt gewählte Datei nicht mehr, bleibt das Feld leer.
 
+Das erzeugte ODT enthält ein Inhaltsverzeichnis-Feld, das LibreOffice/Word erst beim Öffnen befüllt – per Rechtsklick ins Verzeichnis → „Index aktualisieren“ (bzw. Cursor hineinklicken und F9). Das ist normales ODF-Verhalten, kein Fehler.
+
 ## CLI-Workflows
 Das Skript `pipeline/emoji_pipeline.py` bündelt verschiedene Teilaufgaben:
 ```bash
