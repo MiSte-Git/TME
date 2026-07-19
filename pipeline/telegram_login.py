@@ -69,7 +69,10 @@ def perform_telegram_login(
             code_callback=code_callback,
             password=password_callback,
         )
-        me = client.get_me()
+        # get_me() ist (anders als start()/disconnect()) eine reine "async def"-
+        # Methode ohne eingebaute Sync-Wandlung - ein direkter Aufruf liefert nur
+        # ein Coroutine-Objekt zurueck statt des User-Objekts.
+        me = client.loop.run_until_complete(client.get_me())
         if me is None:
             raise RuntimeError("Login abgeschlossen, aber get_me() lieferte kein Ergebnis.")
         return TelegramLoginResult(user_id=me.id, username=getattr(me, "username", None))
