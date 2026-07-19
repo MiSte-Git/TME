@@ -984,7 +984,7 @@ async def run_schedule(
             link_url = item.link or _build_message_link(item.entity, msg, topic_id=item.topic_id)
 
             if effective_chronological_merge and item.channel_label:
-                header_runs.append(TextRun(kind="TextRun", text=f"Kanal: {item.channel_label}", bold=True))
+                header_runs.append(TextRun(kind="TextRun", text=f"Titel: {item.channel_label}", bold=True))
                 header_runs.append(LineBreak(kind="LineBreak"))
             header_runs.append(TextRun(kind="TextRun", text=header_text))
             header_runs.append(LineBreak(kind="LineBreak"))

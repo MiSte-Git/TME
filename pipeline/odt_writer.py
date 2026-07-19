@@ -618,7 +618,7 @@ def write_odt_for_record_pairs(
         row = TableRow()
 
         # Original-Spalte: Header (Zeitstempel/Link/Autor bzw. bei aktivem
-        # Interleaving die "Kanal: <Name>"-Zeile) + Nachrichtentext.
+        # Interleaving die "Titel: <Name>"-Zeile) + Nachrichtentext.
         cell_orig = TableCell(stylename=style_names["TCell.Base"])
         link_text = rec.meta.get("link") if rec.meta else None
         header_runs = rec.meta.get("header_runs") if rec.meta else None
