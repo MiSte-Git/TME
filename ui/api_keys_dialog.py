@@ -8,6 +8,9 @@ from PySide6.QtWidgets import (
 )
 
 from credentials import (
+    get_deepl_api_key,
+    get_google_translate_api_key,
+    get_openai_api_key,
     get_provider_api_key_source,
     save_deepl_api_key,
     save_google_translate_api_key,
@@ -27,6 +30,12 @@ _SAVE_FUNCS = {
     "deepl": save_deepl_api_key,
     "google": save_google_translate_api_key,
     "openai": save_openai_api_key,
+}
+
+_GET_FUNCS = {
+    "deepl": get_deepl_api_key,
+    "google": get_google_translate_api_key,
+    "openai": get_openai_api_key,
 }
 
 
@@ -60,20 +69,56 @@ class ApiKeysDialog(QDialog):
         grid.setSpacing(8)
         self._edits: Dict[str, QLineEdit] = {}
         self._status_labels: Dict[str, QLabel] = {}
+        # Zuletzt gespeicherter/vorbefüllter Wert je Provider - dient dazu, ein
+        # unverändert gelassenes Feld beim Klick auf "Speichern" als No-Op zu
+        # erkennen, statt den Key unnötig neu zu speichern/zu rotieren.
+        self._original_values: Dict[str, str] = {}
 
         for row, (provider, display_name) in enumerate(_PROVIDERS):
             grid.addWidget(QLabel(display_name), row, 0)
+
             edit = QLineEdit()
             edit.setEchoMode(QLineEdit.EchoMode.Password)
             edit.setPlaceholderText(self.tr("Neuen Key eingeben zum Ändern…"))
-            grid.addWidget(edit, row, 1)
+            try:
+                current_value = _GET_FUNCS[provider]() or ""
+            except Exception:
+                current_value = ""
+            edit.setText(current_value)
+            self._original_values[provider] = current_value
+            self._edits[provider] = edit
+
+            field_row = QHBoxLayout()
+            field_row.setContentsMargins(0, 0, 0, 0)
+            field_row.setSpacing(4)
+            field_row.addWidget(edit, 1)
+            eye_btn = QPushButton("👁")
+            eye_btn.setCheckable(True)
+            eye_btn.setFixedWidth(32)
+            eye_btn.setToolTip(self.tr("Wert anzeigen/verbergen"))
+            eye_btn.setEnabled(bool(current_value))
+            eye_btn.toggled.connect(
+                lambda checked, e=edit: e.setEchoMode(
+                    QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+                )
+            )
+
+            def _on_field_text_changed(text: str, e: QLineEdit = edit, b: QPushButton = eye_btn) -> None:
+                has_text = bool(text)
+                b.setEnabled(has_text)
+                if not has_text:
+                    b.setChecked(False)
+
+            edit.textChanged.connect(_on_field_text_changed)
+            field_row.addWidget(eye_btn)
+            grid.addLayout(field_row, row, 1)
+
             btn = QPushButton(self.tr("Speichern"))
             btn.clicked.connect(lambda _checked=False, p=provider: self._on_save_clicked(p))
             grid.addWidget(btn, row, 2)
             status = QLabel("")
             status.setWordWrap(True)
             grid.addWidget(status, row, 3)
-            self._edits[provider] = edit
             self._status_labels[provider] = status
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
@@ -108,6 +153,15 @@ class ApiKeysDialog(QDialog):
     def _on_save_clicked(self, provider: str) -> None:
         edit = self._edits[provider]
         value = edit.text().strip()
+        original = self._original_values.get(provider, "")
+        if value == original:
+            # Unverändertes (ggf. vorbefülltes) Feld - nichts zu tun, insbesondere
+            # keinen bestehenden Key unnötig neu speichern/rotieren.
+            QMessageBox.information(
+                self, self.tr("API-Keys"),
+                self.tr("Feld wurde nicht geändert - nichts zu speichern."),
+            )
+            return
         if not value:
             QMessageBox.warning(self, self.tr("API-Keys"), self.tr("Bitte einen Key eingeben."))
             return
@@ -120,7 +174,7 @@ class ApiKeysDialog(QDialog):
                 self.tr("Speichern fehlgeschlagen: {err}").format(err=exc),
             )
             return
-        edit.clear()
+        self._original_values[provider] = value
         self._refresh_status(provider)
         logger.info("API-Key für '%s' gespeichert (Backend: %s).", provider, backend)
         if backend == "credentials_json_fallback":
