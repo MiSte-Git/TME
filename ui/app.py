@@ -1105,7 +1105,7 @@ class MainWindow(QMainWindow):
         self.action_api_help.triggered.connect(self._show_api_help)
         self.action_readme.triggered.connect(lambda: self._open_doc("README.md"))
         self.action_deploy.triggered.connect(lambda: self._open_doc("docs/DEPLOY.md"))
-        self.action_spec.triggered.connect(lambda: self._open_doc("telegram_odt.spec"))
+        self.action_spec.triggered.connect(lambda: self._open_doc("TME.spec"))
         self.help_menu.addAction(self.action_api_help)
         self.help_menu.addAction(self.action_readme)
         self.help_menu.addAction(self.action_deploy)

@@ -140,7 +140,7 @@ python3 -m pip install pyinstaller PySide6 telethon odfpy pillow easyocr keyring
 ```bash
 # aus dem Repo-Root
 ./scripts/build_mac.sh
-# Ergebnis: dist/Telegram-ODT.app
+# Ergebnis: dist/TME.app
 ```
 
 Optionales Signieren/Notarisieren (mit Developer-ID):
@@ -148,9 +148,9 @@ Optionales Signieren/Notarisieren (mit Developer-ID):
 ```bash
 codesign --deep --force --verify --verbose \
   --sign "Developer ID Application: <Dein Name>" \
-  dist/Telegram-ODT.app
-xcrun notarytool submit dist/Telegram-ODT.app --keychain-profile <profil> --wait
-xcrun stapler staple dist/Telegram-ODT.app
+  dist/TME.app
+xcrun notarytool submit dist/TME.app --keychain-profile <profil> --wait
+xcrun stapler staple dist/TME.app
 ```
 
 ### Windows
@@ -209,7 +209,7 @@ python3 scripts/generate_build_files.py
 ```
 
 Unter Linux wird die `.desktop`-Datei automatisch mitgeneriert und nach
-`~/.local/share/applications/telegram-odt.desktop` geschrieben (inkl. Aufruf von
+`~/.local/share/applications/tme.desktop` geschrieben (inkl. Aufruf von
 `update-desktop-database`, falls installiert). `Exec=`/`TryExec=` zeigen dabei auf
 `.venv/bin/python3`, falls ein lokales venv existiert, sonst auf das im `PATH` gefundene
 `python3`.

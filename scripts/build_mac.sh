@@ -13,9 +13,9 @@ if ! command -v pyinstaller >/dev/null 2>&1; then
 fi
 
 # Build via spec
-pyinstaller --noconfirm telegram_odt.spec
+pyinstaller --noconfirm TME_mac.spec
 
-APP="dist/Telegram-ODT.app"
+APP="dist/TME.app"
 if [ -d "$APP" ]; then
   echo "Built: $APP"
 else

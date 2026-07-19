@@ -171,7 +171,10 @@ exe = EXE(
 )
 """
 
-DESKTOP_ENTRY_NAME = "telegram-odt.desktop"
+def _desktop_entry_filename(app_name: str) -> str:
+    """z.B. 'TME' -> 'tme.desktop' - folgt --name statt eines fest verdrahteten
+    Namens, damit die Desktop-Datei zum tatsächlich gebauten App-Namen passt."""
+    return f"{app_name.strip().lower().replace(' ', '-')}.desktop"
 
 
 def _desktop_applications_dir() -> Path:
@@ -213,10 +216,10 @@ TryExec={python_exec}
 """
 
 
-def install_desktop_entry(repo_root: Path, entry: Path) -> Path:
+def install_desktop_entry(repo_root: Path, entry: Path, app_name: str) -> Path:
     target_dir = _desktop_applications_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / DESKTOP_ENTRY_NAME
+    target_path = target_dir / _desktop_entry_filename(app_name)
 
     content = generate_desktop_entry(repo_root, entry)
     target_path.write_text(content, encoding="utf-8")
@@ -225,8 +228,8 @@ def install_desktop_entry(repo_root: Path, entry: Path) -> Path:
     return target_path
 
 
-def uninstall_desktop_entry() -> bool:
-    target_path = _desktop_applications_dir() / DESKTOP_ENTRY_NAME
+def uninstall_desktop_entry(app_name: str) -> bool:
+    target_path = _desktop_applications_dir() / _desktop_entry_filename(app_name)
     if not target_path.is_file():
         return False
 
@@ -279,8 +282,8 @@ def main() -> int:
     repo_root = Path(args.repo).resolve()
 
     if args.uninstall_desktop:
-        removed = uninstall_desktop_entry()
-        target_path = _desktop_applications_dir() / DESKTOP_ENTRY_NAME
+        removed = uninstall_desktop_entry(args.name)
+        target_path = _desktop_applications_dir() / _desktop_entry_filename(args.name)
         if removed:
             print(f"Removed: {target_path}")
         else:
@@ -317,7 +320,7 @@ def main() -> int:
         want_desktop = sys.platform.startswith("linux")
 
     if want_desktop:
-        desktop_path = install_desktop_entry(repo_root, entry)
+        desktop_path = install_desktop_entry(repo_root, entry, args.name)
         print(f" - {desktop_path} (installiert)")
 
     return 0
