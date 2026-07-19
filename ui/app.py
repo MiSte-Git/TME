@@ -316,7 +316,12 @@ class ScheduleTab(QWidget):
         # fehlende API-Zugangsdaten (True) vs. nur ungültige Session (False) -
         # siehe _on_credentials_missing/_on_session_invalid/_on_login_clicked.
         self._login_needs_credentials = False
- 
+        # Einmaliger Einrichtungs-Hinweis beim allerersten Start (siehe
+        # maybe_show_first_run_hint()) - unabhängig von den reaktiven Checks
+        # TelegramSessionInvalid/TelegramCredentialsMissing/
+        # _ensure_provider_api_key, die weiterhin unverändert bestehen bleiben.
+        self._first_run_hint_shown = False
+
         lay.addStretch()
  
         self._load_state()
@@ -702,6 +707,44 @@ class ScheduleTab(QWidget):
                 self.tr("Login erfolgreich - du kannst den Lauf jetzt erneut starten.")
             )
 
+    def maybe_show_first_run_hint(self) -> None:
+        """Einmaliger, rein informativer Hinweis beim allerersten Start (siehe
+        first_run_hint_shown in ui_state.json). Ersetzt NICHT die bestehenden
+        reaktiven Prüfungen (TelegramSessionInvalid/TelegramCredentialsMissing/
+        _ensure_provider_api_key), die unverändert beim tatsächlichen
+        Laufstart bzw. Aktivieren von "Übersetzen" greifen."""
+        if self._first_run_hint_shown:
+            return
+        # Sofort als gezeigt markieren (unabhängig vom später geklickten
+        # Button) - er soll garantiert nur einmal erscheinen.
+        self._first_run_hint_shown = True
+        self._save_state()
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle(self.tr("Willkommen bei TME"))
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setText(self.tr(
+            "Für die Nutzung werden Telegram API-Zugangsdaten (ID/Hash) sowie "
+            "mindestens ein Übersetzungs-Provider-Key benötigt, falls du "
+            "übersetzen möchtest. Diese können jederzeit über „Jetzt einloggen…“ "
+            "bzw. das Menü „Einstellungen → API-Keys verwalten…“ hinterlegt werden."
+        ))
+        btn_setup = msg.addButton(self.tr("Jetzt einrichten"), QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(self.tr("Später"), QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_setup)
+        msg.exec()
+        if msg.clickedButton() is btn_setup:
+            self._open_first_run_setup()
+
+    def _open_first_run_setup(self) -> None:
+        # Telegram-Zugangsdaten und Übersetzungs-Provider-Keys sind zwei
+        # unabhängige Dinge - beide nacheinander anbieten, statt eine eigene
+        # Auswahl zu bauen.
+        login_dialog = LoginDialog(self, need_credentials=not self._credentials_present())
+        login_dialog.exec()
+        api_keys_dialog = ApiKeysDialog(self)
+        api_keys_dialog.exec()
+
     def _on_thread_finished(self) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
@@ -839,6 +882,9 @@ class ScheduleTab(QWidget):
                 lidx = self.layout_combo.findData(layout_val)
                 if lidx >= 0:
                     self.layout_combo.setCurrentIndex(lidx)
+            first_run_hint_shown = data.get("first_run_hint_shown")
+            if isinstance(first_run_hint_shown, bool):
+                self._first_run_hint_shown = first_run_hint_shown
         except Exception:
             pass
         finally:
@@ -861,6 +907,7 @@ class ScheduleTab(QWidget):
             "translation_provider": self.provider_combo.currentData(),
             "incremental_mode": self.cb_incremental.isChecked(),
             "layout": self.layout_combo.currentData(),
+            "first_run_hint_shown": self._first_run_hint_shown,
         }
         try:
             p = _ui_state_file()
@@ -879,6 +926,9 @@ class MainWindow(QMainWindow):
         # Gruppierung in ScheduleTab, die die eigentliche Ursache der übergroßen
         # minimumSizeHint behebt).
         self.setMinimumSize(700, 400)
+        # Verhindert, dass der einmalige Erste-Schritte-Hinweis (siehe
+        # showEvent) bei jedem Minimieren/Wiederherstellen erneut geprüft wird.
+        self._first_run_hint_checked = False
         # App/Icon setzen, wenn vorhanden
         root = Path(__file__).resolve().parents[1]
         icon_path = root / "Telegram-LibreOffice.png"
@@ -907,7 +957,13 @@ class MainWindow(QMainWindow):
 
         # Menü: Ansicht → Theme und Sprache
         self._init_menus()
-        
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        super().showEvent(event)
+        if not self._first_run_hint_checked:
+            self._first_run_hint_checked = True
+            self.schedule_tab.maybe_show_first_run_hint()
+
     def _init_lang_bar(self, parent_layout) -> None:
         from PySide6.QtWidgets import QWidget, QHBoxLayout, QToolButton
         bar = QWidget()
