@@ -106,6 +106,11 @@ def _ensure_min_styles(doc: OpenDocumentText, style_ids: Dict[str, Any]) -> Dict
 # links/rechts) - nutzbare Breite für das side_by_side-Tabellenlayout.
 _PAGE_USABLE_WIDTH_CM = 17.0
 
+# side_by_side-Dokumente werden im Querformat geschrieben (siehe _add_footer),
+# damit die zwei Spalten (Original/Übersetzung) nicht auf Hochformat-Breite
+# gequetscht werden: 29,7cm Seitenbreite abzüglich je 2cm Rand links/rechts.
+_PAGE_USABLE_WIDTH_LANDSCAPE_CM = 25.7
+
 
 def _ensure_table_styles(doc: OpenDocumentText, style_names: Dict[str, Any], usable_width_cm: float = _PAGE_USABLE_WIDTH_CM) -> Dict[str, Any]:
     """Legt Styles für das side_by_side-Tabellenlayout an (zwei gleich breite
@@ -140,6 +145,17 @@ def _ensure_table_styles(doc: OpenDocumentText, style_names: Dict[str, Any], usa
     col_header_text.addElement(TextProperties(fontweight="bold"))
     doc.styles.addElement(col_header_text)
     style_names["T.ColumnHeader"] = "T.ColumnHeader"
+
+    # Eigener (kleinerer) Absatzstil für den Nachrichtentext in den Tabellen-
+    # zellen - Schriftgröße lässt sich in ODF nur über den Absatz-/Textstil
+    # setzen, nicht über TCell.Base (table-cell-Styles beeinflussen nur
+    # Rahmen/Innenabstand/Hintergrund, keine Textformatierung). P.Base selbst
+    # bleibt für den linearen Fließtext unverändert.
+    cell_para_style = Style(name="P.CellBase", family="paragraph")
+    cell_para_style.addElement(ParagraphProperties(marginbottom="0.3cm", lineheight="150%"))
+    cell_para_style.addElement(TextProperties(fontsize="10pt"))
+    doc.automaticstyles.addElement(cell_para_style)
+    style_names["P.CellBase"] = "P.CellBase"
 
     return style_names
 
@@ -312,9 +328,11 @@ def _build_header_paragraph(
     return p_header
 
 
-def _add_footer(doc, styles_map):
+def _add_footer(doc, styles_map, landscape: bool = False):
     pl = PageLayout(name="pm1")
-    pl.addElement(PageLayoutProperties(pagewidth="21cm", pageheight="29.7cm",
+    page_width, page_height = ("29.7cm", "21cm") if landscape else ("21cm", "29.7cm")
+    pl.addElement(PageLayoutProperties(pagewidth=page_width, pageheight=page_height,
+                                       printorientation="landscape" if landscape else "portrait",
                                        margintop="1.5cm", marginbottom="1.5cm",
                                        marginleft="2cm", marginright="2cm"))
     doc.automaticstyles.addElement(pl)
@@ -428,7 +446,7 @@ def write_odt_for_record_pairs(
     """
     doc = OpenDocumentText()
     style_names = _ensure_min_styles(doc, styles or {})
-    style_names = _ensure_table_styles(doc, style_names)
+    style_names = _ensure_table_styles(doc, style_names, usable_width_cm=_PAGE_USABLE_WIDTH_LANDSCAPE_CM)
     col_width_cm = style_names["_side_by_side_col_width_cm"]
     # Zellpolsterung beidseitig abziehen, nie unter eine sinnvolle Mindestbreite fallen.
     max_img_width_cm = max(col_width_cm - 0.4, 2.0)
@@ -444,7 +462,7 @@ def write_odt_for_record_pairs(
         tp.addElement(Span(text=str(doc_title), stylename=tstyle_text))
         doc.text.addElement(tp)
     _add_toc(doc, style_names)
-    _add_footer(doc, style_names)
+    _add_footer(doc, style_names, landscape=True)
 
     current_chat = None
     seen_subheading: Dict[str, bool] = {}
@@ -494,16 +512,16 @@ def write_odt_for_record_pairs(
         p_header = _build_header_paragraph(doc, header_runs, link_text, style_names)
         if p_header is not None:
             cell_orig.addElement(p_header)
-        render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.Base"), max_image_width_cm=max_img_width_cm)
+        render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
 
         # Übersetzungs-Spalte: nur der übersetzte Text, kein eigener Header
         # (Zeitstempel/Kanal gehören zum Original, eine Wiederholung wäre in
         # der Seite-an-Seite-Ansicht redundant).
         cell_tr = TableCell(stylename=style_names["TCell.Base"])
         if pair.translation is not None:
-            render_runs_into_container(doc, cell_tr, pair.translation.runs, style_names, style_names.get("P.Base"), max_image_width_cm=max_img_width_cm)
+            render_runs_into_container(doc, cell_tr, pair.translation.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
         else:
-            p_missing = P(stylename=style_names.get("P.Base"))
+            p_missing = P(stylename=style_names.get("P.CellBase"))
             p_missing.addElement(Span(text=_MISSING_TRANSLATION_PLACEHOLDER))
             cell_tr.addElement(p_missing)
 
