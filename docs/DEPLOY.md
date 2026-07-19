@@ -35,6 +35,29 @@ python3 ui/app.py
 - Alternativ werden auch `credentials.yaml`/`credentials.yml` oder eine `.env`-Datei in diesem Ordner akzeptiert.
 - Beim ersten Start fragt die App die Keys ab und legt diese JSON-Datei automatisch an (POSIX-Rechte 0600), falls keine Quelle gefunden wurde.
 
+### Login direkt im UI (empfohlener Weg)
+
+Am einfachsten müssen API ID/API Hash überhaupt nicht vorab manuell hinterlegt
+werden: Fehlen sie komplett oder ist die gespeicherte Telegram-Session
+ungültig/abgelaufen, öffnet die App beim Start eines Laufs automatisch einen
+schrittweisen Login-Dialog:
+
+1. Falls nötig zuerst API ID/API Hash (wird über `save_telegram_credentials()`
+   in dieselbe `credentials.json` wie oben geschrieben).
+2. Telefonnummer, per Telegram zugesandter Bestätigungscode, ggf. 2FA-Passwort.
+
+Der Dialog lässt sich jederzeit erneut über den Button „Jetzt einloggen…" im
+Schedule-Tab öffnen. Für Umgebungen ohne UI (z. B. Server) gibt es weiterhin
+den Konsolen-Fallback:
+
+```bash
+.venv\Scripts\python.exe scripts\telegram_login.py   # Windows
+python3 scripts/telegram_login.py                    # macOS/Linux
+```
+
+Beide Wege nutzen dieselbe Login-Logik (`pipeline/telegram_login.py`) und
+erzeugen/erneuern dieselbe `tg_session.session`-Datei im Repo-Root.
+
 ## Übersetzungs-Provider (DeepL, Google Translate, ChatGPT)
 
 Standardmäßig übersetzt die App über Telegrams eigene Übersetzungsfunktion
@@ -44,7 +67,20 @@ in `config.yaml` bzw. Dropdown "Übersetzungs-Provider" im UI, `--provider` im
 CLI). Jeder externe Provider braucht einen eigenen API-Key, abgelegt nach
 demselben Muster wie die Telegram-Keys:
 
-1) Umgebungsvariablen:
+1) Direkt im UI (empfohlen): Menü „Einstellungen → API-Keys verwalten…" öffnet
+einen Dialog mit einem Eingabefeld je Provider (Augen-Symbol zum kurzzeitigen
+Einblenden des Klartexts). Gespeichert wird bevorzugt verschlüsselt im
+**OS-Keyring** - Windows Credential Locker, macOS Keychain, unter Linux
+Secret Service (GNOME Keyring/KWallet, benötigt einen laufenden Keyring-
+Daemon mit D-Bus-Session; auf headless/minimalen Linux-Installationen ist das
+**nicht garantiert** verfügbar). Findet die App kein nutzbares Keyring-Backend,
+weicht sie automatisch auf `credentials.json` im Klartext aus und markiert das
+deutlich im Dialog sowie im Log (`data/tme.log`). Bereits aktivierte
+Übersetzung/Provider-Auswahl im Schedule-Tab prüft zusätzlich sofort beim
+Aktivieren bzw. Providerwechsel, ob ein Key vorliegt, statt erst beim
+Laufstart mit einem API-Fehler zu scheitern.
+
+2) Umgebungsvariablen (haben stets Vorrang vor Keyring/`credentials.json`):
 
 ```bash
 export DEEPL_API_KEY=your_deepl_key
@@ -52,8 +88,9 @@ export GOOGLE_TRANSLATE_API_KEY=your_google_key
 export OPENAI_API_KEY=your_openai_key
 ```
 
-2) Oder in derselben `~/.config/telegram-odt/credentials.json` wie die
-Telegram-Keys, als zusätzliche Felder:
+3) Oder manuell in derselben `~/.config/telegram-odt/credentials.json` wie die
+Telegram-Keys, als zusätzliche Felder (identisch zum Klartext-Fallback des
+UI-Dialogs):
 
 ```json
 {
@@ -95,7 +132,7 @@ cd ui/translations
 Voraussetzungen (einmalig):
 
 ```bash
-python3 -m pip install pyinstaller PySide6 telethon odfpy pillow easyocr
+python3 -m pip install pyinstaller PySide6 telethon odfpy pillow easyocr keyring
 ```
 
 ### macOS
@@ -118,15 +155,45 @@ xcrun stapler staple dist/Telegram-ODT.app
 
 ### Windows
 
-PowerShell (als Benutzer mit Python/py installiert):
+PowerShell (als Benutzer mit Python/py installiert; legt bei Bedarf automatisch
+ein `.venv` an):
 
 ```powershell
 # aus dem Repo-Root
 ./scripts/build_win.ps1
-# Ergebnis: dist\Telegram-ODT\Telegram-ODT.exe
+# Ergebnis (Standard, --onedir - schnellerer lokaler Test-Build,
+# PyInstaller-Analyse-Cache bleibt erhalten): dist\TME\TME.exe
+
+./scripts/build_win.ps1 -Release
+# Ergebnis (--onefile + --clean - für tatsächliche Weitergabe an Endnutzer):
+# dist\TME.exe
+
+./scripts/build_win.ps1 -Clean
+# wie Standard, erzwingt aber zusätzlich --clean (z.B. nach Änderungen an
+# Abhängigkeiten/Hidden-Imports)
 ```
 
-Optionaler Installer: mit Inno Setup kann aus `dist\Telegram-ODT\` ein Installer gebaut werden (nicht im Repo enthalten).
+Das Skript ergänzt automatisch die für `keyring`s dynamische Backend-Auswahl
+nötigen PyInstaller-Hidden-Imports und weist zu Beginn darauf hin, falls
+Windows Defender Echtzeitschutz aktiv zu sein scheint (verlangsamt Builds
+spürbar - `C:\Projekte\TME` ggf. als Ausschluss eintragen).
+
+Zum reinen Starten der UI aus der venv, ohne Build:
+
+```powershell
+./scripts/run_ui.ps1
+```
+
+Installation als Start-Menü-Eintrag (erwartet `dist\TME.exe`, also einen
+`-Release`-Build):
+
+```powershell
+./scripts/windows-install.ps1 [-AllUsers] [-CreateDesktopShortcut]
+# Deinstallation: ./scripts/windows-uninstall.ps1
+```
+
+Optionaler Installer: mit Inno Setup kann aus `dist\TME\` (bzw. `dist\TME.exe`
+bei `-Release`) ein Installer gebaut werden (nicht im Repo enthalten).
 
 ### Linux
 
@@ -163,6 +230,6 @@ python3 scripts/generate_build_files.py --uninstall-desktop
 
 ## Laufzeit-Hinweise
 
-- Credentials liegen außerhalb des Repos unter `~/.config/telegram-odt/` (oder per ENV). Die App fragt bei Bedarf einmalig nach.
+- Credentials liegen außerhalb des Repos unter `~/.config/telegram-odt/` (oder per ENV/OS-Keyring). Die App fragt bei Bedarf direkt im UI danach (Login-Dialog bzw. API-Keys-Dialog, siehe oben).
 - OCR: Für Tesseract-OCR ist eine Systeminstallation von Tesseract erforderlich; EasyOCR lädt Modelle bei Bedarf. Standardmäßig ist OCR optional (siehe `config.yaml`).
-- Logs/Reports liegen unter `data/` und `out/`.
+- Logs/Reports liegen unter `data/` und `out/`, insbesondere `data/tme.log` für den Verlauf einzelner Läufe.

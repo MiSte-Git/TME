@@ -31,6 +31,21 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   Übersetzung, zeigt die Zelle einen Platzhaltertext
 - Automatisches Nachladen fehlender Emoji-PNGs und Reporting
 - Übergreifender CLI-Einstieg (`pipeline/emoji_pipeline.py`) für Skript-Workflows
+- Laufender Schedule-Export lässt sich im UI jederzeit sauber abbrechen
+  („Abbrechen"-Button neben „Schedule → ODT erzeugen")
+- Telegram-Login direkt im UI: ist die Session ungültig/abgelaufen oder
+  fehlen die API-Zugangsdaten komplett, öffnet sich automatisch ein
+  schrittweiser Login-Dialog (ggf. zuerst API ID/API Hash, dann
+  Telefonnummer/Code/2FA) - kein manueller Konsolen-Umweg mehr nötig
+  (Konsolen-Fallback bleibt als `scripts/telegram_login.py` erhalten)
+- API-Keys für externe Übersetzungs-Provider (DeepL/Google/OpenAI) lassen
+  sich über „Einstellungen → API-Keys verwalten…" direkt im UI hinterlegen;
+  Speicherung bevorzugt verschlüsselt im OS-Keyring (Windows Credential
+  Locker/macOS Keychain/Secret Service unter Linux), mit Klartext-
+  Fallback auf `credentials.json` inkl. deutlicher Kennzeichnung, falls kein
+  Keyring-Backend verfügbar ist
+- Zentrales Logging nach `data/tme.log` (zusätzlich Konsolenausgabe) für
+  effektive Lauf-Optionen, Nachrichtenzählung pro Section und Fehlerursachen
 
 ## Voraussetzungen
 - Python 3.11+
@@ -38,22 +53,34 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   ```bash
   python3 -m pip install -r requirements.txt
   ```
-- Telegram API-Credentials als Umgebungsvariablen setzen (https://my.telegram.org):
-  ```bash
-  export TELEGRAM_API_ID=123456
-  export TELEGRAM_API_HASH="abcdef..."
-  ```
-  Unter Windows PowerShell entsprechend `setx TELEGRAM_API_ID 123456` usw.
-  Alternativ: private `credentials.json` unter `~/.config/telegram-odt/` (Details in
-  [docs/DEPLOY.md](docs/DEPLOY.md)).
+- Telegram API-Credentials (https://my.telegram.org) hinterlegen - drei gleichwertige Wege:
+  - Direkt im UI: fehlen die Zugangsdaten oder ist die Session abgelaufen, öffnet
+    sich beim Start eines Laufs automatisch ein Login-Dialog, der sie abfragt
+    und speichert (kein manueller Schritt vorab nötig).
+  - Als Umgebungsvariablen:
+    ```bash
+    export TELEGRAM_API_ID=123456
+    export TELEGRAM_API_HASH="abcdef..."
+    ```
+    Unter Windows PowerShell entsprechend `setx TELEGRAM_API_ID 123456` usw.
+  - Alternativ: private `credentials.json` unter `~/.config/telegram-odt/` (Details in
+    [docs/DEPLOY.md](docs/DEPLOY.md)).
 
 ## Projektstruktur
-- `ui/app.py` – Qt-basierte Oberfläche (Schedule-Tab, Lettermap-Tab)
-- `pipeline/` – Kernlogik für Telegram-Abfragen, Emoji-Assets, ODT Writer
+- `ui/app.py` – Qt-basierte Oberfläche (Schedule-Tab, Schedule-Editor-Tab,
+  Lettermap-Tab, Tab „Nicht übersetzen"); `ui/login_dialog.py` und
+  `ui/api_keys_dialog.py` – Login- bzw. API-Keys-Dialoge
+- `pipeline/` – Kernlogik für Telegram-Abfragen, Emoji-Assets, ODT Writer,
+  zentrales Logging (`pipeline/logging_setup.py` → `data/tme.log`)
+- `credentials.py` – zentrale Zugangsdaten-Verwaltung (Telegram + Provider-
+  API-Keys, ENV/OS-Keyring/`credentials.json`)
 - `input/` – Beispiel-Schedules (TXT/JSON)
 - `output/` – erzeugte ODTs
-- `data/` – Laufzeitdaten (letter_map.json, reports, UI-Status)
+- `data/` – Laufzeitdaten (letter_map.json, reports, UI-Status, `tme.log`)
 - `media/` & `cache/` – gespeicherte Medien bzw. Emoji-PNGs
+- `scripts/` – Hilfsskripte (siehe [docs/DEPLOY.md](docs/DEPLOY.md)): Build
+  (`build_win.ps1`, `build_mac.sh`), UI-Start unter Windows (`run_ui.ps1`),
+  Konsolen-Login-Fallback (`telegram_login.py`)
 
 ## Schnellstart (UI)
 1. Abhängigkeiten installieren und API-Credentials setzen.
@@ -94,6 +121,7 @@ Für Contributor:innen, die tiefer in Aufbau und Entstehung der Pipeline einstei
 ## Entwicklung
 - Syntax-Check: `python3 -m compileall -q .`
 - Debug-Ausgaben und Reports werden unter `data/` erzeugt (z. B. `missing_lettermap_docs.json`).
+- Lauf-Log: `data/tme.log` (Zeitstempel, effektive Optionen pro Lauf, Nachrichtenzählung, Fehler) - zusätzlich auf der Konsole ausgegeben.
 - Vor Pull-Requests bitte sicherstellen, dass UI und CLI-Läufe mit einer Beispiel-Schedule erfolgreich sind.
 
 ## Lizenz
