@@ -1179,17 +1179,22 @@ async def run_schedule(
                 base_meta: Dict[str, Any] = {}
                 if item.subheading:
                     base_meta["subheading"] = item.subheading
-                if effective_chronological_merge and item.channel_label:
+                if effective_chronological_merge:
                     # rec.chat ist beim chronologischen Mischen für alle
-                    # Nachrichten identisch (interleave_chat_label) - der
-                    # rohe Kanalname wird hier auf jedem Datensatz
-                    # mitgegeben; odt_writer.py entscheidet beim finalen
-                    # Rendern (nicht hier), bei welchem Datensatz er als
-                    # H2-Zwischenüberschrift auftaucht (erstes Auftreten in
-                    # der tatsächlich geschriebenen Reihenfolge - wichtig für
-                    # korrekte Wiederholungen bei Store-Neu-Rendern, siehe
-                    # message_store.render_records_from_store).
-                    base_meta["channel_label"] = item.channel_label
+                    # Nachrichten identisch (interleave_chat_label) - odt_writer.py
+                    # soll daraus daher KEINE automatische H1-Überschrift pro
+                    # chat-Wechsel erzeugen (würde nur einmalig, redundant den
+                    # bereits als Absatz gesetzten Dokumententitel duplizieren).
+                    base_meta["suppress_auto_heading"] = True
+                    if item.channel_label:
+                        # Der rohe Kanalname wird hier auf jedem Datensatz
+                        # mitgegeben; odt_writer.py entscheidet beim finalen
+                        # Rendern (nicht hier), bei welchem Datensatz er als
+                        # Ebene-1-Überschrift auftaucht (erstes Auftreten in
+                        # der tatsächlich geschriebenen Reihenfolge - wichtig für
+                        # korrekte Wiederholungen bei Store-Neu-Rendern, siehe
+                        # message_store.render_records_from_store).
+                        base_meta["channel_label"] = item.channel_label
                 if header_runs:
                     base_meta["header_runs"] = header_runs
                 if link_url:
@@ -1239,8 +1244,10 @@ async def run_schedule(
                             tr_meta: Dict[str, Any] = {}
                             if item.subheading:
                                 tr_meta["subheading"] = item.subheading
-                            if effective_chronological_merge and item.channel_label:
-                                tr_meta["channel_label"] = item.channel_label
+                            if effective_chronological_merge:
+                                tr_meta["suppress_auto_heading"] = True
+                                if item.channel_label:
+                                    tr_meta["channel_label"] = item.channel_label
                             if header_runs:
                                 tr_meta["header_runs"] = header_runs
                             if link_url:

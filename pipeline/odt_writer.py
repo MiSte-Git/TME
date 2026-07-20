@@ -437,9 +437,12 @@ def _add_heading_with_bookmark(
     eingebettetes Punkt-Bookmark (Sprungziel für den TOC-Klicklink) sowie ein
     text:reference-mark (Quelle für das Seitenzahl-Feld im TOC-Eintrag, siehe
     _populate_toc) und wird für _populate_toc gesammelt - wie in Word/
-    LibreOffice-Standard-TOCs landen tiefere Ebenen (z.B. die H2-Kanalmarker
-    beim chronologischen Mischen) nicht im Inhaltsverzeichnis, bleiben im
-    Dokument aber sichtbar. Text wird bewusst über addText() statt des
+    LibreOffice-Standard-TOCs landen tiefere Ebenen nicht im Inhaltsverzeichnis,
+    bleiben im Dokument aber sichtbar. Beim chronologischen Mischen sind die
+    Kanalmarker (channel_label) bewusst selbst Ebene-1-Überschriften (siehe
+    write_odt_for_records), da dort keine automatische chat-H1 erzeugt wird
+    (rec.meta["suppress_auto_heading"]) und die Kanalnamen die einzige
+    sinnvolle TOC-Gliederung sind. Text wird bewusst über addText() statt des
     text=-Kwargs gesetzt, damit Bookmark/ReferenceMark als erste Kinder vor
     dem Textknoten liegen."""
     clean_text = _sanitize_text(text)
@@ -509,11 +512,19 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
     bookmark_counter = itertools.count(1)
     for rec in records:
         if rec.chat != current_chat:
-            heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
-            _add_heading_with_bookmark(
-                doc.text, 1, str(rec.chat), heading_style,
-                f"toc_bm_{next(bookmark_counter)}", toc_entries,
-            )
+            # suppress_auto_heading (chronologisches Mischen, siehe
+            # runner_schedule.py): rec.chat ist dort für alle Nachrichten
+            # identisch (interleave_chat_label) - eine H1 dafür würde nur
+            # einmalig den bereits als Absatz gesetzten Dokumententitel
+            # duplizieren. Die eigentliche Gliederung übernimmt dort
+            # stattdessen channel_label weiter unten.
+            suppress_heading = bool(rec.meta and rec.meta.get("suppress_auto_heading"))
+            if not suppress_heading:
+                heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
+                _add_heading_with_bookmark(
+                    doc.text, 1, str(rec.chat), heading_style,
+                    f"toc_bm_{next(bookmark_counter)}", toc_entries,
+                )
             current_chat = rec.chat
             if rec.meta and rec.meta.get("subheading") and not seen_subheading.get(rec.chat):
                 _add_heading_with_bookmark(
@@ -528,11 +539,12 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
         # Schreiben der finalen (ggf. aus dem Store neu sortierten) Liste
         # ermittelt statt beim Sammeln der Nachrichten - sonst würde ein
         # späterer inkrementeller Lauf (frischer, leerer Sichtbarkeits-Stand)
-        # denselben Kanal fälschlich erneut markieren.
+        # denselben Kanal fälschlich erneut markieren. Ebene 1 (statt 2), damit
+        # der Kanalname - anstelle der unterdrückten chat-H1 - ins TOC kommt.
         channel_label = rec.meta.get("channel_label") if rec.meta else None
         if channel_label and not seen_channel_labels.get(channel_label):
             _add_heading_with_bookmark(
-                doc.text, 2, str(channel_label), style_names.get("H.Sub"),
+                doc.text, 1, str(channel_label), style_names.get("H.Sub"),
                 f"toc_bm_{next(bookmark_counter)}", toc_entries,
             )
             seen_channel_labels[channel_label] = True
@@ -640,11 +652,17 @@ def write_odt_for_record_pairs(
             if current_table is not None:
                 doc.text.addElement(current_table)
                 current_table = None
-            heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
-            _add_heading_with_bookmark(
-                doc.text, 1, str(rec.chat), heading_style,
-                f"toc_bm_{next(bookmark_counter)}", toc_entries,
-            )
+            # suppress_auto_heading (chronologisches Mischen): siehe
+            # write_odt_for_records - rec.chat ist hier für alle Zeilen
+            # identisch, eine H1 dafür würde nur den Dokumententitel
+            # duplizieren. Die Gliederung übernimmt channel_label weiter unten.
+            suppress_heading = bool(rec.meta and rec.meta.get("suppress_auto_heading"))
+            if not suppress_heading:
+                heading_style = style_names.get("H.Base") if current_chat is None else style_names.get("H.Break")
+                _add_heading_with_bookmark(
+                    doc.text, 1, str(rec.chat), heading_style,
+                    f"toc_bm_{next(bookmark_counter)}", toc_entries,
+                )
             current_chat = rec.chat
             if rec.meta and rec.meta.get("subheading") and not seen_subheading.get(rec.chat):
                 _add_heading_with_bookmark(
@@ -658,14 +676,15 @@ def write_odt_for_record_pairs(
         # beim Schreiben der finalen Liste ermittelt (siehe Kommentar dort),
         # nicht beim Sammeln. Die laufende Tabelle wird davor abgeschlossen
         # (Überschriften stehen bewusst außerhalb jeder Tabelle, siehe
-        # Docstring oben) und danach neu begonnen.
+        # Docstring oben) und danach neu begonnen. Ebene 1 (statt 2), damit
+        # der Kanalname - anstelle der unterdrückten chat-H1 - ins TOC kommt.
         channel_label = rec.meta.get("channel_label") if rec.meta else None
         if channel_label and not seen_channel_labels.get(channel_label):
             if current_table is not None:
                 doc.text.addElement(current_table)
                 current_table = None
             _add_heading_with_bookmark(
-                doc.text, 2, str(channel_label), style_names.get("H.Sub"),
+                doc.text, 1, str(channel_label), style_names.get("H.Sub"),
                 f"toc_bm_{next(bookmark_counter)}", toc_entries,
             )
             seen_channel_labels[channel_label] = True
