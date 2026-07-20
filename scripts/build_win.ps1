@@ -175,6 +175,12 @@ if (Test-Path $TranslationsDir) {
     $DataArgs += @("--add-data", "$($_.FullName);ui\translations")
   }
 }
+$FlagsDir = Join-Path $RepoRoot "ui\assets\flags"
+if (Test-Path $FlagsDir) {
+  Get-ChildItem -Path $FlagsDir -Filter "*.png" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $DataArgs += @("--add-data", "$($_.FullName);ui\assets\flags")
+  }
+}
 
 Write-Host "Building EXE via PyInstaller..."
 # Alle Flags zu EINEM Array zusammenfassen und nur einmal splatten (@PyInstallerArgs).

@@ -131,3 +131,5 @@ Copyright (C) 2026 MiSte-Git
 
 Dieses Projekt steht unter der GNU General Public License v3.0 (SPDX: `GPL-3.0-or-later`).
 Siehe beiliegende `LICENSE`-Datei für den vollständigen Lizenztext.
+
+Eingebundene Drittanbieter-Assets (Flaggen-Icons der Sprachauswahl) siehe `THIRD_PARTY_LICENSES.md`.

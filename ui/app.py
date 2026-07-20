@@ -25,7 +25,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths, QSize
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices, QGuiApplication
 from functools import partial
 from PySide6.QtWidgets import (
@@ -48,6 +48,17 @@ from ui.schedule_editor_tab import ScheduleEditorTab
 from ui.no_translate_words_tab import NoTranslateWordsTab
 
 TRANSLATIONS_DIR = Path(__file__).parent / "translations"
+FLAGS_DIR = Path(__file__).parent / "assets" / "flags"
+
+
+def _flag_icon_path(code: str) -> Path | None:
+    # Qt lädt bei High-DPI automatisch die "<name>@2x.png"-Variante aus
+    # demselben Verzeichnis, sofern vorhanden - kein manuelles Multi-Size-Icon nötig.
+    for base in (FLAGS_DIR, Path.cwd() / "ui" / "assets" / "flags"):
+        p = base / f"{code}.png"
+        if p.exists():
+            return p
+    return None
 
 APP_NAME = "TME"
 ORG_NAME = "MiSte"  # beliebig, aber fix lassen für stabile Pfade
@@ -987,11 +998,16 @@ class MainWindow(QMainWindow):
         lay.addStretch(1)
         for code, flag, tip in langs:
             btn = QToolButton()
-            btn.setText(flag)
+            icon_path = _flag_icon_path(code)
+            if icon_path is not None:
+                btn.setIcon(QIcon(str(icon_path)))
+            else:
+                # Fallback, falls die Icon-Datei fehlt (z.B. unvollständiges Bundle)
+                btn.setText(flag)
+            btn.setIconSize(QSize(22, 22))
             btn.setToolTip(tip)
             btn.setCheckable(True)
-            btn.setProperty("base_flag", flag)
-            btn.setStyleSheet("font-size: 22px; padding: 2px 6px;")
+            btn.setStyleSheet(self._LANG_BTN_STYLE_INACTIVE)
             btn.clicked.connect(lambda _=False, c=code: self._on_lang_clicked(c))
             lay.addWidget(btn)
             self.lang_flag_buttons[code] = btn
@@ -1000,14 +1016,20 @@ class MainWindow(QMainWindow):
         # highlight current
         self.update_lang_flag_highlight(_load_language_preference())
 
+    _LANG_BTN_STYLE_INACTIVE = (
+        "QToolButton { border: 2px solid transparent; border-radius: 4px; padding: 2px 4px; }"
+    )
+    _LANG_BTN_STYLE_ACTIVE = (
+        "QToolButton { border: 2px solid #4e9cff; border-radius: 4px; padding: 2px 4px;"
+        " background-color: rgba(78, 156, 255, 40); }"
+    )
+
     def update_lang_flag_highlight(self, cur: str) -> None:
         try:
             for code, btn in (self.lang_flag_buttons or {}).items():
                 is_cur = (code == cur)
                 btn.setChecked(is_cur)
-                base = btn.property("base_flag") or btn.text().replace("★", "").strip()
-                btn.setText(f"{base} ★" if is_cur else str(base))
-                btn.setStyleSheet("font-size: 22px; padding: 2px 6px;" + (" font-weight: bold;" if is_cur else ""))
+                btn.setStyleSheet(self._LANG_BTN_STYLE_ACTIVE if is_cur else self._LANG_BTN_STYLE_INACTIVE)
         except Exception:
             pass
 
