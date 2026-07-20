@@ -148,20 +148,26 @@ def _get_provider_api_key(env_var: str, json_key: str) -> Optional[str]:
 
 def get_deepl_api_key() -> Optional[str]:
     """DeepL API-Key: ENV DEEPL_API_KEY, OS-Keyring oder credentials.json-Feld
-    'deepl_api_key'."""
-    return _get_provider_api_key(*_PROVIDER_KEYS["deepl"])
+    'deepl_api_key'. Wird nochmals defensiv getrimmt, unabhängig von der
+    Quelle - ein führendes/nachgestelltes Leerzeichen im Key (z.B. durch
+    Copy-Paste in ENV/Keyring/JSON) würde sonst den ':fx'-Suffix-Check für
+    die Free/Pro-Endpoint-Wahl in deepl_provider.py unbemerkt verfälschen."""
+    val = _get_provider_api_key(*_PROVIDER_KEYS["deepl"])
+    return val.strip() if val else None
 
 
 def get_google_translate_api_key() -> Optional[str]:
     """Google-Translate API-Key: ENV GOOGLE_TRANSLATE_API_KEY, OS-Keyring oder
     credentials.json-Feld 'google_translate_api_key'."""
-    return _get_provider_api_key(*_PROVIDER_KEYS["google"])
+    val = _get_provider_api_key(*_PROVIDER_KEYS["google"])
+    return val.strip() if val else None
 
 
 def get_openai_api_key() -> Optional[str]:
     """OpenAI API-Key: ENV OPENAI_API_KEY, OS-Keyring oder credentials.json-Feld
     'openai_api_key'."""
-    return _get_provider_api_key(*_PROVIDER_KEYS["openai"])
+    val = _get_provider_api_key(*_PROVIDER_KEYS["openai"])
+    return val.strip() if val else None
 
 
 def save_provider_api_key(provider: str, value: str) -> str:

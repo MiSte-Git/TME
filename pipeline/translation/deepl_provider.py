@@ -12,9 +12,12 @@ from typing import Dict, Optional
 
 from credentials import get_deepl_api_key
 
+from ..logging_setup import get_logger
 from ._http import post_json
 from .base import TranslationError, TranslationResult
 from .pricing import DEFAULT_PRICING, estimate_cost_usd
+
+logger = get_logger(__name__)
 
 
 class DeepLProvider:
@@ -31,10 +34,16 @@ class DeepLProvider:
             self._api_url = api_url
         else:
             # DeepL-Konvention: Keys mit ":fx"-Suffix gehören zum kostenlosen Tier.
+            is_free = self._api_key.endswith(":fx")
             self._api_url = (
                 "https://api-free.deepl.com/v2/translate"
-                if self._api_key.endswith(":fx")
+                if is_free
                 else "https://api.deepl.com/v2/translate"
+            )
+            logger.info(
+                "DeepL: Endpoint '%s' gewählt (Key %s auf ':fx')",
+                "api-free" if is_free else "api",
+                "endet" if is_free else "endet nicht",
             )
         self._pricing = pricing or DEFAULT_PRICING
 

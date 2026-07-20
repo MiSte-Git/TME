@@ -16,7 +16,10 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional
 
+from ..logging_setup import get_logger
 from .base import TranslationError
+
+logger = get_logger(__name__)
 
 _RETRIES = 3
 _INITIAL_DELAY = 0.8
@@ -85,6 +88,10 @@ async def post_json(
             return await asyncio.to_thread(_do_request, url, headers=hdrs, data=body, timeout=timeout)
         except _HttpStatusError as exc:
             last_err = exc
+            logger.warning(
+                "%s: HTTP %s Fehlerantwort (Versuch %d/%d): %s",
+                provider_label, exc.status, attempt + 1, _RETRIES, exc.body,
+            )
             if exc.status == 429 or exc.status >= 500:
                 if attempt < _RETRIES - 1:
                     await asyncio.sleep(delay)
