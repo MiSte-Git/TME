@@ -7,7 +7,6 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import json
 from typing import Dict, Any
-import shutil, subprocess, tempfile, os
 
 from telethon import functions, types
 from telethon.tl.types import DocumentAttributeCustomEmoji, DocumentAttributeSticker, MessageEntityCustomEmoji
@@ -84,8 +83,10 @@ async def ensure_custom_emoji_pngs(client, twe: types.TextWithEntities, cache_di
     eine PNG-Datei unter cache/emoji/<doc_id>.png.
     Unterstützte Konvertierungen:
       - image/webp, image/png → PNG
-      - video/webm, image/webm → PNG (erstes Frame, benötigt ffmpeg)
-      - application/x-tgsticker (.tgs) → PNG (erstes Frame, benötigt lottie/cairosvg oder lottie_convert.py)
+      - video/webm, image/webm → PNG (mehrere über die Laufzeit verteilte Frames
+        alpha-compositet, benötigt ffmpeg; siehe pipeline/frame_compositing.py)
+      - application/x-tgsticker (.tgs) → PNG (mehrere über die Composition-Länge
+        verteilte Frames alpha-compositet, benötigt lottie_convert.py)
     Falls Tools fehlen, bleibt das Emoji als Text/Alt-Text.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -124,45 +125,11 @@ async def ensure_custom_emoji_pngs(client, twe: types.TextWithEntities, cache_di
             elif mime.startswith('image/png') or lower == '.png':
                 out_png.write_bytes(tmp_path.read_bytes())
             elif 'webm' in mime or lower == '.webm':
-                # ffmpeg nutzen, falls vorhanden
-                ff = shutil.which('ffmpeg')
-                if ff:
-                    tmp_png = tmp_path.with_suffix('.png')
-                    try:
-                        subprocess.run([ff, '-y', '-i', str(tmp_path), '-frames:v', '1', str(tmp_png)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        if tmp_png.exists():
-                            out_png.write_bytes(tmp_png.read_bytes())
-                    except Exception:
-                        pass
-                    finally:
-                        try:
-                            if tmp_png.exists(): tmp_png.unlink()
-                        except Exception:
-                            pass
+                from .frame_compositing import render_webm_multiframe
+                render_webm_multiframe(tmp_path, out_png)
             elif mime == 'application/x-tgsticker' or lower == '.tgs':
-                # TGS → PNG via lottie (python) oder lottie_convert.py
-                ok = False
-                try:
-                    from lottie.utils import script
-                    # Falls lottie_convert.py verfügbar ist
-                    lc = shutil.which('lottie_convert.py')
-                    if lc:
-                        tmp_png = tmp_path.with_suffix('.png')
-                        subprocess.run([lc, str(tmp_path), str(tmp_png), '--frame', '0'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        if tmp_png.exists():
-                            out_png.write_bytes(tmp_png.read_bytes()); ok = True
-                        if tmp_png.exists(): tmp_png.unlink(missing_ok=True)
-                except Exception:
-                    ok = False
-                if not ok:
-                    # Minimaler Python-Weg, falls lottie installiert ist
-                    try:
-                        from lottie import objects, importers
-                        from lottie.exporters import exporters
-                        ani = importers.import_tgs(str(tmp_path))
-                        exporters.export_png(ani, str(out_png), frame=0)
-                    except Exception:
-                        pass
+                from .frame_compositing import render_tgs_multiframe
+                render_tgs_multiframe(tmp_path, out_png)
             # andere Formate bleiben unkonvertiert
         except Exception:
             pass
