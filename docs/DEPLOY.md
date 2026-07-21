@@ -132,7 +132,7 @@ cd ui/translations
 Voraussetzungen (einmalig):
 
 ```bash
-python3 -m pip install pyinstaller PySide6 telethon odfpy pillow easyocr keyring
+python3 -m pip install pyinstaller PySide6 telethon odfpy pillow PyYAML lottie keyring
 ```
 
 ### macOS
@@ -301,18 +301,21 @@ korrekt versioniert werden. Bereits vorhandene Alt-Einträge werden dadurch
 unnötig teuer). Stattdessen danach einmalig ausführen:
 
 ```bash
-python3 scripts/rescan_emoji_cache.py                # Dry-Run, nur Report
-python3 scripts/rescan_emoji_cache.py --apply         # betroffene Alt-Einträge in cache/emoji/_quarantine/ verschieben
+python3 scripts/rescan_emoji_cache.py                          # Dry-Run, nur Report
+python3 scripts/rescan_emoji_cache.py --apply                  # betroffene Alt-Einträge in cache/emoji/_quarantine/ verschieben
+python3 scripts/rescan_emoji_cache.py --apply --source-dir DIR # + direkter Rerender, falls Rohdateien <doc_id>.<ext> in DIR vorliegen
 ```
 
 Das Skript erkennt Alt-Einträge heuristisch als "wahrscheinlich unvollständig"
-(fast leeres Bild - typisches Symptom eines zu früh gerenderten Frames) und
-verschiebt nur diese nach `cache/emoji/_quarantine/`, statt den ganzen Cache
-zu verwerfen; beim nächsten echten Lauf werden sie automatisch neu von
-Telegram geladen und mit dem aktuellen Verfahren gerendert. Einschränkung:
-Einträge, die bei Frame 0 bereits ein vollständiges, nur um einzelne Elemente
-unvollständiges Bild zeigen, erkennt die Heuristik nicht (siehe Docstring in
-`scripts/rescan_emoji_cache.py`).
+(fast leeres Bild - typisches Symptom eines zu früh gerenderten Frames). Ohne
+`--source-dir` werden nur diese nach `cache/emoji/_quarantine/` verschoben,
+statt den ganzen Cache zu verwerfen; beim nächsten echten Lauf werden sie
+automatisch neu von Telegram geladen und mit dem aktuellen Verfahren
+gerendert. Mit `--source-dir` (falls die ursprünglichen .tgs/.webm-Rohdateien
+noch vorliegen) rendert das Skript betroffene Einträge stattdessen direkt neu,
+ohne Quarantäne. Einschränkung: Einträge, die bei Frame 0 bereits ein
+vollständiges, nur um einzelne Elemente unvollständiges Bild zeigen, erkennt
+die Heuristik nicht (siehe Docstring in `scripts/rescan_emoji_cache.py`).
 
 ## Laufzeit-Hinweise
 

@@ -5,7 +5,7 @@
 Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dokumenten – inklusive Übersetzungen, Bild- und Emoji-Einbettung. Der Fokus liegt auf dem komfortablen UI-Workflow (`python3 ui/app.py`), der alle Schritte von der Schedule-Datei bis zum fertigen ODT orchestriert.
 
 ## Features
-- Schedule-Dateien (TXT oder JSON) einlesen, Nachrichten abrufen und als ODT exportieren
+- Schedule-Dateien (JSON, siehe `input/example.json`) einlesen, Nachrichten abrufen und als ODT exportieren
 - Optional Übersetzungen anhängen (inline, am Ende oder als separates Dokument)
 - Austauschbarer Übersetzungs-Provider: Telegram (Default, kein API-Key nötig),
   DeepL, Google Translate oder ChatGPT/OpenAI (`translation.provider` in
@@ -88,7 +88,7 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   zentrales Logging (`pipeline/logging_setup.py` → `data/tme.log`)
 - `credentials.py` – zentrale Zugangsdaten-Verwaltung (Telegram + Provider-
   API-Keys, ENV/OS-Keyring/`credentials.json`)
-- `input/` – Beispiel-Schedules (TXT/JSON)
+- `input/` – Beispiel-Schedules (JSON)
 - `output/` – erzeugte ODTs
 - `data/` – Laufzeitdaten (letter_map.json, reports, UI-Status, `tme.log`)
 - `media/` & `cache/` – gespeicherte Medien bzw. Emoji-PNGs
@@ -111,10 +111,14 @@ Das erzeugte ODT enthält ein Inhaltsverzeichnis mit klickbaren Einträgen (Spru
 ## CLI-Workflows
 Das Skript `pipeline/emoji_pipeline.py` bündelt verschiedene Teilaufgaben:
 ```bash
-python3 pipeline/emoji_pipeline.py by-date --schedule input/links.txt --mode inline --translate 1 --lang de
+python3 pipeline/emoji_pipeline.py by-date --schedule input/example.json --mode inline --translate 1 --lang de
 python3 pipeline/emoji_pipeline.py collect-letters --links input/links.txt
 python3 pipeline/emoji_pipeline.py extract-plain --links input/links.txt
 ```
+`by-date` erwartet eine JSON-Schedule-Datei (siehe `input/example.json`);
+`collect-letters`/`extract-plain` erwarten dagegen eine reine Links-Liste
+(eine Telegram-Nachrichten-URL pro Zeile, siehe `input/links.txt`) - beide
+Formate sind bewusst unterschiedlich und nicht austauschbar.
 Details zu den Subcommands stehen im Quelltext (`pipeline/emoji_pipeline.py`). Für alle Befehle mit Telegram-Zugriff gelten die oben genannten API-Variablen.
 
 ## Mapping/Lettermap
@@ -135,7 +139,10 @@ Für Contributor:innen, die tiefer in Aufbau und Entstehung der Pipeline einstei
   oder im Install-Befehl oben enthalten; wird ergänzt, sobald die Funktion umgesetzt ist.
 
 ## Entwicklung
-- Syntax-Check: `python3 -m compileall -q .`
+- Syntax-Check: `python3 -m compileall -q . -x "[\\/](\.venv|build|dist)[\\/]"`
+  (Ausschluss nötig, sonst scannt compileall bei lokalem `.venv` im Repo-Root
+  auch Fremdpakete mit - z. B. ein PySide6-Jinja2-Template, das als
+  ungültiges Python fehlschlägt, siehe auch `scripts/build_win.ps1`)
 - Debug-Ausgaben und Reports werden unter `data/` erzeugt (z. B. `missing_lettermap_docs.json`).
 - Lauf-Log: `data/tme.log` (Zeitstempel, effektive Optionen pro Lauf, Nachrichtenzählung, Fehler) - zusätzlich auf der Konsole ausgegeben.
 - Vor Pull-Requests bitte sicherstellen, dass UI und CLI-Läufe mit einer Beispiel-Schedule erfolgreich sind.

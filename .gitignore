@@ -31,7 +31,9 @@ cache/
 output/
 data/
 media/
-input/
+input/*
+!input/example.json
+!input/links.txt
 out/
 *.bak
 *.session

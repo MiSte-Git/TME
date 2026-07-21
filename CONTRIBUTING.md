@@ -10,7 +10,9 @@ auf Deutsch verfassen.
 ## Lokal testen & bauen
 
 - Abhängigkeiten installieren: `python3 -m pip install -r requirements.txt`
-- Syntax-Check (ohne Telegram-Zugriff): `python3 -m compileall -q .`
+- Syntax-Check (ohne Telegram-Zugriff): `python3 -m compileall -q . -x "[\\/](\.venv|build|dist)[\\/]"`
+  (Ausschluss nötig, sonst scannt compileall bei lokalem `.venv` im Repo-Root
+  auch Fremdpakete mit, was fälschlich fehlschlagen kann)
 - UI starten: `python3 ui/app.py`
 - Desktop-Bundles (macOS/Windows/Linux) sowie Ablage der Telegram-API-Keys: siehe
   [docs/DEPLOY.md](docs/DEPLOY.md)
