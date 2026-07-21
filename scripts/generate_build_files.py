@@ -277,6 +277,25 @@ def main() -> int:
         action="store_false",
         help="Überspringt die requirements.txt-Generierung (Standard).",
     )
+    spec_group = ap.add_mutually_exclusive_group()
+    spec_group.add_argument(
+        "--with-spec",
+        dest="spec",
+        action="store_true",
+        default=None,
+        help=(
+            "Erzeugt/überschreibt <name>.spec (mit lokalen Absolut-Pfaden in "
+            "pathex/datas). Standard außerhalb von Linux; unter Linux Standard "
+            "übersprungen, da dort kein PyInstaller-Bundle genutzt wird (siehe "
+            "docs/DEPLOY.md)."
+        ),
+    )
+    spec_group.add_argument(
+        "--no-spec",
+        dest="spec",
+        action="store_false",
+        help="Überspringt die <name>.spec-Generierung, auch außerhalb von Linux.",
+    )
     args = ap.parse_args()
 
     repo_root = Path(args.repo).resolve()
@@ -311,9 +330,16 @@ def main() -> int:
     else:
         print(" - requirements.txt (übersprungen, siehe --with-requirements)")
 
-    spec = generate_spec(repo_root, entry, args.name)
-    (repo_root / f"{args.name}.spec").write_text(spec, encoding="utf-8")
-    print(f" - {args.name}.spec")
+    want_spec = args.spec
+    if want_spec is None:
+        want_spec = not sys.platform.startswith("linux")
+
+    if want_spec:
+        spec = generate_spec(repo_root, entry, args.name)
+        (repo_root / f"{args.name}.spec").write_text(spec, encoding="utf-8")
+        print(f" - {args.name}.spec")
+    else:
+        print(f" - {args.name}.spec (übersprungen, siehe --with-spec)")
 
     want_desktop = args.desktop_entry
     if want_desktop is None:

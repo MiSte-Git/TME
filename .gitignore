@@ -36,7 +36,6 @@ out/
 *.bak
 *.session
 *.session-journal
-*.code-workspace
 *.desktop
 
 # Git internals

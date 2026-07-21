@@ -222,6 +222,16 @@ python3 scripts/generate_build_files.py --with-desktop-entry   # erzwingen
 python3 scripts/generate_build_files.py --no-desktop-entry     # überspringen
 ```
 
+Das Skript erzeugt außerdem standardmäßig `<name>.spec` (Standardname `TME.spec`)
+für einen möglichen PyInstaller-Build - mit lokalen Absolut-Pfaden in `pathex`/`datas`.
+Da Linux (s. o.) kein PyInstaller-Bundle nutzt, wird diese Generierung unter Linux
+**standardmäßig übersprungen**; `TME.spec` wird daher auch nicht eingecheckt. Bei
+Bedarf (z. B. zum Testen eines Linux-Bundles) explizit erzwingen:
+
+```bash
+python3 scripts/generate_build_files.py --with-spec
+```
+
 Wieder entfernen:
 
 ```bash

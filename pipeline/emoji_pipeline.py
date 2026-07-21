@@ -11,8 +11,14 @@ Beispiel:
 """
 from __future__ import annotations
 import argparse
+import sys
 from pathlib import Path
 from typing import Tuple
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from credentials import get_telegram_credentials
 from pipeline.adapters.existing_scripts import run_by_date
 
