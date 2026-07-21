@@ -125,11 +125,13 @@ async def ensure_custom_emoji_pngs(client, twe: types.TextWithEntities, cache_di
             elif mime.startswith('image/png') or lower == '.png':
                 out_png.write_bytes(tmp_path.read_bytes())
             elif 'webm' in mime or lower == '.webm':
-                from .frame_compositing import render_webm_multiframe
-                render_webm_multiframe(tmp_path, out_png)
+                from .frame_compositing import mark_rendered, render_webm_multiframe
+                if render_webm_multiframe(tmp_path, out_png):
+                    mark_rendered(cache_dir, d.id)
             elif mime == 'application/x-tgsticker' or lower == '.tgs':
-                from .frame_compositing import render_tgs_multiframe
-                render_tgs_multiframe(tmp_path, out_png)
+                from .frame_compositing import mark_rendered, render_tgs_multiframe
+                if render_tgs_multiframe(tmp_path, out_png):
+                    mark_rendered(cache_dir, d.id)
             # andere Formate bleiben unkonvertiert
         except Exception:
             pass

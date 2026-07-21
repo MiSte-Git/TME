@@ -4,7 +4,7 @@ from typing import Iterable
 
 from telethon import functions
 
-from .frame_compositing import render_tgs_multiframe, render_webm_multiframe
+from .frame_compositing import mark_rendered, render_tgs_multiframe, render_webm_multiframe
 
 
 async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Path = Path("cache/emoji")) -> int:
@@ -56,6 +56,7 @@ async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Pat
             # WEBM -> PNG (mehrere über die Laufzeit verteilte Frames, alpha-compositet)
             if mime.startswith('video/webm') or tmp.suffix.lower() == '.webm':
                 if render_webm_multiframe(tmp, out_png):
+                    mark_rendered(cache_dir, d.id)
                     ok += 1
                     continue
             # WEBP/PNG direkt
@@ -75,6 +76,7 @@ async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Pat
             # verteilte Frames, alpha-compositet)
             if mime in ('application/x-tgsticker', 'application/json+tgs') or lower == '.tgs':
                 if render_tgs_multiframe(tmp, out_png, size=512):
+                    mark_rendered(cache_dir, d.id)
                     ok += 1
                     continue
         except Exception:

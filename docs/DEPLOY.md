@@ -262,6 +262,34 @@ aber ebenfalls nicht ab.
 Per Umgebungsvariable `STT_DEVICE=cuda` lässt sich (bei vorhandener GPU) CUDA statt
 CPU für die Transkription erzwingen; ohne Setzen der Variable wird immer CPU genutzt.
 
+## Custom-Emoji-Cache (cache/emoji/)
+
+Gerenderte PNGs für Custom-Emojis (inkl. animierter .tgs/.webm, siehe
+`pipeline/frame_compositing.py`) werden dauerhaft unter `cache/emoji/<doc_id>.png`
+zwischengespeichert - der Cache-Check prüft nur, ob die Datei existiert, nicht
+mit welchem Verfahren/welcher Version sie erzeugt wurde.
+
+Ändert sich künftig das Render-Verfahren (z. B. andere `DEFAULT_FRAME_SAMPLES`,
+andere Compositing-Logik), muss dafür `RENDERER_VERSION` in
+`pipeline/frame_compositing.py` erhöht werden, damit neu erzeugte Einträge
+korrekt versioniert werden. Bereits vorhandene Alt-Einträge werden dadurch
+*nicht* automatisch neu gerendert (das würde bei tausenden Cache-Dateien
+unnötig teuer). Stattdessen danach einmalig ausführen:
+
+```bash
+python3 scripts/rescan_emoji_cache.py                # Dry-Run, nur Report
+python3 scripts/rescan_emoji_cache.py --apply         # betroffene Alt-Einträge in cache/emoji/_quarantine/ verschieben
+```
+
+Das Skript erkennt Alt-Einträge heuristisch als "wahrscheinlich unvollständig"
+(fast leeres Bild - typisches Symptom eines zu früh gerenderten Frames) und
+verschiebt nur diese nach `cache/emoji/_quarantine/`, statt den ganzen Cache
+zu verwerfen; beim nächsten echten Lauf werden sie automatisch neu von
+Telegram geladen und mit dem aktuellen Verfahren gerendert. Einschränkung:
+Einträge, die bei Frame 0 bereits ein vollständiges, nur um einzelne Elemente
+unvollständiges Bild zeigen, erkennt die Heuristik nicht (siehe Docstring in
+`scripts/rescan_emoji_cache.py`).
+
 ## Laufzeit-Hinweise
 
 - Credentials liegen außerhalb des Repos unter `~/.config/telegram-odt/` (oder per ENV/OS-Keyring). Die App fragt bei Bedarf direkt im UI danach (Login-Dialog bzw. API-Keys-Dialog, siehe oben).
