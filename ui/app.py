@@ -327,6 +327,13 @@ class ScheduleTab(QWidget):
         # fehlende API-Zugangsdaten (True) vs. nur ungültige Session (False) -
         # siehe _on_credentials_missing/_on_session_invalid/_on_login_clicked.
         self._login_needs_credentials = False
+        # True, wenn der Login-Dialog ausgelöst wurde, weil ein Start-Versuch
+        # an fehlender/ungültiger Session bzw. fehlenden Zugangsdaten
+        # gescheitert ist (siehe _show_login_needed) - steuert, ob nach
+        # erfolgreichem Login in _on_login_clicked() automatisch fortgesetzt
+        # wird. Bleibt False bei einem manuellen, nicht laufbezogenen Klick
+        # auf "Jetzt einloggen…" (z. B. proaktive Einrichtung).
+        self._pending_run_after_login = False
         # Einmaliger Einrichtungs-Hinweis beim allerersten Start (siehe
         # maybe_show_first_run_hint()) - unabhängig von den reaktiven Checks
         # TelegramSessionInvalid/TelegramCredentialsMissing/
@@ -481,7 +488,17 @@ class ScheduleTab(QWidget):
             self._save_state()
 
     def run_schedule_file(self) -> None:
-        path = Path(self.schedule_edit.text())
+        text = self.schedule_edit.text().strip()
+        if not text:
+            # Path("") normalisiert zu Path(".") (Arbeitsverzeichnis), was
+            # .exists() faelschlich als True beantwortet - ohne diese explizite
+            # Vorab-Pruefung wuerde der leere Pfad unbemerkt bis zum JSON-
+            # Format-Check in runner_schedule.py durchlaufen und dort die
+            # irrefuehrende Meldung "Nur JSON-Schedule-Dateien werden
+            # unterstützt" statt eines Hinweises auf die fehlende Auswahl auslösen.
+            QMessageBox.warning(self, self.tr("Fehler"), self.tr("Bitte zuerst eine Schedule-Datei auswählen."))
+            return
+        path = Path(text)
         if not path.exists():
             QMessageBox.warning(self, self.tr("Fehler"), self.tr("Bitte eine gültige Schedule-Datei wählen."))
             return
@@ -706,6 +723,7 @@ class ScheduleTab(QWidget):
         # der Nutzer den Dialog wegklickt und ihn später erneut öffnen will.
         # Löst nur hier aus (tatsächlicher Lauf mit TelegramSessionInvalid/
         # TelegramCredentialsMissing), nicht bei jedem App-Start.
+        self._pending_run_after_login = True
         self._on_login_clicked()
 
     def _on_login_clicked(self) -> None:
@@ -713,10 +731,26 @@ class ScheduleTab(QWidget):
         dialog.exec()
         if dialog.login_result is not None:
             self.btn_login.setVisible(False)
-            self.status_label.setVisible(True)
-            self.status_label.setText(
-                self.tr("Login erfolgreich - du kannst den Lauf jetzt erneut starten.")
-            )
+            if self._pending_run_after_login:
+                # Login wurde durch einen gescheiterten Start-Versuch
+                # ausgelöst (siehe _show_login_needed) - ursprünglich
+                # angeforderten Lauf jetzt automatisch fortsetzen, statt den
+                # Nutzer erneut auf "Start" klicken zu lassen.
+                self._pending_run_after_login = False
+                self.status_label.setVisible(True)
+                self.status_label.setText(self.tr("Login erfolgreich - Lauf wird fortgesetzt…"))
+                self.run_schedule_file()
+            else:
+                self.status_label.setVisible(True)
+                self.status_label.setText(self.tr("Login erfolgreich."))
+        else:
+            # Login fehlgeschlagen oder vom Nutzer abgebrochen - Flag NICHT
+            # gesetzt lassen: sonst würde ein späterer, komplett unabhängiger
+            # Login (z.B. Stunden danach, ohne dass zwischenzeitlich erneut
+            # "Start" geklickt wurde) fälschlich automatisch einen Lauf
+            # auslösen. btn_login bleibt weiterhin sichtbar (siehe
+            # _show_login_needed), ein erneuter Klick öffnet den Dialog neu.
+            self._pending_run_after_login = False
 
     def maybe_show_first_run_hint(self) -> None:
         """Einmaliger, rein informativer Hinweis beim allerersten Start (siehe

@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 from typing import Tuple, Optional
 
+from pipeline.logging_setup import get_logger
+
+logger = get_logger(__name__)
+
 
 def _credentials_json_path() -> Path:
     """
@@ -45,6 +49,7 @@ def get_telegram_credentials() -> Tuple[int, str, Optional[str]]:
         api_id = int(api_id_raw.strip())
         api_hash = api_hash_raw.strip()
         phone = phone_raw.strip() if isinstance(phone_raw, str) and phone_raw.strip() else None
+        logger.info("Telegram-Credentials aus Umgebungsvariablen (TELEGRAM_API_ID/TELEGRAM_API_HASH).")
         return api_id, api_hash, phone
 
     # 2) Fallback: credentials.json
@@ -61,6 +66,7 @@ def get_telegram_credentials() -> Tuple[int, str, Optional[str]]:
         api_id = int(api_id_val)
         api_hash = api_hash_val
         phone = phone_val or None
+        logger.info("Telegram-Credentials aus %s.", cfg_path)
         return api_id, api_hash, phone
 
     # Weder ENV noch Datei vorhanden/valid → Fehler
