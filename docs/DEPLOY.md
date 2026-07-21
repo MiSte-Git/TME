@@ -262,6 +262,30 @@ aber ebenfalls nicht ab.
 Per Umgebungsvariable `STT_DEVICE=cuda` lässt sich (bei vorhandener GPU) CUDA statt
 CPU für die Transkription erzwingen; ohne Setzen der Variable wird immer CPU genutzt.
 
+## Animierte Custom-Emojis (Frame-Compositing)
+
+Animierte Telegram-Custom-Emojis (`.tgs`/`.webm`, z. B. Buchstaben-Sets mit
+Einblend- oder Schreib-Animation) wurden ursprünglich durch Rendern eines
+einzelnen Frames (Zeitpunkt 0) in ein PNG umgewandelt. Bei Animationen, deren
+Inhalt erst später sichtbar wird (Fade-in, verzögerter Layer-Einsatz), lieferte
+das leere oder unvollständige Bilder - z. B. fehlten bei manchen "Buchstaben"-
+Emojis die eigentlichen Buchstaben komplett, weil sie erst nach Frame 0
+eingeblendet werden.
+
+Die aktuelle Lösung (`pipeline/frame_compositing.py`) rendert stattdessen
+mehrere über die Animationsdauer verteilte Frames und legt sie per Alpha-
+Compositing übereinander - das Ergebnis-PNG enthält so alles, was irgendwann
+während der Animation sichtbar war. Die Anzahl der Sample-Frames ist über
+`DEFAULT_FRAME_SAMPLES` in `pipeline/frame_compositing.py` einstellbar (Default:
+10) - mehr Frames erhöhen die Trefferquote bei kurzen Einblend-Fenstern,
+verlangsamen aber die Erst-Erzeugung neuer Cache-Einträge entsprechend.
+
+Bekannte Grenzen: Bei Layern, die sich *bewegen* statt nur ein-/auszublenden,
+kann das zu sichtbarem "Ghosting" (mehrere überlappende Positionen im
+Ergebnisbild) führen. Trim-Path-Reveals (schrittweise gezeichnete Konturen)
+werden nur teilweise erfasst, da das Verfahren auf fertig gerenderten Frames
+arbeitet statt auf der Vektor-Animation selbst.
+
 ## Custom-Emoji-Cache (cache/emoji/)
 
 Gerenderte PNGs für Custom-Emojis (inkl. animierter .tgs/.webm, siehe

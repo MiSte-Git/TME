@@ -16,7 +16,11 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   und mitübersetzt (als Klartext, keine Rückübersetzung in Emoji-Sequenzen),
   außer sie stehen auf der erweiterbaren Ausnahmeliste `data/no_translate_words.json`
   (Tab „Nicht übersetzen" im UI, inkl. CSV-Import/Export)
-- Medien und Custom-Emojis als Bilder einbetten
+- Medien und Custom-Emojis als Bilder einbetten - bei animierten Custom-Emojis
+  (.tgs/.webm) werden mehrere Frames über die Animationsdauer per Alpha-
+  Compositing zusammengeführt, damit erst später einblendende Inhalte (z. B.
+  bei „geschriebenen" Buchstaben-Sets) nicht fehlen (Details, Grenzen und
+  Stellschrauben siehe [docs/DEPLOY.md](docs/DEPLOY.md))
 - Optional: automatische Transkription von Sprachnachrichten (OpenAI Whisper) -
   das erkannte Transkript wird direkt unter der jeweiligen Nachricht ins ODT
   eingefügt. Benötigt die zusätzlichen Abhängigkeiten aus `requirements-stt.txt`
