@@ -697,12 +697,25 @@ async def run_schedule(
                     missing_letters.add(orig_ch)
             return out_runs
 
-        def _apply_lettermap_to_textrun(tr: TextRun) -> List[TextRun | EmojiRun | LineBreak]:
+        def _apply_lettermap_to_textrun(tr: TextRun, allow_full_scope: bool = True) -> List[TextRun | EmojiRun | LineBreak]:
+            """allow_full_scope=False begrenzt lettermap_scope="all" auf das
+            sichere "emoji-only"-Verhalten (nur echte, positionsfest per Regex
+            erkennbare Keycap-Emoji-Sequenzen). Wichtig für bereits übersetzten
+            Text (siehe Aufrufer bei der Übersetzung): die volle "all"-Zuordnung
+            arbeitet zeichenweise und positionsunabhängig über letter_to_doc -
+            auf frisch übersetztem Klartext würde das einzelne Buchstaben, die
+            zufällig mit einem gemappten Buchstaben übereinstimmen, fälschlich
+            wieder in (semantisch sinnlose) Buchstaben-Emojis zurückkodieren,
+            unabhängig davon ob sie aus dem ursprünglichen Emoji-Wort stammen.
+            Für unübersetzten Originaltext bleibt "all" unverändert voll aktiv."""
             if not letter_to_doc or not lm_for_group:
                 return [tr]
-            if _rbi._LM_SCOPE == "all":
+            effective_scope = _rbi._LM_SCOPE
+            if effective_scope == "all" and not allow_full_scope:
+                effective_scope = "emoji-only"
+            if effective_scope == "all":
                 return _map_textrun_to_letter_runs(tr)
-            if _rbi._LM_SCOPE == "emoji-only":
+            if effective_scope == "emoji-only":
                 pattern = re.compile(r"([0-9])\uFE0F\u20E3")
                 pos = 0
                 txt = tr.text or ""
@@ -1238,7 +1251,11 @@ async def run_schedule(
                                         alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
                                         new_runs_tr.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
                                 elif isinstance(rr, TextRun):
-                                    mapped = _apply_lettermap_to_textrun(rr)
+                                    # allow_full_scope=False: rr stammt aus der
+                                    # Übersetzung (Telegram-nativ oder
+                                    # translate_runs()) - siehe Docstring von
+                                    # _apply_lettermap_to_textrun.
+                                    mapped = _apply_lettermap_to_textrun(rr, allow_full_scope=False)
                                     new_runs_tr.extend(mapped)
                                 else:
                                     new_runs_tr.append(rr)
