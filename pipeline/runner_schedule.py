@@ -1068,7 +1068,8 @@ async def run_schedule(
                         audio_path = Path(str(audio_path_str))
                         try:
                             stt_text = transcribe_voice(audio_path, language=(target_lang or "de"))
-                        except SpeechToTextError:
+                        except SpeechToTextError as exc:
+                            logger.warning("STT: Transkription für %s übersprungen: %s", audio_path, exc)
                             stt_text = None
                         if stt_text:
                             runs_list.append(LineBreak(kind="LineBreak"))

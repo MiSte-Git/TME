@@ -17,6 +17,11 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   außer sie stehen auf der erweiterbaren Ausnahmeliste `data/no_translate_words.json`
   (Tab „Nicht übersetzen" im UI, inkl. CSV-Import/Export)
 - Medien und Custom-Emojis als Bilder einbetten
+- Optional: automatische Transkription von Sprachnachrichten (OpenAI Whisper) -
+  das erkannte Transkript wird direkt unter der jeweiligen Nachricht ins ODT
+  eingefügt. Benötigt die zusätzlichen Abhängigkeiten aus `requirements-stt.txt`
+  (siehe unten); ohne diese Installation erscheinen Sprachnachrichten einfach
+  ohne Transkript im ODT, kein Fehler
 - Optional: Nachrichten mehrerer Kanäle chronologisch mischen statt blockweise pro
   Kanal ausgeben (`interleave_channels` in `config.yaml` bzw. Checkbox „Kanäle
   chronologisch mischen" im UI; Kanalname bleibt als Label pro Nachricht sichtbar)
@@ -52,6 +57,11 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
 - Abhängigkeiten installieren:
   ```bash
   python3 -m pip install -r requirements.txt
+  ```
+- Optional für automatische Sprachnachrichten-Transkription (siehe Features oben,
+  Details in [docs/DEPLOY.md](docs/DEPLOY.md)):
+  ```bash
+  python3 -m pip install -r requirements-stt.txt
   ```
 - Telegram API-Credentials (https://my.telegram.org) hinterlegen - drei gleichwertige Wege:
   - Direkt im UI: fehlen die Zugangsdaten oder ist die Session abgelaufen, öffnet

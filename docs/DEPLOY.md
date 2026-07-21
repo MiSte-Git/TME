@@ -238,6 +238,30 @@ Wieder entfernen:
 python3 scripts/generate_build_files.py --uninstall-desktop
 ```
 
+## Sprachnachrichten-Transkription (optional)
+
+Sprach-/Audionachrichten werden während eines Schedule-Laufs automatisch heruntergeladen
+und per [OpenAI Whisper](https://github.com/openai/whisper) transkribiert
+(`pipeline/speech_to_text.py`); das Transkript erscheint direkt unterhalb der
+jeweiligen Nachricht im ODT.
+
+Dafür sind zusätzliche, nicht standardmäßig installierte Abhängigkeiten nötig
+(`torch` inkl. CUDA-Paketen, `openai-whisper`, zusammen mehrere GB):
+
+```bash
+python3 -m pip install -r requirements-stt.txt
+```
+
+Ohne diese Installation läuft die App unverändert weiter - `transcribe_voice()`
+schlägt dann kontrolliert fehl (`SpeechToTextError`, z. B. weil `whisper` fehlt),
+der Lauf wird ohne Absturz fortgesetzt und Sprachnachrichten erscheinen im ODT
+einfach ohne Transkript. Unerwartete Transkriptionsfehler (z. B. bei bereits
+installiertem `whisper`) werden nach `data/tme.log` geloggt, brechen den Lauf
+aber ebenfalls nicht ab.
+
+Per Umgebungsvariable `STT_DEVICE=cuda` lässt sich (bei vorhandener GPU) CUDA statt
+CPU für die Transkription erzwingen; ohne Setzen der Variable wird immer CPU genutzt.
+
 ## Laufzeit-Hinweise
 
 - Credentials liegen außerhalb des Repos unter `~/.config/telegram-odt/` (oder per ENV/OS-Keyring). Die App fragt bei Bedarf direkt im UI danach (Login-Dialog bzw. API-Keys-Dialog, siehe oben).

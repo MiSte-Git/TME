@@ -5,5 +5,7 @@ keyring>=25.0
 lottie>=0.6.11
 odfpy>=1.4.1
 telethon>=1.34
-torch>=2.1
-openai-whisper>=20231117
+
+# Automatische Transkription von Sprachnachrichten (optional, ~4-5 GB inkl.
+# CUDA-Deps): pip install -r requirements-stt.txt. Ohne diese Installation
+# erscheinen Sprachnachrichten im ODT einfach ohne Transkript, kein Fehler.

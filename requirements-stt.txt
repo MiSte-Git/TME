@@ -1,0 +1,12 @@
+# Optionale Zusatz-Dependencies fuer automatische Transkription von
+# Sprachnachrichten (pipeline/speech_to_text.py, OpenAI Whisper).
+#
+# Installation nur bei Bedarf, zusaetzlich zu requirements.txt:
+#   python3 -m pip install -r requirements.txt
+#   python3 -m pip install -r requirements-stt.txt
+#
+# Zieht torch inkl. CUDA-Abhaengigkeiten nach (~4-5 GB installiert). Ohne
+# diese Datei laeuft die App unveraendert weiter - Sprachnachrichten
+# erscheinen im ODT dann einfach ohne Transkript (kein Fehler, kein Crash).
+torch>=2.13
+openai-whisper>=20250625
