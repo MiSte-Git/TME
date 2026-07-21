@@ -391,10 +391,11 @@ async def run_schedule(
     want_side_by_side = effective_layout == "side_by_side" and translate
 
     # Ausnahmeliste für Emoji-Wörter, die NICHT übersetzt werden sollen (siehe
-    # pipeline/emoji_words.py, data/no_translate_words.json). Nur relevant für
-    # externe Provider (deepl/google/chatgpt) - der Telegram-Pfad übersetzt
-    # ohnehin TextWithEntities nativ und läuft nicht über translate_runs().
-    no_translate_words = load_no_translate_words_set() if effective_translation_provider != "telegram" else set()
+    # pipeline/emoji_words.py, data/no_translate_words.json). Wird sowohl von
+    # translate_runs() (externe Provider) als auch von _fetch_translation()
+    # (Telegram-nativer Pfad, siehe expand_translatable_emoji_words_twe())
+    # genutzt - für alle Provider laden.
+    no_translate_words = load_no_translate_words_set()
 
     # Inkrementelles Dokument-Update (Store-Modus): expliziter Parameter hat
     # Vorrang; ohne expliziten Wert greift config.yaml (incremental_mode,
@@ -1223,7 +1224,10 @@ async def run_schedule(
                         twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                         runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] | None = None
                         if effective_translation_provider == "telegram":
-                            tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
+                            tr = await _fetch_translation(
+                                client, item.entity, msg.id, twe, target_lang,
+                                doc_to_letters=inv_map, no_translate_words=no_translate_words,
+                            )
                             if tr is not None:
                                 tr_non_null = tr
                                 await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))

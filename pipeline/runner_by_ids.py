@@ -21,6 +21,11 @@ from .recompose import _text_to_runs as lettermap_text_to_runs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .no_translate_words import load_no_translate_words_set
+from .emoji_words import (
+    expand_translatable_emoji_words_twe,
+    find_emoji_words_in_entities,
+    is_translatable,
+)
 from .logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -317,7 +322,41 @@ def parse_groups_file(path: Path) -> Tuple[str | None, List[Tuple[str, List[str]
     return doc_title, groups
 
 
-async def _fetch_translation(client: TelegramClient, entity, msg_id: int, twe: types.TextWithEntities, to_lang: str) -> types.TextWithEntities | None:
+async def _fetch_translation(
+    client: TelegramClient,
+    entity,
+    msg_id: int,
+    twe: types.TextWithEntities,
+    to_lang: str,
+    doc_to_letters: Dict[str, str] | None = None,
+    no_translate_words: set[str] | None = None,
+) -> types.TextWithEntities | None:
+    # Enthält twe übersetzungspflichtige Buchstaben-Emoji-Wörter (siehe
+    # pipeline/emoji_words.py)? peer+id und text sind bei TranslateTextRequest
+    # gegenseitig exklusiv (Telegram übersetzt im peer+id-Modus seine eigene
+    # serverseitige Kopie der Nachricht und ignoriert unser twe komplett) -
+    # daher muss der peer+id-Versuch für betroffene Nachrichten übersprungen
+    # werden, sonst würde die lokale Expansion nie zum Tragen kommen. Ohne
+    # solche Wörter bleibt das Verhalten unverändert (peer+id zuerst, Fallback
+    # auf text mit dem unveränderten twe).
+    words = find_emoji_words_in_entities(twe.entities or [], doc_to_letters or {})
+    has_translatable_words = any(
+        is_translatable(decoded, no_translate_words or set()) for _start, _end, decoded, _group in words
+    )
+
+    if has_translatable_words:
+        expanded_twe = expand_translatable_emoji_words_twe(
+            twe, doc_to_letters or {}, no_translate_words or set()
+        )
+        res = await _with_retries(
+            "TranslateTextRequest(text, emoji-word-expanded)",
+            lambda: client(functions.messages.TranslateTextRequest(text=[expanded_twe], to_lang=to_lang)),
+        )
+        res_result = getattr(res, "result", None)
+        if isinstance(res_result, list) and res_result:
+            return res_result[0]
+        return None
+
     # 1) Peer+ID bevorzugt
     res = await _with_retries(
         "TranslateTextRequest(peer,id)",
@@ -379,7 +418,10 @@ async def run_by_ids(
             )
             translate = False
 
-    no_translate_words = load_no_translate_words_set() if effective_translation_provider != "telegram" else set()
+    # Für alle Provider laden - genutzt sowohl von translate_runs() (externe
+    # Provider) als auch von _fetch_translation() (Telegram-nativer Pfad,
+    # siehe expand_translatable_emoji_words_twe() in pipeline/emoji_words.py).
+    no_translate_words = load_no_translate_words_set()
 
     doc_title, groups = parse_groups_file(links_file)
 
@@ -854,7 +896,10 @@ async def run_by_ids(
                     twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                     runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] | None = None
                     if effective_translation_provider == "telegram":
-                        tr = await _fetch_translation(client, entity, msg.id, twe, target_lang)
+                        tr = await _fetch_translation(
+                            client, entity, msg.id, twe, target_lang,
+                            doc_to_letters=inv_map, no_translate_words=no_translate_words,
+                        )
                         if tr is None:
                             continue
                         tr_non_null = tr
