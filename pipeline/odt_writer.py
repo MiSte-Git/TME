@@ -354,7 +354,17 @@ def _build_header_paragraph(
     if not header_runs and not link_text:
         return None
     p_header = P(stylename=style_names.get("P.MessageHeader", style_names.get("P.Base")))
-    for r in header_runs or []:
+    # Aufrufer (runner_schedule.py) hängt der Einfachheit halber nach jeder
+    # Kopfzeile (Zeitstempel/Link/Autor/"Antwort auf: ...") einen LineBreak
+    # an - ob danach noch eine weitere Zeile folgt, hängt von optionalen
+    # Bedingungen ab (Autor vorhanden? Reply erkannt?). Ohne folgenden Inhalt
+    # landet der letzte dieser LineBreaks als überflüssiger
+    # <text:line-break/> direkt vor </text:p> - hier daher entfernt, statt an
+    # jeder Anfügestelle in runner_schedule.py einzeln behandelt zu werden.
+    trimmed_header_runs = list(header_runs or [])
+    while trimmed_header_runs and isinstance(trimmed_header_runs[-1], LB):
+        trimmed_header_runs.pop()
+    for r in trimmed_header_runs:
         _render_run_into_paragraph(doc, p_header, r, style_names)
     # Prüfen, ob der Permalink bereits als Link-Run im Header vorkam (dann
     # keinen zweiten, redundanten Link anhängen). Reine Eingabe-Prüfung,

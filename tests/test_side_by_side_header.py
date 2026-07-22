@@ -52,12 +52,18 @@ def _header_text(cell) -> str | None:
 
 def test_header_row_spans_both_columns_once_per_message() -> None:
     with tempfile.TemporaryDirectory() as tmp:
+        # Trailing LineBreak am Ende bewusst wie in runner_schedule.py (jede
+        # Kopfzeile bekommt dort der Einfachheit halber einen nachgestellten
+        # LineBreak, auch die letzte - siehe _build_header_paragraph in
+        # odt_writer.py für den Fix, der diesen überflüssigen Zeilenumbruch
+        # vor </text:p> entfernt).
         header_runs = [
             TextRun(kind="TextRun", text="2026-01-01 12:00:00 – Bild"),
             LineBreak(kind="LineBreak"),
             TextRun(kind="TextRun", text="https://t.me/testchannel/42", href="https://t.me/testchannel/42", bold=True, underline=True),
             LineBreak(kind="LineBreak"),
             TextRun(kind="TextRun", text="@testchannel (Test Channel)"),
+            LineBreak(kind="LineBreak"),
         ]
         meta = {"header_runs": header_runs, "link": "https://t.me/testchannel/42"}
 
@@ -101,6 +107,17 @@ def test_header_row_spans_both_columns_once_per_message() -> None:
             header_text = _header_text(header_cells[0])
             assert header_text is not None, f"Nachricht {msg_idx + 1}: kein P.MessageHeader-Absatz in der Header-Zeile gefunden"
             assert "2026-01-01 12:00:00" in header_text and "@testchannel" in header_text
+
+            # Kein ueberfluessiger <text:line-break/> unmittelbar vor
+            # </text:p> - obwohl header_runs oben mit einem trailing
+            # LineBreak endet (wie in runner_schedule.py).
+            header_p = [p for p in header_cells[0].findall("text:p", NS) if p.get(f"{{{TEXT_NS}}}style-name") == "P.MessageHeader"][0]
+            children = list(header_p)
+            assert children, f"Nachricht {msg_idx + 1}: Header-Absatz sollte nicht leer sein"
+            assert children[-1].tag != f"{{{TEXT_NS}}}line-break", (
+                f"Nachricht {msg_idx + 1}: letztes Kind des Header-Absatzes sollte KEIN line-break sein, "
+                f"war {children[-1].tag}"
+            )
 
             # Datenzeile: genau 2 normale Zellen, OHNE eigenen
             # P.MessageHeader-Absatz (nicht mehr dupliziert).

@@ -37,19 +37,31 @@ async def translate_runs(
     """
     if doc_to_letters:
         runs = expand_translatable_emoji_words(runs, doc_to_letters, no_translate_words or set())
-    masked_text, emoji_by_id = mask_runs(runs)
+    masked_text, emoji_by_id, link_by_id = mask_runs(runs)
     if not masked_text.strip():
         empty = TranslationResult(text="", provider=provider.name, target_lang=target_lang, source_lang=source_lang)
         return [], empty
 
     result = await provider.translate(masked_text, target_lang, source_lang=source_lang)
-    translated_runs, found_ids = unmask_to_runs(result.text, emoji_by_id)
+    translated_runs, found_ids = unmask_to_runs(result.text, emoji_by_id, link_by_id)
 
-    missing = set(emoji_by_id) - found_ids
-    if missing:
+    missing_emoji = set(emoji_by_id) - found_ids
+    if missing_emoji:
         result.warnings.append(
-            f"{len(missing)} Custom-Emoji-Platzhalter nach Übersetzung ({provider.name}) nicht "
+            f"{len(missing_emoji)} Custom-Emoji-Platzhalter nach Übersetzung ({provider.name}) nicht "
             f"wiedergefunden - Emoji(s) könnten in der Übersetzung fehlen."
+        )
+    missing_links = {f"link:{lid}" for lid in link_by_id} - found_ids
+    if missing_links:
+        result.warnings.append(
+            f"{len(missing_links)} Link(s) nach Übersetzung ({provider.name}) nicht wiedergefunden "
+            f"- Link(s) könnten in der Übersetzung fehlen."
+        )
+    repaired_links = {i for i in found_ids if i.startswith("link-repaired:")}
+    if repaired_links:
+        result.warnings.append(
+            f"{len(repaired_links)} Link(s) wurden vom Übersetzungs-Provider ({provider.name}) "
+            f"fehlerhaft aufgetrennt und unverändert (unübersetzt) übernommen."
         )
 
     return translated_runs, result

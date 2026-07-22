@@ -22,6 +22,20 @@ kodiert statt als rohes "\\n" - nur <lb/> gilt beim Zurücklesen als echter
 Zeilenumbruch, rohe "\\n"/"\\r" im übersetzten Text werden zu Leerzeichen
 normalisiert.
 
+Nachtest an einem frisch generierten Mehr-Nachrichten-ODT zeigte einen
+ZWEITEN, eigenständigen Bug derselben Symptomklasse, der vom href-Fix NICHT
+abgedeckt war: ein Provider (v.a. LLM-basiert, z.B. ChatGPT) interpretierte
+ein URL-artiges Linktoken wie "lobstr.co" als zwei Wörter (getrennt durch
+den Punkt) und riss dabei das <a>-Tag versehentlich in zwei separate
+<a>-Tags mit identischer id auseinander, mit eigenen <lb/>-Tags dazwischen -
+im Endergebnis zwei <text:a>-Elemente mit demselben href statt einem
+zusammenhängenden Link. Fix: href-Kodierung auf id-Referenz umgestellt
+(analog zu Custom-Emojis) plus Integritätsprüfung nach der Übersetzung -
+kommt eine Link-id nicht genau einmal vor, gilt sie als vom Provider
+zerrissen und der komplette Bereich (inkl. allem dazwischen, z.B. jener
+<lb/>-Tags) wird durch den unveränderten Original-Run ersetzt statt
+versucht zu rekonstruieren.
+
 Kein pytest im Projekt (siehe requirements.txt) - eigenständiges Skript wie
 die übrigen tests/test_*.py. Aufruf:
     .venv/bin/python tests/test_translation_link_linebreak.py
@@ -71,12 +85,12 @@ def test_unmask_preserves_link_and_ignores_spurious_linebreak() -> None:
         TextRun(kind="TextRun", text="*"),
         TextRun(kind="TextRun", text="lobstr.co", href="lobstr.co"),
     ]
-    masked, emoji_map = mask_runs(runs)
-    assert '<a href="lobstr.co">lobstr.co</a>' in masked, f"href sollte beim Maskieren erhalten bleiben: {masked!r}"
+    masked, emoji_map, link_map = mask_runs(runs)
+    assert '<a id="0">lobstr.co</a>' in masked, f"Link-Tag sollte beim Maskieren erhalten bleiben: {masked!r}"
 
     # Provider fuegt einen rohen Zeilenumbruch an einer Run-Grenze ein.
     spurious = masked.replace("</b>", "</b>\n", 1)
-    result, _found = unmask_to_runs(spurious, emoji_map)
+    result, _found = unmask_to_runs(spurious, emoji_map, link_map)
 
     from pipeline.runs import LineBreak
     linebreaks = [r for r in result if isinstance(r, LineBreak)]
@@ -154,8 +168,71 @@ def test_odt_output_has_matching_link_and_linebreak_counts() -> None:
         print("[OK] ODT-Ausgabe: identische text:a-Anzahl EN/DE, kein zusaetzlicher text:line-break in DE.")
 
 
+class SplitLinkProvider:
+    """Simuliert den zweiten, eigenständigen Bug: der Provider reißt das
+    <a id="N">...</a>-Tag mitten im Linktext auseinander (z.B. weil er
+    "lobstr.co" als zwei Wörter interpretiert), mit <lb/>-Tags dazwischen -
+    exakt das am frisch generierten Test-ODT beobachtete Muster."""
+    name = "fake-split-link"
+
+    async def translate(self, text: str, target_lang: str, source_lang: Optional[str] = None) -> TranslationResult:
+        import re as _re
+        m = _re.search(r'<a id="(\d+)">([^<]+)</a>', text)
+        if m:
+            lid, inner = m.group(1), m.group(2)
+            mid = len(inner) // 2 or 1
+            split = f'<a id="{lid}">{inner[:mid]}</a><lb/><lb/><a id="{lid}">{inner[mid:]}</a>'
+            text = text[: m.start()] + split + text[m.end():]
+        return TranslationResult(text=text, provider=self.name, target_lang=target_lang, source_lang=source_lang)
+
+
+def test_split_link_tag_repaired_to_single_intact_link() -> None:
+    """Provider zerreißt das Link-Tag mitten im Wort - erwartet: nach der
+    Reparatur existiert GENAU EIN <text:a> mit vollständigem, ungebrochenem
+    Text und korrektem href, kein zweites <text:a> mit gleichem href direkt
+    danach, und keine zusätzlichen Zeilenumbrüche."""
+    orig_runs = [
+        TextRun(kind="TextRun", text="QSIGF-AVERTORIA", bold=True),
+        TextRun(kind="TextRun", text="*"),
+        TextRun(kind="TextRun", text="lobstr.co", href="lobstr.co"),
+    ]
+    translated_runs, result = asyncio.run(translate_runs(orig_runs, "de", SplitLinkProvider()))
+
+    from pipeline.runs import LineBreak
+    assert not any(isinstance(r, LineBreak) for r in translated_runs), (
+        f"kein Zeilenumbruch erwartet (Original hatte keinen an dieser Stelle): {translated_runs}"
+    )
+    link_runs = [r for r in translated_runs if isinstance(r, TextRun) and r.href]
+    assert len(link_runs) == 1, f"erwartet genau 1 zusammenhängender Link-Run, gefunden: {link_runs}"
+    assert link_runs[0].text == "lobstr.co" and link_runs[0].href == "lobstr.co", (
+        f"Link sollte vollständig und unverändert übernommen werden: {link_runs[0]}"
+    )
+    assert any("aufgetrennt" in w for w in result.warnings), "Warnung zum reparierten Link erwartet"
+
+    pair = RecordPair(
+        original=RunsRecord(chat="Chat", message_id=1, runs=orig_runs),
+        translation=RunsRecord(chat="Chat - DE", message_id=1, runs=translated_runs),
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = Path(tmp) / "test_split_link.odt"
+        write_odt_for_record_pairs([pair], out_path, styles={}, doc_title="Test")
+        with zipfile.ZipFile(out_path) as z:
+            content = z.read("content.xml")
+        root = ET.fromstring(content)
+        rows = root.findall(".//table:table-row", NS)[1:]
+        de_cell = rows[0].findall("table:table-cell", NS)[1]
+        de_link_elems = de_cell.findall(".//text:a", NS)
+        assert len(de_link_elems) == 1, f"erwartet genau 1 text:a in DE, gefunden {len(de_link_elems)}"
+        de_link_text = "".join(de_link_elems[0].itertext())
+        assert de_link_text == "lobstr.co", f"Linktext sollte ungebrochen sein, war: {de_link_text!r}"
+        assert not de_cell.findall(".//text:line-break", NS), "keine Zeilenumbrueche in der DE-Zelle erwartet"
+
+    print("[OK] Zerrissenes Link-Tag repariert: genau 1 <text:a> mit vollständigem, ungebrochenem Text.")
+
+
 if __name__ == "__main__":
     test_unmask_preserves_link_and_ignores_spurious_linebreak()
     test_translate_runs_end_to_end_no_extra_linebreak_same_link_count()
     test_odt_output_has_matching_link_and_linebreak_counts()
+    test_split_link_tag_repaired_to_single_intact_link()
     print("ALLE TESTS BESTANDEN")
