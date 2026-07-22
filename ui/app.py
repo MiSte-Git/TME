@@ -303,6 +303,9 @@ class ScheduleTab(QWidget):
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
         self.status_label.setVisible(False)
+        # Zeigt u.a. Fehlermeldungen mit technischen Details (Pfade, IDs) an -
+        # muss zur Fehlersuche kopierbar sein, nicht nur lesbar.
+        self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.status_label)
 
         # Geschätzte Übersetzungskosten des letzten abgeschlossenen Laufs -
@@ -312,6 +315,7 @@ class ScheduleTab(QWidget):
         self.cost_status_label = QLabel("")
         self.cost_status_label.setWordWrap(True)
         self.cost_status_label.setVisible(False)
+        self.cost_status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.cost_status_label)
 
         self.btn_continue = QPushButton(self.tr("Fortsetzen"))

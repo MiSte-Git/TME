@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Optional
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, Qt
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QStackedWidget, QWidget, QMessageBox,
@@ -195,6 +195,7 @@ class LoginDialog(QDialog):
         self.lbl_password_telegram_hint = QLabel("")
         self.lbl_password_telegram_hint.setWordWrap(True)
         self.lbl_password_telegram_hint.setStyleSheet("color: gray; font-style: italic;")
+        self.lbl_password_telegram_hint.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.lbl_password_telegram_hint.setVisible(False)
         v.addWidget(self.lbl_password_telegram_hint)
         self.stack.addWidget(page_password)
@@ -210,13 +211,18 @@ class LoginDialog(QDialog):
         v = QVBoxLayout(page_done)
         self.lbl_done = QLabel("")
         self.lbl_done.setWordWrap(True)
+        self.lbl_done.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         v.addWidget(self.lbl_done)
         self.stack.addWidget(page_done)
 
         page_error = QWidget()
         v = QVBoxLayout(page_error)
+        # Kann technische Details enthalten (z.B. die ApiIdInvalidError-
+        # Meldung mit ENV-/credentials.json-Hinweisen) - muss zur
+        # Fehlersuche kopierbar sein, nicht nur lesbar.
         self.lbl_error = QLabel("")
         self.lbl_error.setWordWrap(True)
+        self.lbl_error.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         v.addWidget(self.lbl_error)
         self.stack.addWidget(page_error)
 

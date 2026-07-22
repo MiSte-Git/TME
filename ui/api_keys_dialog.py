@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QMessageBox,
@@ -118,6 +119,7 @@ class ApiKeysDialog(QDialog):
             grid.addWidget(btn, row, 2)
             status = QLabel("")
             status.setWordWrap(True)
+            status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             grid.addWidget(status, row, 3)
             self._status_labels[provider] = status
         grid.setColumnStretch(1, 1)
