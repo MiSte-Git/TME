@@ -700,6 +700,14 @@ async def run_schedule(
             code_suffix = f"_{source_up}"
         else:
             code_suffix = f"_{source_up}-{lang_up}" if translate else f"_{source_up}"
+            # Provider-Tag nur bei normalen (zeitgestempelten) Läufen anhängen,
+            # NICHT im Store-/Incremental-Modus (ts_part=="") - dort ist der
+            # Dateiname bewusst stabil über mehrere Läufe hinweg (dieselbe
+            # Datei wird fortgeschrieben statt neu erzeugt); ein Provider-Tag
+            # würde bei einem Providerwechsel zwischen zwei Incremental-Läufen
+            # eine neue Datei erzeugen und die alte als Karteileiche zurücklassen.
+            if translate and ts_part:
+                code_suffix += f"_{_PROVIDER_FILENAME_TAGS.get(effective_translation_provider, effective_translation_provider)}"
         out_path = out_dir / f"{out_basename}{ts_part}{code_suffix}.odt"
 
         safe_img_dir = Path("media/odt_safe"); safe_img_dir.mkdir(parents=True, exist_ok=True)
@@ -1479,7 +1487,10 @@ async def run_schedule(
             if resume_hints:
                 stop_id = (resume_hints[0].get("hint", {}) or {}).get("last_ok_id")
                 tr_title = f"{tr_title} (Teil-Export, Stop bei msg_id {stop_id})"
-            extra_path = out_dir / f"{out_basename}{ts_part}_{lang_up}.odt"
+            extra_suffix = f"_{lang_up}"
+            if ts_part:
+                extra_suffix += f"_{_PROVIDER_FILENAME_TAGS.get(effective_translation_provider, effective_translation_provider)}"
+            extra_path = out_dir / f"{out_basename}{ts_part}{extra_suffix}.odt"
             _notify(QCoreApplication.translate("RunnerSchedule", "Übersetzungs-ODT wird geschrieben…"))
             write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)
             logger.info("Übersetzungs-ODT geschrieben: %s (%d Eintrag/Einträge).", extra_path, len(translations_acc))
