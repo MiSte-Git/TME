@@ -197,45 +197,94 @@ bei `-Release`) ein Installer gebaut werden (nicht im Repo enthalten).
 
 ### Linux
 
-Für Linux gibt es kein PyInstaller-Bundle, stattdessen eine `.desktop`-Datei für die
-Desktop-Integration (Anwendungsmenü). Sie wird **nicht** eingecheckt, sondern bei Bedarf
-lokal generiert – die hinterlegten `Exec=`/`Path=`/`Icon=`-Pfade würden sonst auf das System
-zeigen, auf dem sie erzeugt wurde.
+Drei Workflows, analog zu den Windows-Skripten (`build_win.ps1`/`run_ui.ps1`): einer für
+die tägliche Entwicklung (aktueller Code, keine venv-Aktivierung nötig), einer für den
+Produktiv-Build (eigenständiges PyInstaller-Binary) und einer für die Installation
+(Binary + Desktop-Eintrag, der danach direkt auf das Binary zeigt - kein venv/Python-Aufruf
+mehr nötig, ein Klick im Anwendungsmenü genügt).
 
-Generieren/installieren (aus dem Repo-Root):
+#### Entwicklung: `run_linux_dev.sh`
+
+```bash
+./run_linux_dev.sh          # legt bei Bedarf .venv/ an, installiert requirements.txt, startet ui/app.py
+./run_linux_dev.sh --stt    # zusätzlich requirements-stt.txt sicherstellen
+```
+
+Startet die App direkt aus dem aktuellen Arbeitsstand (kein Build) - für schnelle
+Iteration während der Entwicklung. Legt die venv bei Bedarf automatisch an (anders als
+`scripts/run_ui.ps1`, das eine bestehende venv voraussetzt).
+
+#### Produktiv-Build: `build_linux.sh`
+
+```bash
+./build_linux.sh              # --onedir Testbuild, PyInstaller-Cache bleibt erhalten
+./build_linux.sh --release    # --onefile + --clean, für Weitergabe an Endnutzer
+./build_linux.sh --clean      # erzwingt --clean auch für --onedir
+./build_linux.sh --with-stt   # STT-Abhängigkeiten (torch/whisper) mit ins Bundle aufnehmen
+```
+
+Baut in einer eigenen Build-venv (`.venv-build/`, getrennt von der Dev-venv aus
+`run_linux_dev.sh`, damit keine Dev-Only-Pakete ins Bundle gelangen) - dieselben
+`--add-data`/Hidden-Import-Optionen wie `scripts/build_win.ps1` (Theme-QSS inkl. dem
+darin referenzierten `checkbox-check.svg`, Fenster-Icon, Qt-Übersetzungen,
+Flaggen-PNGs; `keyring`-Backend-Hidden-Imports). Ergebnis unter `dist/TME/TME`
+(`--onedir`, Standard, ca. 250 MB) bzw. `dist/TME` als Einzeldatei (`--onefile` mit
+`--release`).
+
+**STT standardmäßig ausgeschlossen:** `requirements-stt.txt` (torch/whisper, ~4-5 GB)
+landet nur mit explizitem `--with-stt` im Bundle - für die meisten Installationen
+unnötiger Ballast (siehe [Sprachnachrichten-Transkription](#sprachnachrichten-transkription-optional)
+oben: bleibt ohne diese Abhängigkeiten weiterhin kontrolliert deaktiviert, kein Absturz).
+
+#### Installation: `install_linux.sh`
+
+```bash
+./install_linux.sh              # baut bei Bedarf (falls dist/ fehlt) und installiert
+./install_linux.sh --release    # erzwingt vorher einen --release-Build
+./install_linux.sh --with-stt   # bei Neu-Build: STT-Abhängigkeiten mit einschließen
+```
+
+Kopiert das gebaute Bundle nach `~/.local/share/tme/` (kein root nötig), inkl.
+`config.yaml` und Fenster-Icon, und aktualisiert den Desktop-Eintrag
+(`~/.local/share/applications/tme.desktop`) so, dass `Exec=`/`TryExec=` direkt auf das
+Binary zeigen statt auf einen venv-Python-Aufruf von `ui/app.py`.
+
+Deinstallieren:
+
+```bash
+python3 scripts/generate_build_files.py --uninstall-desktop
+rm -rf ~/.local/share/tme
+```
+
+#### Nur Desktop-Eintrag ohne Build (Entwicklungsstand im Anwendungsmenü)
+
+Für einen Desktop-Eintrag, der auf den aktuellen Entwicklungsstand zeigt (venv +
+`ui/app.py`) statt auf ein gebautes Binary:
 
 ```bash
 python3 scripts/generate_build_files.py
 ```
 
-Unter Linux wird die `.desktop`-Datei automatisch mitgeneriert und nach
-`~/.local/share/applications/tme.desktop` geschrieben (inkl. Aufruf von
-`update-desktop-database`, falls installiert). `Exec=`/`TryExec=` zeigen dabei auf
-`.venv/bin/python3`, falls ein lokales venv existiert, sonst auf das im `PATH` gefundene
-`python3`.
-
-Auf anderen Plattformen ausgeführt (z. B. zum Testen) oder um die Generierung explizit
-zu steuern:
+Die `.desktop`-Datei wird **nicht** eingecheckt, sondern bei Bedarf lokal generiert – die
+hinterlegten `Exec=`/`Path=`/`Icon=`-Pfade würden sonst auf das System zeigen, auf dem
+sie erzeugt wurde. `Exec=`/`TryExec=` zeigen dabei auf `.venv/bin/python3`, falls ein
+lokales venv existiert, sonst auf das im `PATH` gefundene `python3`.
 
 ```bash
-python3 scripts/generate_build_files.py --with-desktop-entry   # erzwingen
-python3 scripts/generate_build_files.py --no-desktop-entry     # überspringen
+python3 scripts/generate_build_files.py --with-desktop-entry            # erzwingen
+python3 scripts/generate_build_files.py --no-desktop-entry              # überspringen
+python3 scripts/generate_build_files.py --binary-path /pfad/zum/Binary  # wie install_linux.sh es nutzt
 ```
 
-Das Skript erzeugt außerdem standardmäßig `<name>.spec` (Standardname `TME.spec`)
-für einen möglichen PyInstaller-Build - mit lokalen Absolut-Pfaden in `pathex`/`datas`.
-Da Linux (s. o.) kein PyInstaller-Bundle nutzt, wird diese Generierung unter Linux
-**standardmäßig übersprungen**; `TME.spec` wird daher auch nicht eingecheckt. Bei
-Bedarf (z. B. zum Testen eines Linux-Bundles) explizit erzwingen:
+Das Skript erzeugt außerdem standardmäßig `<name>.spec` (Standardname `TME.spec`) für
+einen möglichen Spec-basierten PyInstaller-Build - mit lokalen Absolut-Pfaden in
+`pathex`/`datas`. `build_linux.sh` nutzt das nicht (ruft PyInstaller direkt mit
+CLI-Optionen auf, analog zu `build_win.ps1`), daher wird diese Generierung unter Linux
+**standardmäßig übersprungen**; `TME.spec` wird auch nicht eingecheckt. Bei Bedarf
+explizit erzwingen:
 
 ```bash
 python3 scripts/generate_build_files.py --with-spec
-```
-
-Wieder entfernen:
-
-```bash
-python3 scripts/generate_build_files.py --uninstall-desktop
 ```
 
 ## Sprachnachrichten-Transkription (optional)

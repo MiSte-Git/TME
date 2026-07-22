@@ -198,30 +198,59 @@ def _run_update_desktop_database() -> None:
     subprocess.run([update_db, str(_desktop_applications_dir())], check=False)
 
 
-def generate_desktop_entry(repo_root: Path, entry: Path) -> str:
-    python_exec = _find_python_exec(repo_root)
-    icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+def generate_desktop_entry(repo_root: Path, entry: Path, binary_path: Optional[Path] = None) -> str:
+    """Erzeugt den .desktop-Inhalt.
+
+    Standardmäßig zeigt Exec/TryExec auf den venv-Python-Interpreter plus
+    ui/app.py (Entwicklungs-Setup, Repo-Checkout bleibt Voraussetzung).
+
+    Ist binary_path gesetzt (siehe install_linux.sh), zeigt Exec/TryExec
+    stattdessen direkt auf das eigenständige PyInstaller-Binary - kein
+    Python/venv-Aufruf mehr nötig. Path= und Icon= verweisen dann auf das
+    Verzeichnis des Binaries statt auf den Repo-Root, damit der Eintrag auch
+    funktioniert, wenn das Repo-Checkout später nicht mehr vorhanden ist
+    (install_linux.sh kopiert Icon/config.yaml dafür mit an den Zielort).
+    """
+    if binary_path is not None:
+        exec_cmd = f'"{binary_path}"'
+        try_exec = str(binary_path)
+        work_dir = binary_path.parent
+        icon_path = binary_path.parent / "Telegram-Nachrichten Herunterladen.png"
+        try:
+            icon_exists = icon_path.exists()
+        except OSError:
+            icon_exists = False
+        if not icon_exists:
+            icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+    else:
+        python_exec = _find_python_exec(repo_root)
+        exec_cmd = f'{python_exec} "{entry}"'
+        try_exec = python_exec
+        work_dir = repo_root
+        icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
 
     return f"""[Desktop Entry]
 Type=Application
 Version=1.0
 Name=Telegram → ODT mit Emoji & Übersetzung
 Comment=Erzeuge ODT aus Telegram-Schedules, inkl. Emoji-Handling und Übersetzung
-Exec={python_exec} "{entry}"
-Path={repo_root}
+Exec={exec_cmd}
+Path={work_dir}
 Icon={icon_path}
 Terminal=false
 Categories=Office;Utility;
-TryExec={python_exec}
+TryExec={try_exec}
 """
 
 
-def install_desktop_entry(repo_root: Path, entry: Path, app_name: str) -> Path:
+def install_desktop_entry(
+    repo_root: Path, entry: Path, app_name: str, binary_path: Optional[Path] = None
+) -> Path:
     target_dir = _desktop_applications_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / _desktop_entry_filename(app_name)
 
-    content = generate_desktop_entry(repo_root, entry)
+    content = generate_desktop_entry(repo_root, entry, binary_path=binary_path)
     target_path.write_text(content, encoding="utf-8")
 
     _run_update_desktop_database()
@@ -248,6 +277,16 @@ def main() -> int:
         "--uninstall-desktop",
         action="store_true",
         help="Entfernt eine zuvor installierte .desktop-Datei und beendet, ohne Spec/Requirements zu generieren.",
+    )
+    ap.add_argument(
+        "--binary-path",
+        default=None,
+        help=(
+            "Pfad zu einem eigenständigen, bereits gebauten Binary (z. B. via "
+            "build_linux.sh + install_linux.sh). Wenn gesetzt, zeigt der "
+            ".desktop-Eintrag direkt auf dieses Binary statt auf einen "
+            "venv-Python-Aufruf von --entry."
+        ),
     )
     desktop_group = ap.add_mutually_exclusive_group()
     desktop_group.add_argument(
@@ -346,7 +385,8 @@ def main() -> int:
         want_desktop = sys.platform.startswith("linux")
 
     if want_desktop:
-        desktop_path = install_desktop_entry(repo_root, entry, args.name)
+        binary_path = Path(args.binary_path).resolve() if args.binary_path else None
+        desktop_path = install_desktop_entry(repo_root, entry, args.name, binary_path=binary_path)
         print(f" - {desktop_path} (installiert)")
 
     return 0

@@ -95,6 +95,9 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
 - `scripts/` – Hilfsskripte (siehe [docs/DEPLOY.md](docs/DEPLOY.md)): Build
   (`build_win.ps1`, `build_mac.sh`), UI-Start unter Windows (`run_ui.ps1`),
   Konsolen-Login-Fallback (`telegram_login.py`)
+- Linux-Skripte im Repo-Root (siehe [docs/DEPLOY.md](docs/DEPLOY.md)):
+  Entwicklung (`run_linux_dev.sh`), Build (`build_linux.sh`), Installation
+  (`install_linux.sh`)
 
 ## Schnellstart (UI)
 1. Abhängigkeiten installieren und API-Credentials setzen.
@@ -125,8 +128,19 @@ Details zu den Subcommands stehen im Quelltext (`pipeline/emoji_pipeline.py`). F
 Der Lettermap-Tab im UI und die zugehörigen Dateien (`data/letter_map.json`, `data/lettermap_ignore.json`) waren ursprünglich für ein Emoji-zu-Buchstaben-Mapping vorgesehen. Aktuell ist dieser Schritt optional; die ODT-Erzeugung funktioniert auch ohne weitere Eingriffe. Das Mapping-Feature bleibt als Vorbereitung für künftige Erweiterungen im Projekt.
 
 ## Installation & Build (Desktop-Bundles)
-Für fertige Desktop-Bundles (macOS `.app`, Windows `.exe`, Linux-Desktop-Eintrag) sowie
+Für fertige Desktop-Bundles (macOS `.app`, Windows `.exe`, Linux-Binary) sowie
 Details zur Ablage der Telegram-API-Keys siehe [docs/DEPLOY.md](docs/DEPLOY.md).
+
+Unter Linux stehen drei Skripte im Repo-Root zur Verfügung:
+
+```bash
+./run_linux_dev.sh      # Entwicklung: startet ui/app.py aus dem aktuellen Arbeitsstand (venv wird bei Bedarf angelegt)
+./build_linux.sh        # Produktiv-Build: eigenständiges Binary via PyInstaller nach dist/
+./install_linux.sh      # Installation: kopiert nach ~/.local/share/tme/, Desktop-Eintrag zeigt danach direkt auf das Binary
+```
+
+Details zu Optionen (`--release`, `--stt`/`--with-stt` für die optionale
+Sprachnachrichten-Transkription, Zielpfade) siehe [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Hintergrund & Architektur
 Für Contributor:innen, die tiefer in Aufbau und Entstehung der Pipeline einsteigen wollen:

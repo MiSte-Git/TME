@@ -8,9 +8,14 @@ build/
 dist/
 .eggs/
 *.egg-info/
+# Von PyInstaller (build_win.ps1/build_linux.sh) als Nebeneffekt im Repo-Root
+# erzeugt, wenn kein bestehendes .spec als Ziel uebergeben wird - TME_mac.spec
+# ist dagegen bewusst eingecheckt (siehe build_mac.sh), daher kein *.spec.
+/TME.spec
 
 # Virtual envs and local env files
 .venv/
+.venv-build/
 venv/
 env/
 .env
