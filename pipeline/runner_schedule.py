@@ -43,6 +43,7 @@ from .runs import EmojiRun, ImageRun, LineBreak, RecordPair, RunsRecord, TextRun
 from .message_collect import collect_messages_for_schedule
 from .message_store import MessageStore, channel_key_for_entity, render_records_from_store, render_record_pairs_from_store
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
+from .translation.deepl_quota import DeepLQuotaState, record_usage as _record_deepl_usage
 from .no_translate_words import load_no_translate_words_set
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
 from .logging_setup import get_logger
@@ -357,6 +358,10 @@ class ScheduleRunResult:
     # estimated_cost_usd) je Provider - für die UI-seitige, über Qt-i18n
     # übersetzbare Anzeige (siehe ui/app.py::_on_worker_finished).
     translation_cost_totals: List[Tuple[str, int, int, int, int, float]] | None = None
+    # Nur gesetzt, wenn effective_translation_provider == "deepl" war (siehe
+    # pipeline/translation/deepl_quota.py) - Freikontingent-Stand NACH
+    # diesem Lauf, für die UI-Anzeige (ui/app.py::_on_worker_finished).
+    deepl_quota_state: "DeepLQuotaState | None" = None
 
     def __str__(self) -> str:  # pragma: no cover - convenience
         return str(self.odt_path)
@@ -1640,6 +1645,32 @@ async def run_schedule(
             for line in cost_summary_lines:
                 _notify(QCoreApplication.translate("RunnerSchedule", "Übersetzungskosten: {line}").format(line=line))
 
+        # DeepL-Freikontingent-Tracking (siehe pipeline/translation/deepl_quota.py):
+        # EINMAL pro Lauf, nicht pro Nachricht (get_usage() ist ein eigener
+        # GET-Aufruf) - andere Provider haben andere/keine Freikontingente,
+        # daher nur für "deepl" relevant.
+        deepl_quota_state: Optional[DeepLQuotaState] = None
+        if effective_translation_provider == "deepl" and translation_provider_obj is not None and cost_totals:
+            deepl_chars_this_run = next((c for p, _calls, c, *_ in cost_totals if p == "deepl"), 0)
+            live_usage = None
+            try:
+                live_usage = await translation_provider_obj.get_usage()
+            except Exception as exc:
+                logger.warning(
+                    "DeepL-Kontingent-Live-Check fehlgeschlagen (nutze lokalen Fallback-Zähler): %s", exc,
+                )
+            deepl_quota_state = _record_deepl_usage(deepl_chars_this_run, live_usage)
+            _notify(
+                QCoreApplication.translate(
+                    "RunnerSchedule",
+                    "DeepL-Freikontingent diesen Zeitraum: ~{used} von {limit} Zeichen verbraucht ({remaining} übrig).",
+                ).format(
+                    used=deepl_quota_state.character_count,
+                    limit=deepl_quota_state.character_limit,
+                    remaining=deepl_quota_state.remaining,
+                )
+            )
+
         _notify(QCoreApplication.translate("RunnerSchedule", "Fertig."))
         return ScheduleRunResult(
             odt_path=out_path,
@@ -1649,6 +1680,7 @@ async def run_schedule(
             docx_error="; ".join(docx_errors) if docx_errors else None,
             translation_cost_summary=cost_summary_lines,
             translation_cost_totals=cost_totals,
+            deepl_quota_state=deepl_quota_state,
         )
     finally:
         if client is not None:

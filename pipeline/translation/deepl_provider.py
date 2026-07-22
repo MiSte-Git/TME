@@ -13,8 +13,9 @@ from typing import Dict, Optional
 from credentials import get_deepl_api_key
 
 from ..logging_setup import get_logger
-from ._http import post_json
+from ._http import get_json, post_json
 from .base import TranslationError, TranslationResult
+from .deepl_quota import DEEPL_FREE_CHARACTER_LIMIT
 from .pricing import DEFAULT_PRICING, estimate_cost_usd
 
 logger = get_logger(__name__)
@@ -75,3 +76,16 @@ class DeepLProvider:
             char_count=char_count,
             estimated_cost_usd=cost,
         )
+
+    async def get_usage(self) -> tuple[int, int]:
+        """GET /v2/usage - (character_count, character_limit) der aktuellen
+        DeepL-Abrechnungsperiode (siehe deepl_quota.py für die Einordnung/
+        Persistierung). Bewusst NICHT Teil von translate() - wird einmal pro
+        Lauf abgefragt (siehe runner_schedule.py), nicht einmal pro
+        übersetzter Nachricht."""
+        headers = {"Authorization": f"DeepL-Auth-Key {self._api_key}"}
+        usage_url = self._api_url.rsplit("/v2/", 1)[0] + "/v2/usage"
+        data = await get_json(usage_url, headers=headers, provider_label="DeepL-Kontingent")
+        character_count = int(data.get("character_count") or 0)
+        character_limit = int(data.get("character_limit") or DEEPL_FREE_CHARACTER_LIMIT)
+        return character_count, character_limit

@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from pipeline.runner_schedule import run_schedule, estimate_translatable_chars
 from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid, TelegramCredentialsMissing
+from pipeline.translation.deepl_quota import load_quota_state as _load_deepl_quota_state, would_exceed as _deepl_would_exceed, set_local_reset_day as _set_deepl_local_reset_day
 from ui.login_dialog import LoginDialog
 from ui.api_keys_dialog import ApiKeysDialog
 from pipeline.logging_setup import get_logger
@@ -265,6 +266,17 @@ class ScheduleTab(QWidget):
         # parallele Telegram-Verbindungen zu öffnen.
         self._char_preview_rerun_pending = False
 
+        # DeepL-Freikontingent-Anzeige (siehe pipeline/translation/deepl_quota.py,
+        # _refresh_deepl_quota_display) - nur relevant/sichtbar, wenn
+        # provider_combo aktuell auf "deepl" steht; zeigt den zuletzt
+        # bekannten Stand (Live-Wert von DeepL bevorzugt, siehe Moduldoc)
+        # UND ggf. eine Überschreitungs-Warnung basierend auf der
+        # Zeichen-Vorschau (char_preview_label).
+        self.deepl_quota_label = QLabel("")
+        self.deepl_quota_label.setWordWrap(True)
+        self.deepl_quota_label.setVisible(False)
+        lay.addWidget(self.deepl_quota_label)
+
         self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
         self.lbl_provider = QLabel(self.tr("Übersetzungs-Provider:"))
@@ -428,6 +440,7 @@ class ScheduleTab(QWidget):
         self._load_state()
         self._install_state_handlers()
         self._sync_layout_enabled(self.cb_translate.isChecked())
+        self._refresh_deepl_quota_display()
 
     def _credentials_present(self) -> bool:
         try:
@@ -630,6 +643,7 @@ class ScheduleTab(QWidget):
                 chars=char_count, n=message_count,
             )
         )
+        self._refresh_deepl_quota_display(preview_chars=char_count)
 
     def _on_char_preview_error(self, request_id: int, message: str) -> None:
         if request_id != self._char_preview_request_id:
@@ -637,6 +651,37 @@ class ScheduleTab(QWidget):
         logger.info("Zeichen-Vorschau nicht verfügbar: %s", message)
         self.char_preview_label.setVisible(True)
         self.char_preview_label.setText(self.tr("Vorschau nicht verfügbar (Telegram-Login prüfen)."))
+        self._refresh_deepl_quota_display()
+
+    def _refresh_deepl_quota_display(self, preview_chars: Optional[int] = None) -> None:
+        """Aktualisiert deepl_quota_label - nur relevant, wenn aktuell
+        DeepL als Provider gewählt ist (andere Provider haben andere/keine
+        Freikontingente, siehe pipeline/translation/deepl_quota.py). Liest
+        den zuletzt PERSISTIERTEN Stand (kein Live-API-Call hier - der
+        passiert einmal pro echtem Lauf in runner_schedule.py, siehe dort) -
+        daher reine, sofortige Datei-Lektüre, unkritisch im UI-Thread.
+
+        preview_chars: char_count aus der aktuellen Zeichen-Vorschau (siehe
+        _on_char_preview_finished) - wenn gesetzt, wird zusätzlich geprüft,
+        ob ein Lauf mit dieser Zeichenzahl das Freikontingent überschreiten
+        würde, und ggf. eine Warnung angehängt."""
+        if str(self.provider_combo.currentData() or "telegram") != "deepl":
+            self._set_toggle_widget_visible(self.deepl_quota_label, False)
+            return
+        state = _load_deepl_quota_state()
+        if state.source == "none":
+            self._set_toggle_widget_visible(self.deepl_quota_label, False)
+            return
+        text = self.tr(
+            "DeepL-Freikontingent diesen Zeitraum: ~{used} von {limit} Zeichen verbraucht ({remaining} übrig)."
+        ).format(used=state.character_count, limit=state.character_limit, remaining=state.remaining)
+        if preview_chars is not None and _deepl_would_exceed(state, preview_chars):
+            over = state.character_count + preview_chars - state.character_limit
+            text += " " + self.tr(
+                "⚠ Dieser Lauf würde das Freikontingent um ~{over} Zeichen überschreiten und zusätzliche Kosten verursachen."
+            ).format(over=over)
+        self.deepl_quota_label.setText(text)
+        self._set_toggle_widget_visible(self.deepl_quota_label, True)
 
     def run_schedule_file(self) -> None:
         text = self.schedule_edit.text().strip()
@@ -910,6 +955,12 @@ class ScheduleTab(QWidget):
                         ).format(provider=provider, n=calls, chars=char_count, cost=cost_str)
                     )
             self.cost_status_label.setText(self.tr("Letzter Run: {summary}").format(summary="; ".join(parts)))
+        # DeepL-Freikontingent-Anzeige mit dem gerade von runner_schedule.py
+        # frisch persistierten Stand aktualisieren (siehe deepl_quota_state
+        # auf result und _refresh_deepl_quota_display - liest die Datei neu
+        # statt result.deepl_quota_state direkt zu nutzen, damit dieselbe
+        # Anzeige-Logik wie beim Provider-Wechsel gilt).
+        self._refresh_deepl_quota_display()
         # Merke Ausgabe-Pfad und zeige Button. btn_open_output/cost_status_label
         # waren bis hierhin ggf. unsichtbar (Visibility=False) - Qt vergrößert
         # das Fenster beim Sichtbarwerden NICHT automatisch, sondern quetscht
@@ -1148,6 +1199,7 @@ class ScheduleTab(QWidget):
             # _ensure_provider_api_key() kümmert sich bereits nur um genau
             # diesen einen Provider.
             self._ensure_provider_api_key(str(self.provider_combo.currentData() or "telegram"))
+        self._refresh_deepl_quota_display()
 
     def _install_state_handlers(self) -> None:
         self.schedule_edit.editingFinished.connect(self._save_state)
@@ -1430,6 +1482,34 @@ class MainWindow(QMainWindow):
         dialog = ApiKeysDialog(self)
         dialog.exec()
 
+    def _on_set_deepl_reset_day(self) -> None:
+        # Reiner Fallback für den lokalen Zähler, falls der Live-Check bei
+        # DeepL (GET /v2/usage, siehe deepl_provider.py::get_usage) mal
+        # nicht erreichbar ist - der Live-Wert wird immer bevorzugt und
+        # kennt seinen Reset-Zeitpunkt selbst (siehe deepl_quota.py-Moduldoc,
+        # DeepL liefert dafür kein Datum über die API). 0 = Fallback
+        # deaktivieren (Zähler wächst dann unbegrenzt, bis wieder ein
+        # Live-Check gelingt).
+        state = _load_deepl_quota_state()
+        current = state.local_reset_day or 0
+        day, ok = QInputDialog.getInt(
+            self,
+            self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)"),
+            self.tr(
+                "Tag des Monats, an dem dein DeepL-Nutzungszeitraum beginnt "
+                "(nur als Fallback genutzt, wenn der Live-Abgleich mit DeepL "
+                "nicht erreichbar ist - siehe DeepL-Kontoseite für das genaue "
+                "Datum). 0 = Fallback deaktivieren."
+            ),
+            current, 0, 28,
+        )
+        if ok:
+            _set_deepl_local_reset_day(day or None)
+            for i in range(self.tabs.count()):
+                w = self.tabs.widget(i)
+                if isinstance(w, ScheduleTab):
+                    w._refresh_deepl_quota_display()
+
     def _show_api_help(self) -> None:
         xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
         cred_path = str(Path(xdg) / "telegram-odt" / "credentials.json")
@@ -1470,6 +1550,8 @@ class MainWindow(QMainWindow):
             self.settings_menu.setTitle(self.tr("Einstellungen"))
             if hasattr(self, "action_api_keys"):
                 self.action_api_keys.setText(self.tr("API-Keys verwalten…"))
+            if hasattr(self, "action_deepl_reset_day"):
+                self.action_deepl_reset_day.setText(self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)…"))
         if hasattr(self, "help_menu"):
             self.help_menu.setTitle(self.tr("Hilfe"))
             if hasattr(self, "action_api_help"):
@@ -1520,6 +1602,9 @@ class MainWindow(QMainWindow):
         self.action_api_keys = QAction(self.tr("API-Keys verwalten…"), self)
         self.action_api_keys.triggered.connect(self._on_manage_api_keys)
         self.settings_menu.addAction(self.action_api_keys)
+        self.action_deepl_reset_day = QAction(self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)…"), self)
+        self.action_deepl_reset_day.triggered.connect(self._on_set_deepl_reset_day)
+        self.settings_menu.addAction(self.action_deepl_reset_day)
         # Hilfe / Doku (ganz rechts)
         self.help_menu = menubar.addMenu(self.tr("Hilfe"))
         self.action_api_help = QAction(self.tr("Hinweis: Telegram API-Schlüssel"), self)
