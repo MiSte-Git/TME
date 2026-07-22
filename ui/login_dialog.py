@@ -32,7 +32,7 @@ class TelegramLoginBridge(QObject):
 
     need_phone = Signal(int)
     need_code = Signal(int)
-    need_password = Signal(int)
+    need_password = Signal(int, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -69,9 +69,9 @@ class TelegramLoginBridge(QObject):
         self.need_code.emit(self._code_attempt)
         return self._wait_for_value()
 
-    def password_callback(self) -> str:
+    def password_callback(self, hint: Optional[str] = None) -> str:
         self._password_attempt += 1
-        self.need_password.emit(self._password_attempt)
+        self.need_password.emit(self._password_attempt, hint or "")
         return self._wait_for_value()
 
 
@@ -188,6 +188,15 @@ class LoginDialog(QDialog):
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         v.addWidget(self.password_edit)
+        # Von Telegram hinterlegter Passwort-Hinweis (account.password.hint,
+        # siehe pipeline/telegram_login.py), analog zur offiziellen App -
+        # standardmäßig leer/ausgeblendet, nur befüllt wenn Telegram tatsächlich
+        # einen Hinweis liefert (siehe _on_need_password).
+        self.lbl_password_telegram_hint = QLabel("")
+        self.lbl_password_telegram_hint.setWordWrap(True)
+        self.lbl_password_telegram_hint.setStyleSheet("color: gray; font-style: italic;")
+        self.lbl_password_telegram_hint.setVisible(False)
+        v.addWidget(self.lbl_password_telegram_hint)
         self.stack.addWidget(page_password)
 
         page_wait = QWidget()
@@ -267,10 +276,16 @@ class LoginDialog(QDialog):
         self.btn_next.setEnabled(True)
         self.code_edit.setFocus()
 
-    def _on_need_password(self, attempt: int) -> None:
+    def _on_need_password(self, attempt: int, hint: str) -> None:
         if attempt > 1:
             self.password_edit.clear()
             self.lbl_password_hint.setText(self.tr("Ungültiges Passwort. Bitte erneut eingeben:"))
+        if hint:
+            self.lbl_password_telegram_hint.setText(self.tr("Hinweis: {hint}").format(hint=hint))
+            self.lbl_password_telegram_hint.setVisible(True)
+        else:
+            self.lbl_password_telegram_hint.clear()
+            self.lbl_password_telegram_hint.setVisible(False)
         self.stack.setCurrentIndex(self.PAGE_PASSWORD)
         self.btn_next.setEnabled(True)
         self.password_edit.setFocus()

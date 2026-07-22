@@ -44,7 +44,9 @@ def _code_callback() -> str:
     return input("Bitte den per Telegram erhaltenen Bestätigungscode eingeben: ")
 
 
-def _password_callback() -> str:
+def _password_callback(hint: str | None = None) -> str:
+    if hint:
+        print(f"Passwort-Hinweis von Telegram: {hint}")
     return getpass.getpass("Bitte 2FA-Passwort eingeben: ")
 
 
