@@ -2,7 +2,6 @@
 odt_writer: Runs → ODT schreiben mit benannten Style-IDs
 """
 from __future__ import annotations
-from dataclasses import replace as _dc_replace
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import itertools
@@ -341,158 +340,6 @@ def render_runs_into_container(
         else:
             _render_run_into_paragraph(doc, p, r, style_names)
     container.addElement(p)
-
-
-# Grobe Erfahrungswerte für die Zeilen-Schätzung im side_by_side-Ausgleich
-# (siehe _estimate_section_lines/_render_sentence_balanced) - keine
-# Font-Metrik-genaue Berechnung, nur "ungefähr wieder auf gleicher Höhe"
-# zwischen Original- und Übersetzungsspalte. Bezogen auf P.CellBase
-# (10pt-Schrift, 150% Zeilenhöhe, siehe _ensure_table_styles).
-_CHARS_PER_CM = 5.0
-_LINE_HEIGHT_CM = 0.53
-
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
-
-
-def _split_text_into_sentences(text: str) -> List[str]:
-    """Teilt einen Textblock an Satzenden (. ! ?) gefolgt von Whitespace.
-    Tolerant gegenüber fehlendem Satzzeichen am Ende: der Rest bleibt dann
-    einfach ein einziger (letzter) Abschnitt. Keine linguistisch exakte
-    Satzerkennung (z.B. "Dr." wird mit-getrennt) - für die grobe
-    Zeilen-Ausgleichslogik reicht das."""
-    if not text:
-        return [text]
-    parts = [p for p in _SENTENCE_SPLIT_RE.split(text) if p]
-    return parts or [text]
-
-
-def _split_runs_into_sections(runs: List[Any]) -> List[List[Any]]:
-    """Teilt eine Run-Liste (eine Nachricht) in satzweise Abschnitte für den
-    side_by_side-Zeilenausgleich (siehe _render_sentence_balanced).
-    Formatierung bleibt pro Teilstück erhalten (dataclasses.replace kopiert
-    Bold/Italic/etc. vom Ursprungs-TextRun). ImageRun bekommt immer einen
-    eigenen Abschnitt, damit Bilder einzeln zeilen-geschätzt und ausgeglichen
-    werden (siehe _estimate_section_lines)."""
-    sections: List[List[Any]] = []
-    current: List[Any] = []
-    for r in runs:
-        if isinstance(r, ImageRun):
-            if current:
-                sections.append(current)
-                current = []
-            sections.append([r])
-            continue
-        if isinstance(r, TextRun) and r.text:
-            pieces = _split_text_into_sentences(r.text)
-            for i, piece in enumerate(pieces):
-                if not piece:
-                    continue
-                current.append(_dc_replace(r, text=piece))
-                if i < len(pieces) - 1:
-                    sections.append(current)
-                    current = []
-        else:
-            current.append(r)
-    if current:
-        sections.append(current)
-    return sections
-
-
-def _estimate_section_lines(section: List[Any], col_width_cm: float, max_image_width_cm: float) -> float:
-    """Grobe Zeilenzahl-Schätzung eines Abschnitts für die verfügbare
-    Spaltenbreite - Zeichenanzahl / Zeichen-pro-Zeile (siehe _CHARS_PER_CM)
-    für Text, Bildhöhe / Zeilenhöhe (siehe _LINE_HEIGHT_CM) für ImageRun.
-    Keine Pixel-/Zeilenperfektion, nur genug für ein sinnvolles Nachziehen
-    der kürzeren Spalte (siehe _render_sentence_balanced)."""
-    chars_per_line = max(1.0, _CHARS_PER_CM * col_width_cm)
-    text_chars = 0
-    extra_lines = 0.0
-    for r in section:
-        if isinstance(r, TextRun):
-            text_chars += len(r.text or "")
-        elif isinstance(r, EmojiRun):
-            text_chars += 2
-        elif isinstance(r, LB):
-            extra_lines += 1.0
-        elif isinstance(r, ImageRun):
-            img_path = Path(r.path)
-            if img_path.exists():
-                width_cm = min(r.width_cm, max_image_width_cm) if max_image_width_cm else r.width_cm
-                extra_lines += _compute_image_height_cm(img_path, width_cm) / _LINE_HEIGHT_CM
-            else:
-                extra_lines += 1.0  # Platzhaltertext "[IMG missing: ...]", siehe _add_image_block
-    if text_chars:
-        extra_lines += max(1.0, text_chars / chars_per_line)
-    return extra_lines
-
-
-def _render_section_into_container(
-    doc: OpenDocumentText,
-    container: Any,
-    section: List[Any],
-    style_names: Dict[str, Any],
-    base_para_style: str,
-    max_image_width_cm: Optional[float],
-) -> None:
-    """Rendert einen einzelnen Satzabschnitt als eigenen Absatz - Bild-
-    Abschnitte (immer genau ein ImageRun, siehe _split_runs_into_sections)
-    wie in render_runs_into_container, sonst ein Textabsatz über
-    _render_run_into_paragraph."""
-    if len(section) == 1 and isinstance(section[0], ImageRun):
-        r = section[0]
-        width_cm = r.width_cm
-        if max_image_width_cm is not None and width_cm > max_image_width_cm:
-            width_cm = max_image_width_cm
-        p_img = P(stylename=base_para_style)
-        _add_image_block(doc, Path(r.path), p_img, style_names["G.InlineEmojiObj"], width_cm=width_cm)
-        container.addElement(p_img)
-        return
-    p = P(stylename=base_para_style)
-    for r in section:
-        _render_run_into_paragraph(doc, p, r, style_names)
-    container.addElement(p)
-
-
-def _render_sentence_balanced(
-    doc: OpenDocumentText,
-    cell_orig: Any,
-    cell_tr: Any,
-    orig_runs: List[Any],
-    tr_runs: List[Any],
-    style_names: Dict[str, Any],
-    base_para_style: str,
-    col_width_cm: float,
-    max_image_width_cm: float,
-) -> None:
-    """side_by_side-Ausgleich (siehe write_odt_for_record_pairs): schreibt
-    Original/Übersetzung satzweise als eigene Absätze in die beiden Zellen
-    und füllt nach jedem Satzabschnitt-Paar die kürzere Seite mit leeren
-    Absätzen auf die grob geschätzte Zeilenzahl der längeren Seite auf -
-    verhindert, dass sich die Spalten über eine lange Nachricht hinweg immer
-    weiter auseinanderziehen. Hat eine Seite mehr Abschnitte als die andere
-    (z.B. andere Satzanzahl nach der Übersetzung), läuft die kürzere Liste
-    einfach leer (zip_longest) - die überzähligen Abschnitte der längeren
-    Seite werden trotzdem durch Leerabsätze auf der anderen Seite
-    ausgeglichen, damit spätere Nachrichten in der Tabelle nicht zusätzlich
-    verschoben starten."""
-    orig_sections = _split_runs_into_sections(orig_runs)
-    tr_sections = _split_runs_into_sections(tr_runs)
-    for o_section, t_section in itertools.zip_longest(orig_sections, tr_sections):
-        o_lines = 0.0
-        t_lines = 0.0
-        if o_section:
-            _render_section_into_container(doc, cell_orig, o_section, style_names, base_para_style, max_image_width_cm)
-            o_lines = _estimate_section_lines(o_section, col_width_cm, max_image_width_cm)
-        if t_section:
-            _render_section_into_container(doc, cell_tr, t_section, style_names, base_para_style, max_image_width_cm)
-            t_lines = _estimate_section_lines(t_section, col_width_cm, max_image_width_cm)
-        diff = round(o_lines) - round(t_lines)
-        if diff > 0:
-            for _ in range(diff):
-                cell_tr.addElement(P(stylename=base_para_style))
-        elif diff < 0:
-            for _ in range(-diff):
-                cell_orig.addElement(P(stylename=base_para_style))
 
 
 def _build_header_paragraph(
@@ -871,13 +718,16 @@ def write_odt_for_record_pairs(
         cell_orig = TableCell(stylename=style_names["TCell.Base"])
         cell_tr = TableCell(stylename=style_names["TCell.Base"])
         if pair.translation is not None:
-            # Satzweise + zeilen-ausgeglichen (siehe _render_sentence_balanced),
-            # damit Original/Übersetzung über die Nachricht hinweg nicht immer
-            # weiter auseinanderlaufen.
-            _render_sentence_balanced(
-                doc, cell_orig, cell_tr, rec.runs, pair.translation.runs,
-                style_names, style_names.get("P.CellBase"), col_width_cm, max_img_width_cm,
-            )
+            # Original und Übersetzung werden jeweils vollständig in ihre
+            # Zelle gerendert (keine satzweise Zeichen-pro-cm-Schätzung mit
+            # Leerabsatz-Auffüllung mehr - siehe Git-Historie: die Tabelle
+            # hat bereits eine echte Zeile pro Nachricht, ODF/LibreOffice
+            # gleicht die Zeilenhöhe automatisch an die längere Spalte an;
+            # die Schätz-Heuristik war dadurch nicht nur unnötig, sondern
+            # blähte das Dokument durch Leerabsätze spürbar auf und lief bei
+            # größeren Längenunterschieden trotzdem sichtbar auseinander).
+            render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
+            render_runs_into_container(doc, cell_tr, pair.translation.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
         else:
             render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
             p_missing = P(stylename=style_names.get("P.CellBase"))
