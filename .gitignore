@@ -55,3 +55,8 @@ WIP-CH.patch
 
 .pip-cache/
 pkg/
+
+# Claude-Code-Berechtigungen sammeln pro Session laufend neue, lokale
+# Eintraege an - stoert staendig als "geaendert" in git status, daher lokal
+# statt geteilt (siehe .claude/settings.json).
+.claude/settings.json
