@@ -1,16 +1,15 @@
 """Regressionstest: Message-Header (Zeitstempel/Link/Kanal) im
-side_by_side-Nebeneinander-Layout fehlte in der Übersetzungsspalte.
+side_by_side-Nebeneinander-Layout.
 
-Befund: die DE-Zelle begann direkt mit dem Nachrichteninhalt, ohne den
-P.MessageHeader-Absatz (Zeitstempel, Nachrichtentyp, Link, Kanalname), der
-in der EN-Zelle jeder Nachricht vorangeht. Ursache war NICHT eine fehlende
-Datenkopie in runner_schedule.py (header_runs landet dort bereits korrekt in
-tr_meta) - odt_writer.write_odt_for_record_pairs() hat den Header für die
-Übersetzungsspalte schlicht nie gebaut (bewusste, aber unerwünschte
-Design-Entscheidung, siehe Kommentar-Historie). Der Header ist
-sprachunabhängig (Zeitstempel/Link/Kanal) und wird daher unübersetzt 1:1 in
-beide Spalten kopiert - analog zur Bild-Duplizierung, siehe
-tests/test_side_by_side_images.py.
+Verlauf: zunächst fehlte der P.MessageHeader-Absatz in der DE-Zelle komplett
+(die Ursache lag NICHT in runner_schedule.py - header_runs landet dort
+bereits korrekt in tr_meta - sondern rein im Rendering in odt_writer.py).
+Der erste Fix duplizierte den Header 1:1 in beide Zellen. Da der Header
+sprachunabhängig ist (Zeitstempel/Link/Kanal), ist die sauberere Lösung
+stattdessen eine eigene, spaltenübergreifende Header-Zeile VOR der
+zweispaltigen Datenzeile jeder Nachricht (table:number-columns-spanned=2 +
+covered-table-cell für die zweite Spalte) - kein Duplikat mehr in den
+Datenzellen selbst.
 
 Kein pytest im Projekt (siehe requirements.txt) - eigenständiges Skript wie
 tests/test_side_by_side_images.py. Aufruf:
@@ -30,30 +29,28 @@ sys.path.insert(0, str(REPO_ROOT))
 from pipeline.runs import RecordPair, RunsRecord, TextRun, LineBreak  # noqa: E402
 from pipeline.odt_writer import write_odt_for_record_pairs  # noqa: E402
 
-NS = {"text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
-      "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0"}
+TABLE_NS = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+TEXT_NS = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+NS = {"text": TEXT_NS, "table": TABLE_NS}
 
 
-def _header_paragraphs_per_cell(odt_path: Path) -> list[tuple[list[str], list[str]]]:
-    """Liest content.xml und liefert pro Datenzeile (Textinhalte der
-    P.MessageHeader-Absätze in Zelle 1, in Zelle 2)."""
+def _rows_after_header(odt_path: Path) -> list:
+    """Alle table:table-row-Elemente ohne die erste Zeile (Spalten-
+    überschriften Original/Übersetzung)."""
     with zipfile.ZipFile(odt_path) as z:
         content = z.read("content.xml")
     root = ET.fromstring(content)
-    rows = root.findall(".//table:table-row", NS)[1:]  # erste Zeile = Spaltenüberschriften
-    result = []
-    for row in rows:
-        cells = row.findall("table:table-cell", NS)
-        assert len(cells) == 2
-        texts_per_cell = []
-        for cell in cells:
-            headers = [p for p in cell.findall("text:p", NS) if p.get(f"{{{NS['text']}}}style-name") == "P.MessageHeader"]
-            texts_per_cell.append(["".join(p.itertext()) for p in headers])
-        result.append((texts_per_cell[0], texts_per_cell[1]))
-    return result
+    return root.findall(".//table:table-row", NS)[1:]
 
 
-def test_header_present_and_identical_in_both_columns() -> None:
+def _header_text(cell) -> str | None:
+    ps = [p for p in cell.findall("text:p", NS) if p.get(f"{{{TEXT_NS}}}style-name") == "P.MessageHeader"]
+    if not ps:
+        return None
+    return "".join(ps[0].itertext())
+
+
+def test_header_row_spans_both_columns_once_per_message() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         header_runs = [
             TextRun(kind="TextRun", text="2026-01-01 12:00:00 – Bild"),
@@ -69,8 +66,8 @@ def test_header_present_and_identical_in_both_columns() -> None:
             original=RunsRecord(chat="Chat", message_id=1, runs=[TextRun(kind="TextRun", text="Hello")], meta=meta),
             translation=RunsRecord(chat="Chat - DE", message_id=1, runs=[TextRun(kind="TextRun", text="Hallo")]),
         )
-        # Nachricht 2: OHNE Übersetzung (pair.translation is None) - Header
-        # muss trotzdem in beiden Spalten erscheinen (siehe else-Zweig in
+        # Nachricht 2: OHNE Übersetzung (pair.translation is None) - die
+        # Header-Zeile muss trotzdem erscheinen (siehe else-Zweig in
         # write_odt_for_record_pairs).
         pair2 = RecordPair(
             original=RunsRecord(chat="Chat", message_id=2, runs=[TextRun(kind="TextRun", text="No translation")], meta=meta),
@@ -83,22 +80,42 @@ def test_header_present_and_identical_in_both_columns() -> None:
             doc_title="Test", original_label="Original (EN)", translation_label="Übersetzung (DE)",
         )
 
-        rows = _header_paragraphs_per_cell(out_path)
-        assert len(rows) == 2, f"erwartet 2 Datenzeilen, gefunden {len(rows)}"
+        rows = _rows_after_header(out_path)
+        # Pro Nachricht: 1 Header-Zeile + 1 Datenzeile = 2 Zeilen -> 4 insgesamt
+        assert len(rows) == 4, f"erwartet 4 Zeilen (2x Header+Daten fuer 2 Nachrichten), gefunden {len(rows)}"
 
-        for i, (en_headers, de_headers) in enumerate(rows, 1):
-            assert len(en_headers) == 1, f"Nachricht {i}: EN-Zelle sollte genau 1 P.MessageHeader-Absatz haben, war {en_headers}"
-            assert len(de_headers) == 1, f"Nachricht {i}: DE-Zelle sollte genau 1 P.MessageHeader-Absatz haben, war {de_headers}"
-            assert en_headers[0] == de_headers[0], (
-                f"Nachricht {i}: Header-Text weicht zwischen EN und DE ab - "
-                f"sollte 1:1 identisch (unübersetzt) sein: EN={en_headers[0]!r} DE={de_headers[0]!r}"
-            )
-            assert "2026-01-01 12:00:00" in en_headers[0] and "@testchannel" in en_headers[0]
+        for msg_idx in range(2):
+            header_row = rows[msg_idx * 2]
+            data_row = rows[msg_idx * 2 + 1]
 
-        print(f"[OK] P.MessageHeader in beiden Spalten vorhanden und identisch, "
-              f"auch ohne Übersetzung (Nachricht 2): {rows}")
+            # Header-Zeile: genau eine table:table-cell mit
+            # number-columns-spanned="2", gefolgt von einer
+            # covered-table-cell - keine zweite eigenständige Zelle.
+            header_cells = header_row.findall("table:table-cell", NS)
+            covered_cells = header_row.findall("table:covered-table-cell", NS)
+            assert len(header_cells) == 1, f"Nachricht {msg_idx + 1}: Header-Zeile sollte genau 1 table-cell haben, war {len(header_cells)}"
+            assert len(covered_cells) == 1, f"Nachricht {msg_idx + 1}: Header-Zeile sollte genau 1 covered-table-cell haben, war {len(covered_cells)}"
+            span = header_cells[0].get(f"{{{TABLE_NS}}}number-columns-spanned")
+            assert span == "2", f"Nachricht {msg_idx + 1}: erwartet number-columns-spanned='2', war {span!r}"
+
+            header_text = _header_text(header_cells[0])
+            assert header_text is not None, f"Nachricht {msg_idx + 1}: kein P.MessageHeader-Absatz in der Header-Zeile gefunden"
+            assert "2026-01-01 12:00:00" in header_text and "@testchannel" in header_text
+
+            # Datenzeile: genau 2 normale Zellen, OHNE eigenen
+            # P.MessageHeader-Absatz (nicht mehr dupliziert).
+            data_cells = data_row.findall("table:table-cell", NS)
+            assert len(data_cells) == 2, f"Nachricht {msg_idx + 1}: Datenzeile sollte 2 Zellen haben, war {len(data_cells)}"
+            for cell in data_cells:
+                assert _header_text(cell) is None, (
+                    f"Nachricht {msg_idx + 1}: Datenzelle sollte keinen P.MessageHeader-Absatz mehr enthalten "
+                    f"(jetzt in eigener Zeile) - gefunden: {_header_text(cell)!r}"
+                )
+
+        print(f"[OK] Pro Nachricht genau 1 spaltenübergreifende Header-Zeile (number-columns-spanned=2) "
+              f"+ 1 Datenzeile ohne Header-Duplikat, auch ohne Übersetzung (Nachricht 2).")
 
 
 if __name__ == "__main__":
-    test_header_present_and_identical_in_both_columns()
+    test_header_row_spans_both_columns_once_per_message()
     print("ALLE TESTS BESTANDEN")

@@ -17,7 +17,7 @@ from odf.text import (
 from odf.namespaces import TEXTNS
 import re
 from odf.draw import Frame, Image as DrawImage
-from odf.table import Table, TableColumn, TableRow, TableCell
+from odf.table import Table, TableColumn, TableRow, TableCell, CoveredTableCell
 
 from PIL import Image as PILImage  # nur für Dimensionen, optional
 from odf.style import (
@@ -730,9 +730,14 @@ def write_odt_for_record_pairs(
     original_label: str = "Original",
     translation_label: str = "Übersetzung",
 ) -> Path:
-    """side_by_side-Layout: eine Tabellenzeile pro Nachricht(-Paar), Original
-    links / Übersetzung rechts. Bewusst eine Tabellenzeile pro Nachricht statt
-    echtem ODT-Spalten-Layout (fo:column-count) - sonst bleiben Original und
+    """side_by_side-Layout: pro Nachricht(-Paar) eine zweispaltige Datenzeile
+    (Original links / Übersetzung rechts), davor optional eine
+    spaltenübergreifende Header-Zeile (Zeitstempel/Typ/Link/Kanal - siehe
+    _build_header_paragraph). Der Header ist sprachunabhängig und steht
+    deshalb bewusst einmalig über beide Spalten hinweg (table:number-columns-
+    spanned + covered-table-cell), statt dupliziert in beiden Datenzellen zu
+    stehen. Bewusst eine Datenzeile pro Nachricht statt echtem ODT-
+    Spalten-Layout (fo:column-count) - sonst bleiben Original und
     Übersetzung nicht zeilensynchron (Machbarkeitsentscheidung, siehe Feature-
     Beschreibung).
 
@@ -844,32 +849,27 @@ def write_odt_for_record_pairs(
         if current_table is None:
             current_table = _start_new_table()
 
-        row = TableRow()
-
-        # Original-Spalte: Header (Zeitstempel/Link/Autor bzw. bei aktivem
-        # Interleaving die "Titel: <Name>"-Zeile) + Nachrichtentext.
-        cell_orig = TableCell(stylename=style_names["TCell.Base"])
+        # Header-Zeile (Zeitstempel/Typ/Link/Kanal - sprachunabhängig, daher
+        # nicht dupliziert in beide Spalten, sondern EINMAL spaltenübergreifend
+        # über der eigentlichen Datenzeile, analog zu einer Section-Header-
+        # Zeile. table:number-columns-spanned + eine anschließende
+        # covered-table-cell für die zweite, "verdeckte" Spalte - siehe ODF-
+        # Spezifikation/odfpy-Doku zu Merged Cells (odf.table.TableCell,
+        # odf.table.CoveredTableCell).
         link_text = rec.meta.get("link") if rec.meta else None
         header_runs = rec.meta.get("header_runs") if rec.meta else None
         p_header = _build_header_paragraph(doc, header_runs, link_text, style_names)
         if p_header is not None:
-            cell_orig.addElement(p_header)
+            header_row = TableRow()
+            header_cell = TableCell(stylename=style_names["TCell.Base"], numbercolumnsspanned=2)
+            header_cell.addElement(p_header)
+            header_row.addElement(header_cell)
+            header_row.addElement(CoveredTableCell())
+            current_table.addElement(header_row)
 
-        # Übersetzungs-Spalte: derselbe Header wie im Original (Zeitstempel/
-        # Link/Kanal sind sprachunabhängig, daher unübersetzt 1:1 kopiert -
-        # analog zur Bild-Duplizierung, siehe
-        # _duplicate_images_into_translation_record in runner_schedule.py).
-        # Bewusst aus rec.meta (Original) statt pair.translation.meta gebaut,
-        # damit der Header auch dann erscheint, wenn keine Übersetzung
-        # vorliegt (pair.translation is None, siehe else-Zweig unten) und
-        # garantiert identisch bleibt, unabhängig davon, ob der
-        # Übersetzungs-Record dieselben Meta-Daten trägt. Ein zweites,
-        # eigenständiges Element (nicht dasselbe p_header-Objekt) - ein
-        # ODF-Element kann nicht zwei Elternknoten haben.
+        row = TableRow()
+        cell_orig = TableCell(stylename=style_names["TCell.Base"])
         cell_tr = TableCell(stylename=style_names["TCell.Base"])
-        p_header_tr = _build_header_paragraph(doc, header_runs, link_text, style_names)
-        if p_header_tr is not None:
-            cell_tr.addElement(p_header_tr)
         if pair.translation is not None:
             # Satzweise + zeilen-ausgeglichen (siehe _render_sentence_balanced),
             # damit Original/Übersetzung über die Nachricht hinweg nicht immer
