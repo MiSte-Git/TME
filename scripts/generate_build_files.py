@@ -198,6 +198,40 @@ def _run_update_desktop_database() -> None:
     subprocess.run([update_db, str(_desktop_applications_dir())], check=False)
 
 
+# Name[xx]=/Comment[xx]= für die 9 zusätzlich unterstützten UI-Sprachen
+# (siehe ui/translations/app_*.ts) - Desktop-Umgebungen (GNOME/KDE/...)
+# wählen anhand der aktuellen System-Locale automatisch die passende
+# Zeile, unabhängig von der in der App gewählten Sprache (dort separat
+# per QTranslator umgeschaltet, siehe ui/app.py::_apply_language). Ohne
+# passende Locale bleibt der unlokalisierte Name=/Comment= (Deutsch) der
+# Fallback. Name[xx] absichtlich übersetzt statt als Eigenname belassen -
+# "Telegram → ODT mit Emoji & Übersetzung" ist ein beschreibender Titel,
+# kein Markenname (übernimmt exakt die vorhandenen Übersetzungen des
+# Fenstertitels aus den .ts-Dateien).
+_DESKTOP_NAME_TRANSLATIONS = {
+    "en": "Telegram → ODT with emoji & translation",
+    "fr": "Telegram → ODT avec emoji et traduction",
+    "it": "Telegram → ODT con emoji e traduzione",
+    "ru": "Telegram → ODT с эмодзи и переводом",
+    "pl": "Telegram → ODT z emoji i tłumaczeniem",
+    "es": "Telegram → ODT con emoji y traducción",
+    "hr": "Telegram → ODT s emojijima i prijevodom",
+    "nl": "Telegram → ODT met emoji & vertaling",
+    "fi": "Telegram → ODT emojeilla ja käännöksellä",
+}
+_DESKTOP_COMMENT_TRANSLATIONS = {
+    "en": "Generate ODT from Telegram schedules, incl. emoji handling and translation",
+    "fr": "Génère un ODT à partir de plannings Telegram, y compris la gestion des emoji et la traduction",
+    "it": "Genera ODT dai programmi Telegram, inclusa la gestione degli emoji e la traduzione",
+    "ru": "Создание ODT из расписаний Telegram, включая обработку эмодзи и перевод",
+    "pl": "Generuje plik ODT na podstawie harmonogramów Telegram, w tym obsługę emoji i tłumaczenie",
+    "es": "Genera ODT a partir de programaciones de Telegram, incl. gestión de emoji y traducción",
+    "hr": "Generira ODT iz Telegram rasporeda, uključujući rukovanje emojijima i prijevod",
+    "nl": "Genereert ODT vanuit Telegram-schema's, incl. emoji-verwerking en vertaling",
+    "fi": "Luo ODT-tiedoston Telegram-aikatauluista, sis. emojien käsittelyn ja käännöksen",
+}
+
+
 def generate_desktop_entry(repo_root: Path, entry: Path, binary_path: Optional[Path] = None) -> str:
     """Erzeugt den .desktop-Inhalt.
 
@@ -229,11 +263,15 @@ def generate_desktop_entry(repo_root: Path, entry: Path, binary_path: Optional[P
         work_dir = repo_root
         icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
 
+    name_lines = "\n".join(f"Name[{lang}]={text}" for lang, text in _DESKTOP_NAME_TRANSLATIONS.items())
+    comment_lines = "\n".join(f"Comment[{lang}]={text}" for lang, text in _DESKTOP_COMMENT_TRANSLATIONS.items())
     return f"""[Desktop Entry]
 Type=Application
 Version=1.0
 Name=Telegram → ODT mit Emoji & Übersetzung
+{name_lines}
 Comment=Erzeuge ODT aus Telegram-Schedules, inkl. Emoji-Handling und Übersetzung
+{comment_lines}
 Exec={exec_cmd}
 Path={work_dir}
 Icon={icon_path}
