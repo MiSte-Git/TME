@@ -306,6 +306,14 @@ class ScheduleTab(QWidget):
         # Zeigt u.a. Fehlermeldungen mit technischen Details (Pfade, IDs) an -
         # muss zur Fehlersuche kopierbar sein, nicht nur lesbar.
         self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        # Garantiert mindestens 2 Zeilen Platz, unabhängig davon, wie das
+        # Layout beim Sichtbarwerden weiterer Widgets (cost_status_label/
+        # btn_open_output, siehe _on_worker_finished) den verfügbaren Platz
+        # verteilt - QLabel.sizeHint() bei aktiviertem Wortumbruch spiegelt
+        # NICHT die tatsächlich bei der realen Breite benötigte Höhe wider,
+        # wodurch das Layout dieses Label sonst bis auf eine Zeile
+        # zusammenquetscht (Bug-Report: Text nach Lauf-Ende abgeschnitten).
+        self.status_label.setMinimumHeight(int(self.status_label.fontMetrics().lineSpacing() * 2.2))
         lay.addWidget(self.status_label)
 
         # Geschätzte Übersetzungskosten des letzten abgeschlossenen Laufs -
@@ -316,7 +324,13 @@ class ScheduleTab(QWidget):
         self.cost_status_label.setWordWrap(True)
         self.cost_status_label.setVisible(False)
         self.cost_status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.cost_status_label.setMinimumHeight(int(self.cost_status_label.fontMetrics().lineSpacing() * 1.6))
         lay.addWidget(self.cost_status_label)
+        # Getrennt von isVisible() (siehe _on_worker_finished/
+        # _grow_window_for_newly_visible): cost_status_label wird vor jedem
+        # neuen Lauf wieder unsichtbar gemacht, soll das Fenster aber nur
+        # beim allerersten Erscheinen vergrößern, nicht bei jedem Lauf erneut.
+        self._cost_label_ever_shown = False
 
         self.btn_continue = QPushButton(self.tr("Fortsetzen"))
         self.btn_continue.setVisible(False)
@@ -617,6 +631,24 @@ class ScheduleTab(QWidget):
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
 
+    def _grow_window_for_newly_visible(self, widgets: list) -> None:
+        """Vergrößert das umgebende Fenster um die Höhe, die die übergebenen,
+        gerade erstmals sichtbar gewordenen Widgets zusätzlich benötigen -
+        Qt vergrößert Top-Level-Fenster bei einem neu sichtbaren Kind-Widget
+        NICHT automatisch, sondern verteilt die zusätzlich benötigte Höhe
+        durch Zusammendrücken bestehender, flexibler Bereiche (z.B.
+        status_label) innerhalb der unveränderten Fenstergröße - dadurch
+        wurde der Statustext direkt nach Lauf-Ende abgeschnitten/unlesbar,
+        bis der Nutzer das Fenster manuell vergrößerte. Addiert bewusst nur
+        die zusätzlich benötigte Höhe auf die AKTUELLE Fenstergröße (statt
+        z.B. window.adjustSize()/sizeHint() zu verwenden), damit eine vom
+        Nutzer bereits größer gezogene Fenstergröße nicht verkleinert wird."""
+        win = self.window()
+        spacing = self.layout().spacing() if self.layout() is not None else 0
+        extra = sum(w.sizeHint().height() + spacing for w in widgets)
+        if extra > 0:
+            win.resize(win.width(), win.height() + extra)
+
     def _on_worker_finished(self, result: object) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
@@ -687,11 +719,32 @@ class ScheduleTab(QWidget):
                         ).format(provider=provider, n=calls, chars=char_count, cost=cost_str)
                     )
             self.cost_status_label.setText(self.tr("Letzter Run: {summary}").format(summary="; ".join(parts)))
+        # Merke Ausgabe-Pfad und zeige Button. btn_open_output/cost_status_label
+        # waren bis hierhin ggf. unsichtbar (Visibility=False) - Qt vergrößert
+        # das Fenster beim Sichtbarwerden NICHT automatisch, sondern quetscht
+        # bestehende Bereiche (z.B. status_label) zusammen, um den neuen
+        # Platzbedarf innerhalb der unveränderten Fenstergröße unterzubringen
+        # (siehe _grow_window_for_newly_visible). Daher hier vorab prüfen, wer
+        # gerade zum ERSTEN Mal sichtbar wird, und das Fenster danach um genau
+        # den zusätzlichen Platzbedarf vergrößern. btn_open_output bleibt nach
+        # dem ersten Run für immer sichtbar (isVisible() genügt als Check);
+        # cost_status_label wird dagegen vor jedem neuen Run wieder auf
+        # unsichtbar zurückgesetzt (siehe run_schedule_file) - dafür ein
+        # eigenes, dauerhaftes Flag, damit das Fenster nicht bei JEDEM
+        # übersetzten Lauf erneut wächst, sondern nur beim allerersten Mal.
+        newly_visible = []
+        if not self.btn_open_output.isVisible():
+            newly_visible.append(self.btn_open_output)
+        if translation_cost_totals and not self._cost_label_ever_shown:
+            newly_visible.append(self.cost_status_label)
+            self._cost_label_ever_shown = True
+        if translation_cost_totals:
             self.cost_status_label.setVisible(True)
-        # Merke Ausgabe-Pfad und zeige Button
         self._last_output_path = main_out
         self.btn_open_output.setVisible(True)
         self.btn_open_output.setEnabled(True)
+        if newly_visible:
+            self._grow_window_for_newly_visible(newly_visible)
         title = self.tr("Fertig (mit Warnung)") if docx_error else self.tr("Fertig")
         if docx_error:
             QMessageBox.warning(self, title, msg)
