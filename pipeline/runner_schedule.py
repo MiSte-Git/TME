@@ -362,6 +362,101 @@ class ScheduleRunResult:
         return str(self.odt_path)
 
 
+@dataclass
+class CharEstimateResult:
+    """Rückgabe von estimate_translatable_chars() - reine Vorschau-Zahlen,
+    keine Übersetzung, keine Kosten."""
+    message_count: int
+    char_count: int
+
+
+async def estimate_translatable_chars(
+    schedule_path: Path,
+    *,
+    chronological_merge: Optional[bool] = None,
+    incremental_mode: Optional[bool] = None,
+    local_tz_override: Optional[str] = None,
+    config_path: Path = Path("config.yaml"),
+    cancel_event: Optional[Any] = None,
+) -> CharEstimateResult:
+    """Zeichen-Vorschau VOR einem echten Lauf (siehe ui/app.py, "Vorschau:
+    ~X Zeichen zu übersetzen").
+
+    Wichtig: die Schedule-JSON selbst enthält NUR Metadaten (Datum, Kanal,
+    Zeitfenster) - der eigentliche Nachrichtentext existiert erst zur
+    Laufzeit bei Telegram. Eine wirklich netzwerkfreie Zeichenzählung ist
+    daher technisch nicht möglich; diese Funktion verbindet sich kurz mit
+    Telegram und sammelt die Nachrichten genauso wie ein echter Lauf
+    (collect_messages_for_schedule) - aber OHNE zu übersetzen, ohne ODT/DOCX
+    zu schreiben und ohne Lettermap-Verarbeitung. Kostet daher keine
+    Übersetzungs-API-Gebühren (nur einen kostenlosen Telegram-API-Zugriff).
+
+    Berücksichtigt denselben min_id_by_fingerprint-Filter wie ein echter
+    Lauf im Store-/Incremental-Modus (bereits im Store bekannte Nachrichten
+    werden dabei server-seitig gar nicht erst zurückgeliefert) - die
+    Vorschau spiegelt damit exakt die Zeichenzahl wider, die ein
+    tatsächlicher Lauf mit denselben Optionen neu übersetzen würde.
+
+    Zeichenzählung: len(msg.message) je gesammelter Nachricht (roher
+    Klartext ohne Entity-/Tag-Overhead) - eine Annäherung an die tatsächlich
+    an den Übersetzungs-Provider gesendete Zeichenzahl (die u.a. noch
+    <ce id="N"/>-Platzhalter für Custom-Emojis enthält, siehe formatting.py),
+    für eine Vorschau ausreichend genau.
+    """
+    _apply_config_overrides(config_path)
+    cfg = _load_config(config_path)
+
+    eff_chronological_merge = (
+        chronological_merge if isinstance(chronological_merge, bool)
+        else bool(cfg.get("interleave_channels", False)) if isinstance(cfg, dict) else False
+    )
+    eff_incremental_mode = (
+        incremental_mode if isinstance(incremental_mode, bool)
+        else bool(cfg.get("incremental_mode", False)) if isinstance(cfg, dict) else False
+    )
+    local_tz = local_tz_override or (cfg.get("local_tz") if isinstance(cfg, dict) else None) or DEFAULT_LOCAL_TZ
+
+    api_id, api_hash, phone = get_telegram_credentials()
+
+    if schedule_path.suffix.lower() != ".json":
+        raise RuntimeError("Nur JSON-Schedule-Dateien werden unterstützt. Bitte die Schedule zuerst nach JSON konvertieren.")
+    schedule = load_schedule_document(schedule_path)
+    schedule.default_channel = _normalize_default_channel(schedule.default_channel)
+
+    store: Optional[MessageStore] = None
+    if eff_incremental_mode:
+        store = MessageStore.load(schedule_path.stem)
+
+    client = TelegramClient(
+        "tg_session",
+        api_id,
+        api_hash,
+        request_retries=_rbi._CLIENT_REQUEST_RETRIES,
+        timeout=_rbi._CLIENT_TIMEOUT,
+        auto_reconnect=_rbi._CLIENT_AUTO_RECONNECT,
+    )
+    await client.connect()
+    try:
+        if not await client.is_user_authorized():
+            raise TelegramSessionInvalid(
+                "Telegram-Session ungültig oder abgelaufen. "
+                "Bitte über scripts/telegram_login.py neu einloggen."
+            )
+        collected, _used_doc_ids, _resume_hints, _section_stats = await collect_messages_for_schedule(
+            client, schedule, local_tz, chronological_merge=eff_chronological_merge,
+            min_id_by_fingerprint=(store.min_ids_by_fingerprint() if store is not None else None),
+            cancel_event=cancel_event,
+        )
+    finally:
+        await client.disconnect()
+
+    total_chars = 0
+    for item in collected:
+        text = getattr(item.message, "message", None) or ""
+        total_chars += len(text)
+    return CharEstimateResult(message_count=len(collected), char_count=total_chars)
+
+
 async def run_schedule(
     schedule_path: Path,
     out_basename: str,

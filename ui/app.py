@@ -25,7 +25,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths, QSize
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths, QSize, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices, QGuiApplication
 from functools import partial
 from PySide6.QtWidgets import (
@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QInputDialog
 )
 
-from pipeline.runner_schedule import run_schedule
+from pipeline.runner_schedule import run_schedule, estimate_translatable_chars
 from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid, TelegramCredentialsMissing
 from ui.login_dialog import LoginDialog
 from ui.api_keys_dialog import ApiKeysDialog
@@ -191,6 +191,34 @@ class ScheduleWorker(QObject):
             self.error.emit(str(exc))
 
 
+class CharPreviewWorker(QObject):
+    """Läuft im Hintergrund-Thread und ruft estimate_translatable_chars()
+    auf (siehe pipeline/runner_schedule.py) - macht dafür einen kurzen,
+    kostenlosen Telegram-API-Zugriff (die Schedule-JSON enthält selbst
+    keinen Nachrichtentext), aber KEINEN Übersetzungs-API-Call. Bewusst ein
+    eigener, viel simplerer Worker statt ScheduleWorker wiederzuverwenden -
+    keine Lettermap-/Cancel-/Resume-Logik nötig."""
+    finished = Signal(object)  # CharEstimateResult
+    error = Signal(str)
+
+    def __init__(self, schedule_path: Path, chronological_merge: bool, incremental_mode: bool) -> None:
+        super().__init__()
+        self.schedule_path = schedule_path
+        self.chronological_merge = chronological_merge
+        self.incremental_mode = incremental_mode
+
+    def run(self) -> None:
+        try:
+            result = asyncio.run(estimate_translatable_chars(
+                self.schedule_path,
+                chronological_merge=self.chronological_merge,
+                incremental_mode=self.incremental_mode,
+            ))
+            self.finished.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class ScheduleTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -212,6 +240,30 @@ class ScheduleTab(QWidget):
         pick_lay.addWidget(self.schedule_edit)
         pick_lay.addWidget(self.btn_pick)
         lay.addLayout(pick_lay)
+
+        # Zeichen-Vorschau VOR Lauf-Start (siehe _schedule_char_preview/
+        # _start_char_preview) - bewusst "Vorschau:"-Wortlaut, damit klar von
+        # cost_status_label ("Letzter Run: ...", NACH Lauf-Ende, siehe
+        # _on_worker_finished) unterscheidbar. Startet unsichtbar/leer, bis
+        # eine gültige Schedule-Datei gewählt und "Übersetzen" aktiv ist.
+        self.char_preview_label = QLabel("")
+        self.char_preview_label.setWordWrap(True)
+        self.char_preview_label.setVisible(False)
+        lay.addWidget(self.char_preview_label)
+        self._char_preview_timer = QTimer(self)
+        self._char_preview_timer.setSingleShot(True)
+        self._char_preview_timer.timeout.connect(self._start_char_preview)
+        self._char_preview_thread: QThread | None = None
+        self._char_preview_worker: CharPreviewWorker | None = None
+        # Erhöht sich bei jeder Vorschau-Anfrage - ein noch laufender, aber
+        # inzwischen überholter Hintergrund-Fetch (z.B. weil der Nutzer
+        # schnell eine andere Datei gewählt hat) darf sein Ergebnis dann
+        # nicht mehr anzeigen (siehe _on_char_preview_finished/_error).
+        self._char_preview_request_id = 0
+        # Merkt sich, ob während eines laufenden Vorschau-Fetches eine neue
+        # Anfrage nötig wurde - wird direkt danach nachgeholt, statt
+        # parallele Telegram-Verbindungen zu öffnen.
+        self._char_preview_rerun_pending = False
 
         self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
@@ -366,10 +418,10 @@ class ScheduleTab(QWidget):
         # TelegramSessionInvalid/TelegramCredentialsMissing/
         # _ensure_provider_api_key, die weiterhin unverändert bestehen bleiben.
         self._first_run_hint_shown = False
-        # Höhe, um die das Fenster beim letzten Sichtbarwerden von
-        # self.progress vergrößert wurde (siehe _set_progress_visible) -
-        # 0, solange kein Ausgleich aussteht.
-        self._progress_grow_amount = 0
+        # id(widget) -> Höhe, um die das Fenster beim letzten Sichtbarwerden
+        # dieses Widgets vergrößert wurde (siehe _set_toggle_widget_visible) -
+        # kein Eintrag, solange kein Ausgleich aussteht.
+        self._toggle_grow_amounts: dict[int, int] = {}
 
         lay.addStretch()
  
@@ -518,6 +570,74 @@ class ScheduleTab(QWidget):
             self.schedule_edit.setText(p)
             self._save_state()
 
+    def _schedule_char_preview(self) -> None:
+        """Debounce-Trigger für die Zeichen-Vorschau (siehe
+        _start_char_preview) - startet/verlängert einen kurzen Timer, statt
+        bei jeder Änderung sofort einen Telegram-Abruf auszulösen (z.B. bei
+        schnellem Tippen im Datei-Pfad)."""
+        self._char_preview_timer.start(700)
+
+    def _start_char_preview(self) -> None:
+        text = self.schedule_edit.text().strip()
+        path = Path(text) if text else None
+        if not self.cb_translate.isChecked() or path is None or not path.exists() or path.suffix.lower() != ".json":
+            self._set_toggle_widget_visible(self.char_preview_label, False)
+            self.char_preview_label.setText("")
+            return
+        # Kein paralleler Telegram-Zugriff neben einem echten Lauf oder
+        # einer bereits laufenden Vorschau - stattdessen nachholen, sobald
+        # die aktuell laufende Anfrage fertig ist (siehe
+        # _on_char_preview_finished/_error).
+        if self.worker_thread is not None or self._char_preview_thread is not None:
+            self._char_preview_rerun_pending = True
+            return
+        self._char_preview_request_id += 1
+        request_id = self._char_preview_request_id
+        self._set_toggle_widget_visible(self.char_preview_label, True)
+        self.char_preview_label.setText(self.tr("Vorschau wird berechnet…"))
+
+        self._char_preview_worker = CharPreviewWorker(
+            path, chronological_merge=self.cb_interleave.isChecked(), incremental_mode=self.cb_incremental.isChecked(),
+        )
+        self._char_preview_thread = QThread(self)
+        self._char_preview_worker.moveToThread(self._char_preview_thread)
+        self._char_preview_thread.started.connect(self._char_preview_worker.run)
+        self._char_preview_worker.finished.connect(lambda result: self._on_char_preview_finished(request_id, result))
+        self._char_preview_worker.error.connect(lambda msg: self._on_char_preview_error(request_id, msg))
+        self._char_preview_worker.finished.connect(self._char_preview_thread.quit)
+        self._char_preview_worker.error.connect(self._char_preview_thread.quit)
+        self._char_preview_worker.finished.connect(self._char_preview_worker.deleteLater)
+        self._char_preview_worker.error.connect(self._char_preview_worker.deleteLater)
+        self._char_preview_thread.finished.connect(self._char_preview_thread.deleteLater)
+        self._char_preview_thread.finished.connect(self._on_char_preview_thread_finished)
+        self._char_preview_thread.start()
+
+    def _on_char_preview_thread_finished(self) -> None:
+        self._char_preview_thread = None
+        self._char_preview_worker = None
+        if self._char_preview_rerun_pending:
+            self._char_preview_rerun_pending = False
+            self._start_char_preview()
+
+    def _on_char_preview_finished(self, request_id: int, result: object) -> None:
+        if request_id != self._char_preview_request_id:
+            return  # überholt durch eine neuere Anfrage
+        message_count = getattr(result, "message_count", 0)
+        char_count = getattr(result, "char_count", 0)
+        self.char_preview_label.setVisible(True)
+        self.char_preview_label.setText(
+            self.tr("Vorschau: ~{chars} Zeichen aus {n} Nachricht(en) zu übersetzen").format(
+                chars=char_count, n=message_count,
+            )
+        )
+
+    def _on_char_preview_error(self, request_id: int, message: str) -> None:
+        if request_id != self._char_preview_request_id:
+            return
+        logger.info("Zeichen-Vorschau nicht verfügbar: %s", message)
+        self.char_preview_label.setVisible(True)
+        self.char_preview_label.setText(self.tr("Vorschau nicht verfügbar (Telegram-Login prüfen)."))
+
     def run_schedule_file(self) -> None:
         text = self.schedule_edit.text().strip()
         if not text:
@@ -535,6 +655,17 @@ class ScheduleTab(QWidget):
             return
         if self.worker_thread is not None:
             QMessageBox.information(self, self.tr("Läuft"), self.tr("Ein Durchlauf ist bereits aktiv. Bitte warten."))
+            return
+        if self._char_preview_thread is not None:
+            # Beide nutzen dieselbe Telethon-SQLite-Session ("tg_session") -
+            # zwei gleichzeitige Verbindungen darauf riskieren "database is
+            # locked"-Fehler. Die Zeichen-Vorschau ist kurz (nur Sammeln,
+            # keine Übersetzung), daher hier einfach kurz abwarten lassen
+            # statt den Lauf ungeprüft parallel zu starten.
+            QMessageBox.information(
+                self, self.tr("Läuft"),
+                self.tr("Zeichen-Vorschau wird gerade berechnet. Bitte kurz warten und erneut versuchen."),
+            )
             return
         # Ensure Telegram credentials before starting
         if not self._ensure_credentials():
@@ -666,32 +797,35 @@ class ScheduleTab(QWidget):
             win.resize(win.width(), win.height() + extra)
         return extra
 
-    def _set_progress_visible(self, visible: bool) -> None:
-        """Schaltet self.progress sichtbar/unsichtbar und kompensiert dabei
-        die Fenstergröße symmetrisch (wachsen beim Sichtbarwerden, wieder
-        schrumpfen beim Verstecken).
+    def _set_toggle_widget_visible(self, widget: QWidget, visible: bool) -> None:
+        """Schaltet ein Widget mit eigener Layout-Zeile sichtbar/unsichtbar
+        und kompensiert dabei die Fenstergröße symmetrisch (wachsen beim
+        Sichtbarwerden, wieder schrumpfen beim Verstecken).
 
-        Anders als btn_open_output/cost_status_label (die nach dem ersten
-        Erscheinen dauerhaft sichtbar bleiben bzw. nur einmal wachsen, siehe
-        _grow_window_for_newly_visible) schaltet der Fortschrittsbalken bei
-        JEDEM Lauf erneut sichtbar<->unsichtbar um - ohne dieses symmetrische
-        Zurückschrumpfen würde das Fenster bei jedem weiteren Lauf kumulativ
-        weiterwachsen. Der Fortschrittsbalken hat (im Gegensatz zu
-        btn_cancel, das sich nur eine bereits vorhandene Zeile mit btn_run
-        teilt) eine eigene Layout-Zeile - sein Sichtbarwerden ohne
-        Fenster-Kompensation quetscht sonst die QFormLayout-Zeilen der
-        "Übersetzung"-Gruppe zusammen (Modus/Provider/Quellsprache/Layout-
-        ComboBoxen), was dort zu Darstellungsfehlern (Rest-Pixel aus der
-        vorherigen, noch nicht ungültig gemachten Zeilenhöhe) führt - das ist
-        derselbe Grundmechanismus wie der ursprüngliche Squeeze-Bug, nur an
-        einer anderen Stelle im Layout."""
+        Für Widgets, die (anders als btn_open_output/cost_status_label, die
+        dauerhaft sichtbar bleiben bzw. nur einmal wachsen, siehe
+        _grow_window_for_newly_visible) MEHRFACH pro Session erneut
+        sichtbar<->unsichtbar umschalten (z.B. self.progress bei jedem Lauf,
+        char_preview_label bei jedem An-/Abwählen von "Übersetzen") - ohne
+        dieses symmetrische Zurückschrumpfen würde das Fenster bei jedem
+        weiteren Umschalten kumulativ weiterwachsen. Solche Widgets haben
+        (im Gegensatz zu btn_cancel, das sich nur eine bereits vorhandene
+        Zeile mit btn_run teilt) eine eigene Layout-Zeile - ihr
+        Sichtbarwerden ohne Fenster-Kompensation quetscht sonst z.B. die
+        QFormLayout-Zeilen der "Übersetzung"-Gruppe zusammen (Modus/
+        Provider/Quellsprache/Layout-ComboBoxen), was dort zu
+        Darstellungsfehlern führt (Rest-Pixel aus der vorherigen, noch
+        nicht ungültig gemachten Zeilenhöhe) - derselbe Grundmechanismus
+        wie der ursprüngliche Squeeze-Bug, nur an anderer Stelle."""
+        key = id(widget)
         if visible:
-            if not self.progress.isVisible():
-                self._progress_grow_amount = self._grow_window_for_newly_visible([self.progress])
-            self.progress.setVisible(True)
+            if not widget.isVisible():
+                self._toggle_grow_amounts[key] = self._grow_window_for_newly_visible([widget])
+            widget.setVisible(True)
         else:
-            self.progress.setVisible(False)
-            if self._progress_grow_amount:
+            widget.setVisible(False)
+            extra = self._toggle_grow_amounts.pop(key, 0)
+            if extra:
                 win = self.window()
                 # win.minimumHeight() statt minimumSizeHint(): Letzteres wird
                 # unmittelbar nach setVisible(False) noch aus dem ALTEN
@@ -700,9 +834,11 @@ class ScheduleTab(QWidget):
                 # dadurch fälschlich nicht verkleinern, sondern erneut
                 # vergrößern. minimumHeight() ist die fest gesetzte Grenze aus
                 # MainWindow.setMinimumSize() und daher zeitlich stabil.
-                new_height = max(win.minimumHeight(), win.height() - self._progress_grow_amount)
+                new_height = max(win.minimumHeight(), win.height() - extra)
                 win.resize(win.width(), new_height)
-                self._progress_grow_amount = 0
+
+    def _set_progress_visible(self, visible: bool) -> None:
+        self._set_toggle_widget_visible(self.progress, visible)
 
     def _on_worker_finished(self, result: object) -> None:
         self.progress.setRange(0, 1)
@@ -1028,6 +1164,20 @@ class ScheduleTab(QWidget):
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.layout_combo.currentIndexChanged.connect(lambda _i: self._save_state())
+        # Zeichen-Vorschau (siehe _schedule_char_preview): nur an Optionen
+        # gekoppelt, die die tatsächlich zu übersetzende Zeichenzahl
+        # beeinflussen - Datei-Auswahl (welche Nachrichten überhaupt),
+        # "Übersetzen" (ohne das gibt es nichts zu übersetzen) und
+        # "Inkrementelles Update (Store)" (bereits im Store bekannte
+        # Nachrichten werden server-seitig gar nicht erst nachgeladen, siehe
+        # estimate_translatable_chars). mode_combo/layout_combo/format_combo/
+        # src_lang/target_lang/cb_interleave ändern dagegen nur Platzierung/
+        # Reihenfolge/Ausgabeformat, NICHT welche Nachrichten übersetzt
+        # werden - dafür bewusst KEIN erneuter (kostenpflichtiger Zeit-,
+        # nicht Geld-)Telegram-Abruf ausgelöst.
+        self.schedule_edit.textChanged.connect(lambda _t: self._schedule_char_preview())
+        self.cb_translate.toggled.connect(lambda _checked: self._schedule_char_preview())
+        self.cb_incremental.toggled.connect(lambda _checked: self._schedule_char_preview())
 
     def _load_state(self) -> None:
         self._loading_state = True
