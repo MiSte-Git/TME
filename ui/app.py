@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from pipeline.runner_schedule import run_schedule, estimate_translatable_chars
 from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid, TelegramCredentialsMissing
 from pipeline.translation.deepl_quota import load_quota_state as _load_deepl_quota_state, would_exceed as _deepl_would_exceed, set_local_reset_day as _set_deepl_local_reset_day
+from pipeline.translation.pricing import estimate_cost_from_chars
 from ui.login_dialog import LoginDialog
 from ui.api_keys_dialog import ApiKeysDialog
 from pipeline.logging_setup import get_logger
@@ -637,12 +638,30 @@ class ScheduleTab(QWidget):
             return  # überholt durch eine neuere Anfrage
         message_count = getattr(result, "message_count", 0)
         char_count = getattr(result, "char_count", 0)
-        self.char_preview_label.setVisible(True)
-        self.char_preview_label.setText(
-            self.tr("Vorschau: ~{chars} Zeichen aus {n} Nachricht(en) zu übersetzen").format(
-                chars=char_count, n=message_count,
-            )
+        text = self.tr("Vorschau: ~{chars} Zeichen aus {n} Nachricht(en) zu übersetzen").format(
+            chars=char_count, n=message_count,
         )
+        # Kostenschätzung nur für zahlungspflichtige Provider (telegram ist
+        # kostenlos) - bei tokenbasierten Providern (chatgpt/gemini, siehe
+        # pricing.py::is_token_based_provider) über eine grobe Zeichen->
+        # Token-Umrechnung, da vor einem echten Lauf keine tatsächliche
+        # Tokenzahl von der API vorliegt - deshalb hier klar als Schätzung
+        # gekennzeichnet (siehe estimate_cost_from_chars-Docstring). Kein
+        # Modell übergeben: die UI kennt das konfigurierte Provider-Modell
+        # nicht (kommt aus config.yaml), estimate_cost_from_chars fällt
+        # dafür auf den "default"-Preiseintrag des Providers zurück.
+        provider_val = str(self.provider_combo.currentData() or "telegram")
+        if provider_val != "telegram" and char_count > 0:
+            cost, is_approximate = estimate_cost_from_chars(provider_val, char_count)
+            if is_approximate:
+                text += " " + self.tr(
+                    "– geschätzte Kosten: ~${cost:.4f} (grobe Schätzung, basierend auf ca. 4 Zeichen pro Token - "
+                    "tatsächliche Tokenisierung kann abweichen)"
+                ).format(cost=cost)
+            else:
+                text += " " + self.tr("– geschätzte Kosten: ~${cost:.4f}").format(cost=cost)
+        self.char_preview_label.setVisible(True)
+        self.char_preview_label.setText(text)
         self._refresh_deepl_quota_display(preview_chars=char_count)
 
     def _on_char_preview_error(self, request_id: int, message: str) -> None:

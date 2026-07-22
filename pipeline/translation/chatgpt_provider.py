@@ -70,7 +70,9 @@ class ChatGPTProvider:
         usage = data.get("usage") or {}
         input_tokens = int(usage.get("prompt_tokens") or 0)
         output_tokens = int(usage.get("completion_tokens") or 0)
-        cost = estimate_cost_usd(self.name, input_tokens=input_tokens, output_tokens=output_tokens, pricing=self._pricing)
+        cost = estimate_cost_usd(
+            self.name, model=self._model, input_tokens=input_tokens, output_tokens=output_tokens, pricing=self._pricing,
+        )
         return TranslationResult(
             text=translated_text,
             provider=self.name,
