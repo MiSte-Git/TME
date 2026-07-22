@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Tuple
 import asyncio
 import json
 import os
@@ -319,7 +319,12 @@ class ScheduleRunResult:
     docx_path: Path | None = None
     docx_translation_path: Path | None = None
     docx_error: str | None = None
+    # Für Log-/Konsolenausgabe (siehe _notify) - bewusst nicht übersetzt.
     translation_cost_summary: List[str] | None = None
+    # Rohdaten (provider, calls, char_count, input_tokens, output_tokens,
+    # estimated_cost_usd) je Provider - für die UI-seitige, über Qt-i18n
+    # übersetzbare Anzeige (siehe ui/app.py::_on_worker_finished).
+    translation_cost_totals: List[Tuple[str, int, int, int, int, float]] | None = None
 
     def __str__(self) -> str:  # pragma: no cover - convenience
         return str(self.odt_path)
@@ -1478,6 +1483,7 @@ async def run_schedule(
                     docx_errors.append(err_extra)
 
         cost_summary_lines = cost_tracker.summary_lines() if cost_tracker.has_data() else None
+        cost_totals = cost_tracker.provider_totals() if cost_tracker.has_data() else None
         if cost_summary_lines:
             for line in cost_summary_lines:
                 _notify(f"Übersetzungskosten: {line}")
@@ -1490,6 +1496,7 @@ async def run_schedule(
             docx_translation_path=docx_translation_path,
             docx_error="; ".join(docx_errors) if docx_errors else None,
             translation_cost_summary=cost_summary_lines,
+            translation_cost_totals=cost_totals,
         )
     finally:
         if client is not None:

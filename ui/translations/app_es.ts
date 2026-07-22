@@ -508,6 +508,18 @@ Esta ventana se cerrará automáticamente…</translation></message>
         <translation>Listo.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Última ejecución: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} mensaje(s), {chars} caracteres, coste estimado: ~${cost} (estimación, sin consulta de precio en tiempo real)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} mensaje(s), {tokens_in}+{tokens_out} tokens (entrada/salida), coste estimado: ~${cost} (estimación, sin consulta de precio en tiempo real)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Abrir carpeta</translation>
     </message>

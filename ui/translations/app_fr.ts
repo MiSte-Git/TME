@@ -508,6 +508,18 @@ Cette fenêtre se fermera automatiquement…</translation></message>
         <translation>Terminé.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Dernière exécution : {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider} : {n} message(s), {chars} caractères, coût estimé : ~{cost} $ (estimation, pas de tarif en temps réel)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider} : {n} message(s), {tokens_in}+{tokens_out} jetons (entrée/sortie), coût estimé : ~{cost} $ (estimation, pas de tarif en temps réel)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Ouvrir le dossier</translation>
     </message>

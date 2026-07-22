@@ -634,7 +634,7 @@ class ScheduleTab(QWidget):
         docx_path = getattr(result, "docx_path", None)
         docx_translation_path = getattr(result, "docx_translation_path", None)
         docx_error = getattr(result, "docx_error", None)
-        translation_cost_summary = getattr(result, "translation_cost_summary", None)
+        translation_cost_totals = getattr(result, "translation_cost_totals", None)
         lines: list[str] = []
         if odt_path is not None:
             try:
@@ -662,11 +662,31 @@ class ScheduleTab(QWidget):
         # Übersetzungskosten bewusst NICHT im Popup, sondern dauerhaft in der
         # Statuszeile (siehe cost_status_label) - bleibt sichtbar, bis der
         # nächste Lauf gestartet wird (siehe run_schedule_file), statt nach
-        # dem Wegklicken des Popups verloren zu gehen.
-        if translation_cost_summary:
-            self.cost_status_label.setText(
-                self.tr("Letzter Run: {summary}").format(summary="; ".join(translation_cost_summary))
-            )
+        # dem Wegklicken des Popups verloren zu gehen. Aus Rohdaten
+        # (translation_cost_totals) statt aus vorformatierten Backend-Strings
+        # (translation_cost_summary, siehe pricing.py) gebaut, damit der
+        # komplette Text über self.tr() läuft und der Sprachumschaltung
+        # folgt - vorformatierte Backend-Strings sind reines Deutsch ohne
+        # Qt-Kontext (siehe _notify in runner_schedule.py).
+        if translation_cost_totals:
+            parts: list[str] = []
+            for provider, calls, char_count, input_tokens, output_tokens, cost in translation_cost_totals:
+                cost_str = f"{cost:.4f}"
+                if input_tokens or output_tokens:
+                    parts.append(
+                        self.tr(
+                            "{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), "
+                            "geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)"
+                        ).format(provider=provider, n=calls, tokens_in=input_tokens, tokens_out=output_tokens, cost=cost_str)
+                    )
+                else:
+                    parts.append(
+                        self.tr(
+                            "{provider}: {n} Nachricht(en), {chars} Zeichen, "
+                            "geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)"
+                        ).format(provider=provider, n=calls, chars=char_count, cost=cost_str)
+                    )
+            self.cost_status_label.setText(self.tr("Letzter Run: {summary}").format(summary="; ".join(parts)))
             self.cost_status_label.setVisible(True)
         # Merke Ausgabe-Pfad und zeige Button
         self._last_output_path = main_out

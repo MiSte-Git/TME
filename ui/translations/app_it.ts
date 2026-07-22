@@ -508,6 +508,18 @@ Questa finestra si chiuderà automaticamente…</translation></message>
         <translation>Fatto.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Ultima esecuzione: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} messaggio/i, {chars} caratteri, costo stimato: ~${cost} (stima, nessuna verifica del prezzo in tempo reale)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} messaggio/i, {tokens_in}+{tokens_out} token (in/out), costo stimato: ~${cost} (stima, nessuna verifica del prezzo in tempo reale)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Apri cartella</translation>
     </message>

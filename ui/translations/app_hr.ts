@@ -508,6 +508,18 @@ Ovaj će se prozor automatski zatvoriti…</translation></message>
         <translation>Gotovo.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Posljednje pokretanje: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} poruka(e), {chars} znakova, procijenjeni trošak: ~${cost} (procjena, bez provjere trenutne cijene)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} poruka(e), {tokens_in}+{tokens_out} tokena (ulaz/izlaz), procijenjeni trošak: ~${cost} (procjena, bez provjere trenutne cijene)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Otvori mapu</translation>
     </message>

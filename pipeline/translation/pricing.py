@@ -9,7 +9,7 @@ Zahlen braucht, muss die jeweilige Anbieter-Abrechnung selbst prüfen.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from .base import TranslationResult
 
@@ -72,6 +72,19 @@ class TranslationCostTracker:
 
     def has_data(self) -> bool:
         return bool(self._totals)
+
+    def provider_totals(self) -> List[Tuple[str, int, int, int, int, float]]:
+        """(provider, calls, char_count, input_tokens, output_tokens,
+        estimated_cost_usd) je Provider mit calls > 0 - liefert Rohdaten für
+        eine UI-seitige, über Qt-i18n übersetzbare Anzeige (siehe
+        ui/app.py::_on_worker_finished). summary_lines() bleibt für Log-/
+        Konsolenausgabe reserviert (bewusst nicht übersetzt - reiner
+        Backend-String ohne Qt-Kontext, siehe _notify in runner_schedule.py)."""
+        return [
+            (provider, t.calls, t.char_count, t.input_tokens, t.output_tokens, t.estimated_cost_usd)
+            for provider, t in sorted(self._totals.items())
+            if t.calls > 0
+        ]
 
     def summary_lines(self) -> List[str]:
         """Menschenlesbare Zeilen, klar als Schätzung gekennzeichnet."""

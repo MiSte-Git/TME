@@ -508,6 +508,18 @@ To okno zamknie się automatycznie…</translation></message>
         <translation>Gotowe.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Ostatnie uruchomienie: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} wiadomość(ci), {chars} znaków, szacowany koszt: ~${cost} (szacunek, bez sprawdzania aktualnej ceny)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} wiadomość(ci), {tokens_in}+{tokens_out} tokenów (wej./wyj.), szacowany koszt: ~${cost} (szacunek, bez sprawdzania aktualnej ceny)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Otwórz folder</translation>
     </message>

@@ -504,6 +504,18 @@ This window will close automatically…</translation></message>
         <translation>Done.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Last run: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} message(s), {chars} characters, estimated cost: ~${cost} (estimate, no live price lookup)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} message(s), {tokens_in}+{tokens_out} tokens (in/out), estimated cost: ~${cost} (estimate, no live price lookup)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Open folder</translation>
     </message>

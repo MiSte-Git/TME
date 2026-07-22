@@ -508,6 +508,18 @@ Tämä ikkuna sulkeutuu automaattisesti…</translation></message>
         <translation>Valmis.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Viimeisin ajo: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} viesti(ä), {chars} merkkiä, arvioidut kustannukset: ~${cost} (arvio, ei reaaliaikaista hintahakua)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} viesti(ä), {tokens_in}+{tokens_out} tokenia (sisään/ulos), arvioidut kustannukset: ~${cost} (arvio, ei reaaliaikaista hintahakua)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Avaa kansio</translation>
     </message>

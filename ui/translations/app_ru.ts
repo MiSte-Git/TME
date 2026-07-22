@@ -508,6 +508,18 @@ Dieses Fenster schließt sich automatisch…</source><translation>Успешны
         <translation>Готово.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Последний запуск: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} сообщение(й), {chars} символов, примерная стоимость: ~${cost} (оценка, без запроса актуальной цены)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} сообщение(й), {tokens_in}+{tokens_out} токенов (вход/выход), примерная стоимость: ~${cost} (оценка, без запроса актуальной цены)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Открыть папку</translation>
     </message>

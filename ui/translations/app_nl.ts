@@ -508,6 +508,18 @@ Dit venster sluit automatisch…</translation></message>
         <translation>Klaar.</translation>
     </message>
     <message>
+        <source>Letzter Run: {summary}</source>
+        <translation>Laatste run: {summary}</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} bericht(en), {chars} tekens, geschatte kosten: ~${cost} (schatting, geen live prijsopvraag)</translation>
+    </message>
+    <message>
+        <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
+        <translation>{provider}: {n} bericht(en), {tokens_in}+{tokens_out} tokens (in/uit), geschatte kosten: ~${cost} (schatting, geen live prijsopvraag)</translation>
+    </message>
+    <message>
         <source>Ordner öffnen</source>
         <translation type="vanished">Map openen</translation>
     </message>
