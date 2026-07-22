@@ -243,7 +243,7 @@ oben: bleibt ohne diese Abhängigkeiten weiterhin kontrolliert deaktiviert, kein
 #### Installation: `install_linux.sh`
 
 ```bash
-./install_linux.sh              # baut bei Bedarf (falls dist/ fehlt) und installiert
+./install_linux.sh              # baut bei Bedarf neu und installiert
 ./install_linux.sh --release    # erzwingt vorher einen --release-Build
 ./install_linux.sh --with-stt   # bei Neu-Build: STT-Abhängigkeiten mit einschließen
 ```
@@ -252,6 +252,14 @@ Kopiert das gebaute Bundle nach `~/.local/share/tme/` (kein root nötig), inkl.
 `config.yaml` und Fenster-Icon, und aktualisiert den Desktop-Eintrag
 (`~/.local/share/applications/tme.desktop`) so, dass `Exec=`/`TryExec=` direkt auf das
 Binary zeigen statt auf einen venv-Python-Aufruf von `ui/app.py`.
+
+`build_linux.sh` stempelt jeden Build mit Git-Kurzhash (+`-dirty` bei uncommitteten
+Änderungen) in `dist/BUILD_VERSION.txt`. `install_linux.sh` vergleicht das vor der
+Installation gegen den aktuellen Arbeitsbaum: fehlt `dist/` komplett oder weicht der
+Stempel ab (z.B. ein liegengebliebener älterer Build), wird automatisch neu gebaut statt
+einen veralteten Stand zu installieren. Nach der Installation liegt der Stempel auch unter
+`~/.local/share/tme/BUILD_VERSION.txt` - Abgleich mit `git rev-parse --short HEAD` zeigt,
+welcher Codestand tatsächlich installiert ist.
 
 Deinstallieren:
 
