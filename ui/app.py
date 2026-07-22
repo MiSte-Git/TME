@@ -305,6 +305,15 @@ class ScheduleTab(QWidget):
         self.status_label.setVisible(False)
         lay.addWidget(self.status_label)
 
+        # Geschätzte Übersetzungskosten des letzten abgeschlossenen Laufs -
+        # bewusst ein eigenes, dauerhaftes Label statt eines Popups (siehe
+        # _on_worker_finished): bleibt sichtbar, bis ein neuer Lauf gestartet
+        # wird (siehe run_schedule_file), nicht nur für ein paar Sekunden.
+        self.cost_status_label = QLabel("")
+        self.cost_status_label.setWordWrap(True)
+        self.cost_status_label.setVisible(False)
+        lay.addWidget(self.cost_status_label)
+
         self.btn_continue = QPushButton(self.tr("Fortsetzen"))
         self.btn_continue.setVisible(False)
         self.btn_continue.clicked.connect(self._on_continue_clicked)
@@ -515,6 +524,10 @@ class ScheduleTab(QWidget):
         target_lang = self.lang_edit.text().strip() or ("de" if translate else "de")
         source_lang = self.src_lang_combo.currentText().strip() or "de"
         self.btn_run.setEnabled(False)
+        # Kostenanzeige des vorherigen Laufs verwerfen - sie soll nur bis zum
+        # Start des NÄCHSTEN Laufs bestehen bleiben (siehe cost_status_label).
+        self.cost_status_label.setVisible(False)
+        self.cost_status_label.setText("")
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
         self.status_label.setVisible(True)
@@ -640,12 +653,17 @@ class ScheduleTab(QWidget):
             lines.append(self.tr("Übersetzungs-DOCX erzeugt: {path}").format(path=docx_translation_path))
         if docx_error:
             lines.append(self.tr("Warnung: DOCX-Konvertierung fehlgeschlagen: {err}").format(err=docx_error))
-        if translation_cost_summary:
-            lines.append(self.tr("Übersetzungskosten (Schätzung):"))
-            for line in translation_cost_summary:
-                lines.append(f"  {line}")
         msg = "\n".join(lines)
         self.status_label.setText(self.tr("Fertig."))
+        # Übersetzungskosten bewusst NICHT im Popup, sondern dauerhaft in der
+        # Statuszeile (siehe cost_status_label) - bleibt sichtbar, bis der
+        # nächste Lauf gestartet wird (siehe run_schedule_file), statt nach
+        # dem Wegklicken des Popups verloren zu gehen.
+        if translation_cost_summary:
+            self.cost_status_label.setText(
+                self.tr("Letzter Run: {summary}").format(summary="; ".join(translation_cost_summary))
+            )
+            self.cost_status_label.setVisible(True)
         # Merke Ausgabe-Pfad und zeige Button
         self._last_output_path = main_out
         self.btn_open_output.setVisible(True)
