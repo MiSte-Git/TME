@@ -72,6 +72,27 @@ if [ ! -f "$ENTRY" ]; then
   exit 1
 fi
 
+# Versionsstempel des aktuell gebauten Codestands (Git-Kurzhash + "-dirty" bei
+# uncommitteten Aenderungen). Wird sowohl ins Bundle (--add-data) als auch als
+# eigenstaendige Datei neben dist/ abgelegt, damit sich nach dem Build UND nach
+# der Installation nachweisen laesst, welcher Commit tatsaechlich verwendet
+# wurde - ohne diesen Stempel war frueher nicht erkennbar/beweisbar, ob
+# install_linux.sh ein veraltetes dist/-Verzeichnis wiederverwendet hat.
+GIT_HASH="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+GIT_DIRTY=""
+if [ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]; then
+  GIT_DIRTY="-dirty"
+fi
+BUILD_VERSION="${GIT_HASH}${GIT_DIRTY}"
+VERSION_TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$VERSION_TMPDIR"' EXIT
+VERSION_FILE="$VERSION_TMPDIR/BUILD_VERSION"
+{
+  echo "commit=${BUILD_VERSION}"
+  echo "built=$(date '+%Y-%m-%d %H:%M:%S %Z')"
+} > "$VERSION_FILE"
+echo "Build-Version: ${BUILD_VERSION}"
+
 if [ "$RELEASE" -eq 1 ]; then
   MODE_ARGS=(--onefile)
   USE_CLEAN=1
@@ -119,6 +140,7 @@ DATA_ARGS=()
 [ -f "$REPO_ROOT/ui/theme_light.qss" ] && DATA_ARGS+=(--add-data "$REPO_ROOT/ui/theme_light.qss:ui")
 [ -f "$REPO_ROOT/ui/checkbox-check.svg" ] && DATA_ARGS+=(--add-data "$REPO_ROOT/ui/checkbox-check.svg:ui")
 [ -f "$REPO_ROOT/Telegram-LibreOffice.png" ] && DATA_ARGS+=(--add-data "$REPO_ROOT/Telegram-LibreOffice.png:.")
+DATA_ARGS+=(--add-data "$VERSION_FILE:.")
 if [ -d "$REPO_ROOT/ui/translations" ]; then
   while IFS= read -r -d '' qm; do
     DATA_ARGS+=(--add-data "$qm:ui/translations")
@@ -145,4 +167,12 @@ if [ -z "$BIN" ]; then
   echo "FEHLER: Build abgeschlossen, aber kein TME-Binary unter dist/ gefunden." >&2
   exit 1
 fi
-echo "Built binary: $BIN"
+
+# Zusaetzlich als Klartextdatei direkt neben dist/ ablegen - beim --onefile-
+# Modus liegt die im Bundle enthaltene Kopie nur im Laufzeit-Extraktions-
+# verzeichnis und ist ohne App-Start nicht einsehbar. So kann install_linux.sh
+# (und jeder Mensch per "cat dist/BUILD_VERSION.txt") den Codestand von dist/
+# pruefen, ohne die App zu starten.
+cp "$VERSION_FILE" "$DIST_DIR/BUILD_VERSION.txt"
+
+echo "Built binary: $BIN (Version: $BUILD_VERSION)"
