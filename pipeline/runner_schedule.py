@@ -221,6 +221,41 @@ def _format_heading(date_iso: str, title: str) -> str:
     return f"{date_iso}  -  {title}".strip()
 
 
+def _duplicate_images_into_translation_record(
+    original_runs: List[Any],
+    translation_record: Optional["RunsRecord"],
+    chat: str,
+    message_id: int,
+) -> Optional["RunsRecord"]:
+    """side_by_side-Layout: Vollständige Nachrichtenbilder (ImageRun, aus
+    msg.media - siehe include_images weiter unten) landen bisher nirgends in
+    der Übersetzungsseite. Anders als Inline-Custom-Emojis (EmojiRun
+    überlebt den Masken-/Übersetzungs-Rundlauf in translate_runs()/
+    unmask_to_runs() von selbst, weil er Teil des maskierten Nachrichten-
+    texts ist) ist ein ImageRun nie Teil des übersetzten Texts - weder
+    translate_runs() noch der Telegram-native Pfad (_fetch_translation)
+    sehen ihn je zu Gesicht. Ohne diese explizite Kopie fehlt das Bild in
+    der Übersetzungsspalte komplett, unabhängig von Bildgröße/Style (nicht
+    nur bei G.InlineEmoji-großen Bildern gefiltert).
+
+    Bildposition: vorne in die Übersetzungs-Runs eingefügt, wie im Original
+    (dort steht das Bild ebenfalls vor dem Nachrichtentext, siehe
+    runs_list-Aufbau in run_schedule()).
+
+    translation_record ist None, wenn die Nachricht keinen Text/Caption
+    hatte (dann wird kein translate()-Aufruf ausgelöst) - in dem Fall wird
+    hier trotzdem ein Record nur mit dem duplizierten Bild angelegt, sonst
+    zeigt die Übersetzungsspalte statt des Bildes nur den
+    "Keine Übersetzung verfügbar"-Platzhalter."""
+    images = [r for r in original_runs if isinstance(r, ImageRun)]
+    if not images:
+        return translation_record
+    if translation_record is not None:
+        translation_record.runs = list(images) + list(translation_record.runs)
+        return translation_record
+    return RunsRecord(chat=chat, message_id=message_id, runs=list(images), meta=None)
+
+
 def _build_message_link(entity: Any, message: Any, original_link: Optional[str] = None, topic_id: Optional[int] = None) -> Optional[str]:
     if original_link:
         return original_link
@@ -1298,6 +1333,11 @@ async def run_schedule(
                             exc_info=True,
                         )
                         _notify(f"Unerwarteter Fehler bei Übersetzung ({effective_translation_provider}) für Nachricht {msg.id}: {exc}")
+
+                if want_side_by_side:
+                    translation_record_for_store = _duplicate_images_into_translation_record(
+                        runs_list, translation_record_for_store, f"{chat_label} - {lang_up}", msg.id,
+                    )
 
                 if store is not None:
                     store.add_message(channel_key, msg.id, getattr(msg, "date", None), original_record, translation_record_for_store)
