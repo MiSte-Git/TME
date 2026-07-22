@@ -366,6 +366,10 @@ class ScheduleTab(QWidget):
         # TelegramSessionInvalid/TelegramCredentialsMissing/
         # _ensure_provider_api_key, die weiterhin unverändert bestehen bleiben.
         self._first_run_hint_shown = False
+        # Höhe, um die das Fenster beim letzten Sichtbarwerden von
+        # self.progress vergrößert wurde (siehe _set_progress_visible) -
+        # 0, solange kein Ausgleich aussteht.
+        self._progress_grow_amount = 0
 
         lay.addStretch()
  
@@ -546,8 +550,18 @@ class ScheduleTab(QWidget):
         # Start des NÄCHSTEN Laufs bestehen bleiben (siehe cost_status_label).
         self.cost_status_label.setVisible(False)
         self.cost_status_label.setText("")
-        self.progress.setVisible(True)
+        self._set_progress_visible(True)
         self.progress.setRange(0, 0)
+        # status_label startet unsichtbar (setVisible(False) in _build_ui) und
+        # wird hier beim allerersten Lauf zum ersten Mal sichtbar - bleibt
+        # danach für den Rest der App-Laufzeit sichtbar (wie btn_open_output),
+        # daher genügt isVisible() als einmaliger Check statt eines eigenen
+        # Flags. Ohne Kompensation quetscht dieses erstmalige Erscheinen
+        # (analog zum Fortschrittsbalken, siehe _set_progress_visible) andere
+        # Bereiche zusammen (beobachtet: Ausgabeformat-ComboBox in der
+        # "Ausgabe"-Gruppe wurde dabei unlesbar).
+        if not self.status_label.isVisible():
+            self._grow_window_for_newly_visible([self.status_label])
         self.status_label.setVisible(True)
         self.status_label.setText(self.tr("Starte…"))
         self.btn_continue.setVisible(False)
@@ -631,7 +645,7 @@ class ScheduleTab(QWidget):
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
 
-    def _grow_window_for_newly_visible(self, widgets: list) -> None:
+    def _grow_window_for_newly_visible(self, widgets: list) -> int:
         """Vergrößert das umgebende Fenster um die Höhe, die die übergebenen,
         gerade erstmals sichtbar gewordenen Widgets zusätzlich benötigen -
         Qt vergrößert Top-Level-Fenster bei einem neu sichtbaren Kind-Widget
@@ -642,12 +656,53 @@ class ScheduleTab(QWidget):
         bis der Nutzer das Fenster manuell vergrößerte. Addiert bewusst nur
         die zusätzlich benötigte Höhe auf die AKTUELLE Fenstergröße (statt
         z.B. window.adjustSize()/sizeHint() zu verwenden), damit eine vom
-        Nutzer bereits größer gezogene Fenstergröße nicht verkleinert wird."""
+        Nutzer bereits größer gezogene Fenstergröße nicht verkleinert wird.
+        Gibt die addierte Höhe zurück, damit Aufrufer sie bei Bedarf später
+        wieder symmetrisch abziehen können (siehe _set_progress_visible)."""
         win = self.window()
         spacing = self.layout().spacing() if self.layout() is not None else 0
         extra = sum(w.sizeHint().height() + spacing for w in widgets)
         if extra > 0:
             win.resize(win.width(), win.height() + extra)
+        return extra
+
+    def _set_progress_visible(self, visible: bool) -> None:
+        """Schaltet self.progress sichtbar/unsichtbar und kompensiert dabei
+        die Fenstergröße symmetrisch (wachsen beim Sichtbarwerden, wieder
+        schrumpfen beim Verstecken).
+
+        Anders als btn_open_output/cost_status_label (die nach dem ersten
+        Erscheinen dauerhaft sichtbar bleiben bzw. nur einmal wachsen, siehe
+        _grow_window_for_newly_visible) schaltet der Fortschrittsbalken bei
+        JEDEM Lauf erneut sichtbar<->unsichtbar um - ohne dieses symmetrische
+        Zurückschrumpfen würde das Fenster bei jedem weiteren Lauf kumulativ
+        weiterwachsen. Der Fortschrittsbalken hat (im Gegensatz zu
+        btn_cancel, das sich nur eine bereits vorhandene Zeile mit btn_run
+        teilt) eine eigene Layout-Zeile - sein Sichtbarwerden ohne
+        Fenster-Kompensation quetscht sonst die QFormLayout-Zeilen der
+        "Übersetzung"-Gruppe zusammen (Modus/Provider/Quellsprache/Layout-
+        ComboBoxen), was dort zu Darstellungsfehlern (Rest-Pixel aus der
+        vorherigen, noch nicht ungültig gemachten Zeilenhöhe) führt - das ist
+        derselbe Grundmechanismus wie der ursprüngliche Squeeze-Bug, nur an
+        einer anderen Stelle im Layout."""
+        if visible:
+            if not self.progress.isVisible():
+                self._progress_grow_amount = self._grow_window_for_newly_visible([self.progress])
+            self.progress.setVisible(True)
+        else:
+            self.progress.setVisible(False)
+            if self._progress_grow_amount:
+                win = self.window()
+                # win.minimumHeight() statt minimumSizeHint(): Letzteres wird
+                # unmittelbar nach setVisible(False) noch aus dem ALTEN
+                # Layout-Zustand berechnet (Neuberechnung erfolgt erst im
+                # nächsten Event-Loop-Durchlauf) und würde die Fensterhöhe
+                # dadurch fälschlich nicht verkleinern, sondern erneut
+                # vergrößern. minimumHeight() ist die fest gesetzte Grenze aus
+                # MainWindow.setMinimumSize() und daher zeitlich stabil.
+                new_height = max(win.minimumHeight(), win.height() - self._progress_grow_amount)
+                win.resize(win.width(), new_height)
+                self._progress_grow_amount = 0
 
     def _on_worker_finished(self, result: object) -> None:
         self.progress.setRange(0, 1)
@@ -750,12 +805,12 @@ class ScheduleTab(QWidget):
             QMessageBox.warning(self, title, msg)
         else:
             QMessageBox.information(self, title, msg)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
 
     def _on_worker_error(self, message: str) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
@@ -772,7 +827,7 @@ class ScheduleTab(QWidget):
         logger.info("Schedule-Lauf abgebrochen (Bestätigung vom Worker).")
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
@@ -801,7 +856,7 @@ class ScheduleTab(QWidget):
         # steuert self._login_needs_credentials (siehe _on_login_clicked).
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
