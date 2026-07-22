@@ -855,10 +855,21 @@ def write_odt_for_record_pairs(
         if p_header is not None:
             cell_orig.addElement(p_header)
 
-        # Übersetzungs-Spalte: nur der übersetzte Text, kein eigener Header
-        # (Zeitstempel/Kanal gehören zum Original, eine Wiederholung wäre in
-        # der Seite-an-Seite-Ansicht redundant).
+        # Übersetzungs-Spalte: derselbe Header wie im Original (Zeitstempel/
+        # Link/Kanal sind sprachunabhängig, daher unübersetzt 1:1 kopiert -
+        # analog zur Bild-Duplizierung, siehe
+        # _duplicate_images_into_translation_record in runner_schedule.py).
+        # Bewusst aus rec.meta (Original) statt pair.translation.meta gebaut,
+        # damit der Header auch dann erscheint, wenn keine Übersetzung
+        # vorliegt (pair.translation is None, siehe else-Zweig unten) und
+        # garantiert identisch bleibt, unabhängig davon, ob der
+        # Übersetzungs-Record dieselben Meta-Daten trägt. Ein zweites,
+        # eigenständiges Element (nicht dasselbe p_header-Objekt) - ein
+        # ODF-Element kann nicht zwei Elternknoten haben.
         cell_tr = TableCell(stylename=style_names["TCell.Base"])
+        p_header_tr = _build_header_paragraph(doc, header_runs, link_text, style_names)
+        if p_header_tr is not None:
+            cell_tr.addElement(p_header_tr)
         if pair.translation is not None:
             # Satzweise + zeilen-ausgeglichen (siehe _render_sentence_balanced),
             # damit Original/Übersetzung über die Nachricht hinweg nicht immer
