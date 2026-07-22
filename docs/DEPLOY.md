@@ -11,6 +11,10 @@ Dieser Leitfaden beschreibt, wie du aus diesem Projekt Desktop-Bundles erzeugst 
     - API ID (eine Zahl)
     - API Hash (eine Zeichenkette)
 - Diese Keys sind geheim. Bitte NIEMALS ins Git-Repository committen.
+- API ID und API Hash immer per Copy-Paste direkt von my.telegram.org übernehmen,
+  nicht von Hand abtippen - besonders bei der rein numerischen API ID fällt eine
+  zusätzliche oder fehlende Ziffer beim Hinsehen kaum auf, führt aber zu einem
+  wenig aussagekräftigen "API ID/API Hash ungültig"-Fehler beim Login.
 
 ### Ablage der Keys (ohne Repo-Leak)
 

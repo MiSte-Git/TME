@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from telethon import TelegramClient, functions
-from telethon.errors import ApiIdInvalidError
+from telethon.errors import ApiIdInvalidError, SendCodeUnavailableError
 
 from credentials import get_telegram_credentials
 
@@ -113,7 +113,22 @@ def perform_telegram_login(
                 "TELEGRAM_API_ID/TELEGRAM_API_HASH, sonst "
                 "~/.config/telegram-odt/credentials.json. Bitte prüfen, ob dort "
                 "veraltete/Platzhalter-Werte hinterlegt sind, und die echten "
-                "Werte von https://my.telegram.org verwenden (siehe docs/DEPLOY.md)."
+                "Werte von https://my.telegram.org verwenden (siehe docs/DEPLOY.md). "
+                "Häufige Ursache ist auch ein Tippfehler in der api_id selbst "
+                "(z.B. eine Ziffer zu viel oder zu wenig beim manuellen "
+                "Abtippen/Eintragen) - api_id/api_hash am besten per Copy-Paste "
+                "direkt von my.telegram.org übernehmen statt abzutippen."
+            ) from exc
+        except SendCodeUnavailableError as exc:
+            # Telegram-Rate-Limit: zu viele Code-Anfragen fuer dieselbe
+            # Telefonnummer in kurzer Zeit (z.B. durch mehrere Login-Versuche
+            # hintereinander waehrend der Fehlersuche zu Problem 1/2). Ohne
+            # diese gezielte Meldung sieht der Nutzer nur Telethons rohen,
+            # wenig aussagekraeftigen Fehlertext.
+            raise RuntimeError(
+                "Telegram hat kurzzeitig zu viele Code-Anfragen für diese "
+                "Nummer erhalten. Bitte 10-15 Minuten warten und erneut "
+                "versuchen."
             ) from exc
         # get_me() ist (anders als start()/disconnect()) eine reine "async def"-
         # Methode ohne eingebaute Sync-Wandlung - ein direkter Aufruf liefert nur

@@ -10,6 +10,54 @@ from pipeline.logging_setup import get_logger
 logger = get_logger(__name__)
 
 
+def _mask_api_hash(api_hash: str) -> str:
+    """Maskiert api_hash für Diagnose-Logs: nur Länge und die äußersten 2
+    Zeichen je Seite bleiben erkennbar, der Rest wird durch '*' ersetzt -
+    genug, um z.B. eine falsche Länge (Kopierfehler, unsichtbares Zeichen)
+    zu erkennen, ohne den Wert selbst preiszugeben."""
+    if len(api_hash) <= 4:
+        return "*" * len(api_hash)
+    return f"{api_hash[:2]}{'*' * (len(api_hash) - 4)}{api_hash[-2:]}"
+
+
+# Telegram vergibt api_id-Werte aktuell typischerweise 7-8-stellig. Kein
+# hartes Limit von Telegram, daher hier bewusst nur eine WARNING statt eines
+# Fehlers - falls künftig laengere IDs vergeben werden, soll das nicht
+# ploetzlich Logins blockieren, nur auffallen (z.B. Tippfehler mit einer
+# Ziffer zu viel beim manuellen Abtippen statt Copy-Paste).
+_API_ID_PLAUSIBLE_MAX_DIGITS = 8
+
+
+def _warn_if_api_id_implausible(api_id: int) -> None:
+    digits = len(str(abs(api_id)))
+    if digits > _API_ID_PLAUSIBLE_MAX_DIGITS:
+        logger.warning(
+            "api_id hat %d Stellen - ungewöhnlich lang (Telegram vergibt aktuell "
+            "typischerweise %d-8-stellige Werte). Möglicher Tippfehler beim "
+            "manuellen Eintragen (z.B. eine Ziffer zu viel)? Wert selbst wird "
+            "hier bewusst nicht geloggt.",
+            digits,
+            _API_ID_PLAUSIBLE_MAX_DIGITS - 1,
+        )
+
+
+def _log_credentials_diagnostics(source: str, api_id: int, api_hash: str) -> None:
+    # Bewusst keine Secret-Werte, nur Metadaten - hilft bei
+    # ApiIdInvalidError zu unterscheiden, ob die Werte aus der falschen
+    # Quelle stammen, api_id versehentlich kein int ist, oder api_hash eine
+    # unerwartete Länge hat (z.B. durch ein unsichtbares Zeichen beim
+    # Copy-Paste, das .strip() nicht entfernt - z.B. Zero-Width-Space).
+    logger.info(
+        "Telegram-Credentials aus %s. api_id-Typ=%s, api_hash-Länge=%d "
+        "(erwartet: 32), api_hash=%s",
+        source,
+        type(api_id).__name__,
+        len(api_hash),
+        _mask_api_hash(api_hash),
+    )
+    _warn_if_api_id_implausible(api_id)
+
+
 def _credentials_json_path() -> Path:
     """
     Pfad zur lokalen Credentials-Datei:
@@ -49,7 +97,7 @@ def get_telegram_credentials() -> Tuple[int, str, Optional[str]]:
         api_id = int(api_id_raw.strip())
         api_hash = api_hash_raw.strip()
         phone = phone_raw.strip() if isinstance(phone_raw, str) and phone_raw.strip() else None
-        logger.info("Telegram-Credentials aus Umgebungsvariablen (TELEGRAM_API_ID/TELEGRAM_API_HASH).")
+        _log_credentials_diagnostics("Umgebungsvariablen (TELEGRAM_API_ID/TELEGRAM_API_HASH)", api_id, api_hash)
         return api_id, api_hash, phone
 
     # 2) Fallback: credentials.json
@@ -66,7 +114,7 @@ def get_telegram_credentials() -> Tuple[int, str, Optional[str]]:
         api_id = int(api_id_val)
         api_hash = api_hash_val
         phone = phone_val or None
-        logger.info("Telegram-Credentials aus %s.", cfg_path)
+        _log_credentials_diagnostics(str(cfg_path), api_id, api_hash)
         return api_id, api_hash, phone
 
     # Weder ENV noch Datei vorhanden/valid → Fehler
