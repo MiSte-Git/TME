@@ -941,8 +941,20 @@ class ScheduleTab(QWidget):
         api_keys_dialog.exec()
 
     def _on_thread_finished(self) -> None:
-        self.progress.setRange(0, 1)
-        self.progress.setValue(0)
+        # KEIN self.progress.setRange()/setValue() hier: worker_thread.finished
+        # feuert erst NACH dem jeweiligen Ergebnis-Handler (_on_worker_finished/
+        # _on_worker_error/_on_worker_cancelled/_show_login_needed), der
+        # progress bereits auf seinen korrekten Endzustand gesetzt hat - und
+        # zwar über eine QUEUED Cross-Thread-Verbindung, die von der
+        # verschachtelten Event-Loop des "Fertig"-Bestätigungsdialogs
+        # (QMessageBox.exec() in _on_worker_finished) mitverarbeitet wird,
+        # ALSO WÄHREND der Dialog noch offen ist. Ein Reset auf setValue(0)
+        # hier hätte den zuvor gesetzten 100%-Endstand (siehe
+        # _on_worker_finished) sichtbar wieder auf "0%" zurückgeworfen, bevor
+        # der Nutzer den Dialog bestätigt hat (Bug-Report: Fortschrittsbalken
+        # zeigt "0%" während des offenen Bestätigungsdialogs) - rein
+        # kosmetisch/keine Datenverluste, da der Lauf zu diesem Zeitpunkt
+        # bereits vollständig abgeschlossen war, aber irreführend.
         self.worker_thread = None
         self.worker = None
         self.btn_cancel.setVisible(False)
