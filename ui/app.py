@@ -10,9 +10,18 @@ import threading
 import warnings
 from typing import Any, Callable, cast
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    # PyInstaller behandelt das Einstiegsskript (ui/app.py) als Top-Level-Modul:
+    # __file__ verliert dabei das "ui/"-Prefix und zeigt direkt auf
+    # sys._MEIPASS/app.py statt sys._MEIPASS/ui/app.py. Alle bisher auf
+    # Path(__file__) basierenden Ressourcenpfade (Uebersetzungen, Flaggen,
+    # Theme-QSS, Fenster-Icon) liefen dadurch im gebauten Bundle ins Leere.
+    ROOT = Path(sys._MEIPASS)
+else:
+    ROOT = Path(__file__).resolve().parents[1]
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+UI_DIR = ROOT / "ui"
 
 from credentials import get_telegram_credentials, save_telegram_credentials, get_provider_api_key_source
 
@@ -49,8 +58,8 @@ from ui.lettermap_tab import LettermapTab
 from ui.schedule_editor_tab import ScheduleEditorTab
 from ui.no_translate_words_tab import NoTranslateWordsTab
 
-TRANSLATIONS_DIR = Path(__file__).parent / "translations"
-FLAGS_DIR = Path(__file__).parent / "assets" / "flags"
+TRANSLATIONS_DIR = UI_DIR / "translations"
+FLAGS_DIR = UI_DIR / "assets" / "flags"
 
 
 def _flag_icon_path(code: str) -> Path | None:
@@ -1358,8 +1367,7 @@ class MainWindow(QMainWindow):
         # showEvent) bei jedem Minimieren/Wiederherstellen erneut geprüft wird.
         self._first_run_hint_checked = False
         # App/Icon setzen, wenn vorhanden
-        root = Path(__file__).resolve().parents[1]
-        icon_path = root / "Telegram-LibreOffice.png"
+        icon_path = ROOT / "Telegram-LibreOffice.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.tabs = QTabWidget()
@@ -1459,8 +1467,7 @@ class MainWindow(QMainWindow):
 
     def _open_doc(self, rel_path: str) -> None:
         try:
-            root = Path(__file__).resolve().parents[1]
-            p = root / rel_path
+            p = ROOT / rel_path
             if p.exists():
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
             else:
@@ -1643,7 +1650,7 @@ class MainWindow(QMainWindow):
 
 def _apply_theme(app: QApplication, theme: str) -> None:
     """Apply QSS theme based on name ('light' or 'dark'). Fallbacks gracefully."""
-    base = Path(__file__).parent
+    base = UI_DIR
     files = {
         "light": base / "theme_light.qss",
         "dark": base / "theme_dark.qss",
