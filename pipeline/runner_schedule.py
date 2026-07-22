@@ -78,6 +78,24 @@ DEBUG_FETCH = False
 # Konfigurierbare Anzeige von Forward-Infos (siehe runner_by_ids._SHOW_FORWARD_INFO)
 _SHOW_FORWARD_INFO = True
 
+# Anzeigename je Übersetzungs-Provider (effective_translation_provider-Wert,
+# siehe run_schedule()) - für die ODT-Spaltenüberschrift ("Übersetzung (DE) –
+# DeepL") und den Ausgabe-Dateinamen (dort der kurze, dateinamensichere Tag
+# ohne Leerzeichen/Sonderzeichen). Eigennamen bleiben unübersetzt, daher keine
+# QCoreApplication.translate()-Anbindung nötig.
+_PROVIDER_DISPLAY_NAMES = {
+    "deepl": "DeepL",
+    "google": "Google",
+    "chatgpt": "ChatGPT (OpenAI)",
+    "telegram": "Telegram-nativ",
+}
+_PROVIDER_FILENAME_TAGS = {
+    "deepl": "DeepL",
+    "google": "Google",
+    "chatgpt": "ChatGPT",
+    "telegram": "Telegram",
+}
+
 
 def _get_display_author(msg, show_forward_info: bool) -> tuple[str | None, datetime | None]:
     """Bestimmt die anzuzeigende Autorenzeile und optional das Originaldatum.
@@ -1445,9 +1463,11 @@ async def run_schedule(
 
         _notify(QCoreApplication.translate("RunnerSchedule", "ODT wird geschrieben…"))
         if want_side_by_side:
+            provider_display = _PROVIDER_DISPLAY_NAMES.get(effective_translation_provider, effective_translation_provider)
             write_odt_for_record_pairs(
                 record_pairs, out_path, styles, doc_title=doc_title_base,
-                original_label=f"Original ({source_up})", translation_label=f"Übersetzung ({lang_up})",
+                original_label=f"Original ({source_up})",
+                translation_label=f"Übersetzung ({lang_up}) – {provider_display}",
             )
         else:
             write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
