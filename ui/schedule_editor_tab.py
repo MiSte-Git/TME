@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 import json
+import re
 
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtWidgets import (
@@ -14,6 +15,18 @@ from schedule_json import (
     ScheduleDocument, ScheduleSection, load_schedule_document, save_schedule_document,
     ISO_DATE_FMT, _parse_date as parse_date
 )
+
+
+def _sanitize_filename_stem(title: str) -> str:
+    """Bereinigt einen Dokumententitel zu einem gültigen Dateinamen-Stamm
+    (ohne Endung): Pfadtrenner, Steuerzeichen und unter Windows reservierte
+    Zeichen werden durch '_' ersetzt, Mehrfach-Unterstriche zusammengefasst,
+    Rand-Whitespace/-Punkte/-Unterstriche entfernt. Liefert "" bei leerem
+    oder vollständig ungültigem Titel (Aufrufer entscheidet dann über einen
+    Fallback-Namen)."""
+    cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", title or "").strip()
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_ .")
+    return cleaned
 
 
 class ScheduleEditorTab(QWidget):
@@ -287,10 +300,19 @@ class ScheduleEditorTab(QWidget):
     def _save_doc_as(self) -> None:
         try:
             sched = self._collect_schedule()
+            if self.current_path is not None:
+                default_path = self.current_path
+            else:
+                # Neue, noch unbenannte Schedule-Datei: Dokumententitel
+                # (bereinigt) als Standard-Dateiname vorschlagen, falls
+                # vorhanden. Ohne Titel bleibt der bisherige generische
+                # Vorschlag unverändert.
+                stem = _sanitize_filename_stem(sched.document_title or "")
+                default_path = (Path.cwd() / "input" / f"{stem}.json") if stem else (Path.cwd() / "input/schedule.json")
             p_str, _ = QFileDialog.getSaveFileName(
                 self,
                 self.tr("Schedule speichern"),
-                str(self.current_path or (Path.cwd() / "input/schedule.json")),
+                str(default_path),
                 self.tr("JSON (*.json)"),
             )
             if not p_str:
