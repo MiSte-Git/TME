@@ -523,7 +523,7 @@ Cette fenêtre se fermera automatiquement…</translation></message>
     <message><source>Telegram (kostenlos)</source><translation>Telegram (gratuit)</translation></message>
     <message><source>Kanäle chronologisch mischen</source><translation>Mélanger les canaux chronologiquement</translation></message>
     <message><source>Inkrementelles Update (Store)</source><translation>Mise à jour incrémentielle (store)</translation></message>
-    <message><source>Quellsprache (Dateiname):</source><translation>Langue source (nom de fichier) :</translation></message>
+    <message><source>Quellsprache:</source><translation>Langue source :</translation></message>
     <message><source>Ausgabeformat:</source><translation>Format de sortie :</translation></message>
     <message><source>Nur ODT</source><translation>ODT uniquement</translation></message>
     <message><source>Nur DOCX</source><translation>DOCX uniquement</translation></message>

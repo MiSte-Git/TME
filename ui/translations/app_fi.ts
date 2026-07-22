@@ -523,7 +523,7 @@ Tämä ikkuna sulkeutuu automaattisesti…</translation></message>
     <message><source>Telegram (kostenlos)</source><translation>Telegram (ilmainen)</translation></message>
     <message><source>Kanäle chronologisch mischen</source><translation>Sekoita kanavat aikajärjestyksessä</translation></message>
     <message><source>Inkrementelles Update (Store)</source><translation>Vaiheittainen päivitys (store)</translation></message>
-    <message><source>Quellsprache (Dateiname):</source><translation>Lähdekieli (tiedostonimi):</translation></message>
+    <message><source>Quellsprache:</source><translation>Lähdekieli:</translation></message>
     <message><source>Ausgabeformat:</source><translation>Tulostusmuoto:</translation></message>
     <message><source>Nur ODT</source><translation>Vain ODT</translation></message>
     <message><source>Nur DOCX</source><translation>Vain DOCX</translation></message>

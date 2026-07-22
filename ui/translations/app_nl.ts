@@ -523,7 +523,7 @@ Dit venster sluit automatisch…</translation></message>
     <message><source>Telegram (kostenlos)</source><translation>Telegram (gratis)</translation></message>
     <message><source>Kanäle chronologisch mischen</source><translation>Kanalen chronologisch mengen</translation></message>
     <message><source>Inkrementelles Update (Store)</source><translation>Incrementele update (store)</translation></message>
-    <message><source>Quellsprache (Dateiname):</source><translation>Brontaal (bestandsnaam):</translation></message>
+    <message><source>Quellsprache:</source><translation>Brontaal:</translation></message>
     <message><source>Ausgabeformat:</source><translation>Uitvoerformaat:</translation></message>
     <message><source>Nur ODT</source><translation>Alleen ODT</translation></message>
     <message><source>Nur DOCX</source><translation>Alleen DOCX</translation></message>

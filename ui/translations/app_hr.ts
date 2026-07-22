@@ -523,7 +523,7 @@ Ovaj će se prozor automatski zatvoriti…</translation></message>
     <message><source>Telegram (kostenlos)</source><translation>Telegram (besplatno)</translation></message>
     <message><source>Kanäle chronologisch mischen</source><translation>Kronološko miješanje kanala</translation></message>
     <message><source>Inkrementelles Update (Store)</source><translation>Inkrementalno ažuriranje (store)</translation></message>
-    <message><source>Quellsprache (Dateiname):</source><translation>Izvorni jezik (naziv datoteke):</translation></message>
+    <message><source>Quellsprache:</source><translation>Izvorni jezik:</translation></message>
     <message><source>Ausgabeformat:</source><translation>Izlazni format:</translation></message>
     <message><source>Nur ODT</source><translation>Samo ODT</translation></message>
     <message><source>Nur DOCX</source><translation>Samo DOCX</translation></message>
