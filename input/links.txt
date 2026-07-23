@@ -1,0 +1,4 @@
+# Beispiel-Links-Datei für collect-letters/extract-plain (eine Telegram-
+# Nachrichten-URL pro Zeile, Zeilen mit # werden ignoriert). Vor der Nutzung
+# durch echte Nachrichten-Permalinks ersetzen, z.B.:
+https://t.me/c/1234567890/100

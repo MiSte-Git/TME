@@ -26,6 +26,9 @@ if os.path.exists(window_icon):
 # Übersetzungen (kann leer sein, falls noch nicht gebaut)
 for p in project_root.glob("ui/translations/app_*.qm"):
     _datas.append((str(p), "ui/translations"))
+# Flaggen-Icons der Sprachauswahl (Sprachcode.png / Sprachcode@2x.png)
+for p in project_root.glob("ui/assets/flags/*.png"):
+    _datas.append((str(p), "ui/assets/flags"))
 
 block_cipher = None
 

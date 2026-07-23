@@ -1,9 +1,10 @@
 from __future__ import annotations
 from pathlib import Path
-import shutil, subprocess, gzip, sys
 from typing import Iterable
 
 from telethon import functions
+
+from .frame_compositing import mark_rendered, render_tgs_multiframe, render_webm_multiframe
 
 
 async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Path = Path("cache/emoji")) -> int:
@@ -52,20 +53,12 @@ async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Pat
         try:
             await client.download_media(d, file=str(raw_path))
             tmp = raw_path
-            # WEBM -> PNG (ffmpeg)
-            if (mime.startswith('video/webm') or tmp.suffix.lower()=='.webm') and shutil.which('ffmpeg'):
-                png_path = tmp.with_suffix('.png')
-                try:
-                    subprocess.run([
-                        'ffmpeg','-y','-i',str(tmp),'-frames:v','1','-pix_fmt','rgba',str(png_path)
-                    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    if png_path.exists():
-                        out_png.write_bytes(png_path.read_bytes()); ok += 1
-                        try: png_path.unlink()
-                        except: pass
-                        continue
-                except Exception:
-                    pass
+            # WEBM -> PNG (mehrere über die Laufzeit verteilte Frames, alpha-compositet)
+            if mime.startswith('video/webm') or tmp.suffix.lower() == '.webm':
+                if render_webm_multiframe(tmp, out_png):
+                    mark_rendered(cache_dir, d.id)
+                    ok += 1
+                    continue
             # WEBP/PNG direkt
             lower = tmp.suffix.lower()
             if mime.endswith('webp') or lower == '.webp':
@@ -79,40 +72,13 @@ async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Pat
             if mime.endswith('png') or lower == '.png':
                 out_png.write_bytes(tmp.read_bytes()); ok += 1
                 continue
-            # TGS (gzippte Lottie) → PNG Frame 0
-            if mime in ('application/x-tgsticker','application/json+tgs') or lower == '.tgs':
-                json_path = tmp.with_suffix('.json')
-                try:
-                    with gzip.open(tmp, 'rb') as gz, open(json_path, 'wb') as jf:
-                        jf.write(gz.read())
-                    ran = False
-                    cli = shutil.which('lottie_convert.py')
-                    if cli:
-                        try:
-                            subprocess.run([cli, str(json_path), str(out_png), '--frame','0','--width','512','--height','512'],
-                                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            ran = out_png.exists()
-                        except Exception:
-                            ran = False
-                    if not ran:
-                        try:
-                            from lottie.scripts.lottie_convert import main as lottie_main
-                            argv_old = sys.argv
-                            sys.argv = ['lottie_convert.py', str(json_path), str(out_png), '--frame','0','--width','512','--height','512']
-                            try:
-                                lottie_main()
-                                ran = out_png.exists()
-                            finally:
-                                sys.argv = argv_old
-                        except Exception:
-                            ran = False
-                    if ran:
-                        ok += 1
-                        try: json_path.unlink()
-                        except Exception: pass
-                        continue
-                except Exception:
-                    pass
+            # TGS (gzippte Lottie) -> PNG (mehrere über die Composition-Länge
+            # verteilte Frames, alpha-compositet)
+            if mime in ('application/x-tgsticker', 'application/json+tgs') or lower == '.tgs':
+                if render_tgs_multiframe(tmp, out_png, size=512):
+                    mark_rendered(cache_dir, d.id)
+                    ok += 1
+                    continue
         except Exception:
             pass
         finally:

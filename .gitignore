@@ -8,9 +8,14 @@ build/
 dist/
 .eggs/
 *.egg-info/
+# Von PyInstaller (build_win.ps1/build_linux.sh) als Nebeneffekt im Repo-Root
+# erzeugt, wenn kein bestehendes .spec als Ziel uebergeben wird - TME_mac.spec
+# ist dagegen bewusst eingecheckt (siehe build_mac.sh), daher kein *.spec.
+/TME.spec
 
 # Virtual envs and local env files
 .venv/
+.venv-build/
 venv/
 env/
 .env
@@ -31,12 +36,13 @@ cache/
 output/
 data/
 media/
-input/
+input/*
+!input/example.json
+!input/links.txt
 out/
 *.bak
 *.session
 *.session-journal
-*.code-workspace
 *.desktop
 
 # Git internals
@@ -48,3 +54,9 @@ WIP-CH-untracked.tar
 WIP-CH.patch
 
 .pip-cache/
+pkg/
+
+# Claude-Code-Berechtigungen sammeln pro Session laufend neue, lokale
+# Eintraege an - stoert staendig als "geaendert" in git status, daher lokal
+# statt geteilt (siehe .claude/settings.json).
+.claude/settings.json

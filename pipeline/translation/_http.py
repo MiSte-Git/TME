@@ -113,3 +113,20 @@ async def post_json(
                 continue
             raise TranslationError(f"{provider_label}: unerwarteter Fehler ({exc})") from exc
     raise TranslationError(f"{provider_label}: fehlgeschlagen ({last_err})")
+
+
+async def get_json(
+    url: str,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 10.0,
+    provider_label: str = "Übersetzungsdienst",
+) -> Dict[str, Any]:
+    """GET ohne Body (z.B. DeepL /v2/usage) - kein Retry bei Fehlern: wird
+    ausschließlich für Best-Effort-Zusatzinfos (Kontingent-Anzeige) genutzt,
+    ein einzelner Fehlschlag soll den eigentlichen Übersetzungslauf nicht
+    verzögern. Kurzer Timeout aus demselben Grund."""
+    try:
+        return await asyncio.to_thread(_do_request, url, method="GET", headers=headers or {}, timeout=timeout)
+    except _HttpStatusError as exc:
+        raise TranslationError(f"{provider_label}: HTTP {exc.status} ({exc.body})") from exc

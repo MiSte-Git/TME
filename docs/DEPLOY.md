@@ -11,6 +11,10 @@ Dieser Leitfaden beschreibt, wie du aus diesem Projekt Desktop-Bundles erzeugst 
     - API ID (eine Zahl)
     - API Hash (eine Zeichenkette)
 - Diese Keys sind geheim. Bitte NIEMALS ins Git-Repository committen.
+- API ID und API Hash immer per Copy-Paste direkt von my.telegram.org übernehmen,
+  nicht von Hand abtippen - besonders bei der rein numerischen API ID fällt eine
+  zusätzliche oder fehlende Ziffer beim Hinsehen kaum auf, führt aber zu einem
+  wenig aussagekräftigen "API ID/API Hash ungültig"-Fehler beim Login.
 
 ### Ablage der Keys (ohne Repo-Leak)
 
@@ -132,7 +136,7 @@ cd ui/translations
 Voraussetzungen (einmalig):
 
 ```bash
-python3 -m pip install pyinstaller PySide6 telethon odfpy pillow easyocr keyring
+python3 -m pip install pyinstaller PySide6 telethon odfpy pillow PyYAML lottie keyring
 ```
 
 ### macOS
@@ -197,36 +201,182 @@ bei `-Release`) ein Installer gebaut werden (nicht im Repo enthalten).
 
 ### Linux
 
-Für Linux gibt es kein PyInstaller-Bundle, stattdessen eine `.desktop`-Datei für die
-Desktop-Integration (Anwendungsmenü). Sie wird **nicht** eingecheckt, sondern bei Bedarf
-lokal generiert – die hinterlegten `Exec=`/`Path=`/`Icon=`-Pfade würden sonst auf das System
-zeigen, auf dem sie erzeugt wurde.
+Drei Workflows, analog zu den Windows-Skripten (`build_win.ps1`/`run_ui.ps1`): einer für
+die tägliche Entwicklung (aktueller Code, keine venv-Aktivierung nötig), einer für den
+Produktiv-Build (eigenständiges PyInstaller-Binary) und einer für die Installation
+(Binary + Desktop-Eintrag, der danach direkt auf das Binary zeigt - kein venv/Python-Aufruf
+mehr nötig, ein Klick im Anwendungsmenü genügt).
 
-Generieren/installieren (aus dem Repo-Root):
+#### Entwicklung: `run_linux_dev.sh`
+
+```bash
+./run_linux_dev.sh          # legt bei Bedarf .venv/ an, installiert requirements.txt, startet ui/app.py
+./run_linux_dev.sh --stt    # zusätzlich requirements-stt.txt sicherstellen
+```
+
+Startet die App direkt aus dem aktuellen Arbeitsstand (kein Build) - für schnelle
+Iteration während der Entwicklung. Legt die venv bei Bedarf automatisch an (anders als
+`scripts/run_ui.ps1`, das eine bestehende venv voraussetzt).
+
+#### Produktiv-Build: `build_linux.sh`
+
+```bash
+./build_linux.sh              # --onedir Testbuild, PyInstaller-Cache bleibt erhalten
+./build_linux.sh --release    # --onefile + --clean, für Weitergabe an Endnutzer
+./build_linux.sh --clean      # erzwingt --clean auch für --onedir
+./build_linux.sh --with-stt   # STT-Abhängigkeiten (torch/whisper) mit ins Bundle aufnehmen
+```
+
+Baut in einer eigenen Build-venv (`.venv-build/`, getrennt von der Dev-venv aus
+`run_linux_dev.sh`, damit keine Dev-Only-Pakete ins Bundle gelangen) - dieselben
+`--add-data`/Hidden-Import-Optionen wie `scripts/build_win.ps1` (Theme-QSS inkl. dem
+darin referenzierten `checkbox-check.svg`, Fenster-Icon, Qt-Übersetzungen,
+Flaggen-PNGs; `keyring`-Backend-Hidden-Imports). Ergebnis unter `dist/TME/TME`
+(`--onedir`, Standard, ca. 250 MB) bzw. `dist/TME` als Einzeldatei (`--onefile` mit
+`--release`).
+
+**STT standardmäßig ausgeschlossen:** `requirements-stt.txt` (torch/whisper, ~4-5 GB)
+landet nur mit explizitem `--with-stt` im Bundle - für die meisten Installationen
+unnötiger Ballast (siehe [Sprachnachrichten-Transkription](#sprachnachrichten-transkription-optional)
+oben: bleibt ohne diese Abhängigkeiten weiterhin kontrolliert deaktiviert, kein Absturz).
+
+#### Installation: `install_linux.sh`
+
+```bash
+./install_linux.sh              # baut bei Bedarf neu und installiert
+./install_linux.sh --release    # erzwingt vorher einen --release-Build
+./install_linux.sh --with-stt   # bei Neu-Build: STT-Abhängigkeiten mit einschließen
+```
+
+Kopiert das gebaute Bundle nach `~/.local/share/tme/` (kein root nötig), inkl.
+`config.yaml` und Fenster-Icon, und aktualisiert den Desktop-Eintrag
+(`~/.local/share/applications/tme.desktop`) so, dass `Exec=`/`TryExec=` direkt auf das
+Binary zeigen statt auf einen venv-Python-Aufruf von `ui/app.py`.
+
+`build_linux.sh` stempelt jeden Build mit Git-Kurzhash (+`-dirty` bei uncommitteten
+Änderungen) in `dist/BUILD_VERSION.txt`. `install_linux.sh` vergleicht das vor der
+Installation gegen den aktuellen Arbeitsbaum: fehlt `dist/` komplett oder weicht der
+Stempel ab (z.B. ein liegengebliebener älterer Build), wird automatisch neu gebaut statt
+einen veralteten Stand zu installieren. Nach der Installation liegt der Stempel auch unter
+`~/.local/share/tme/BUILD_VERSION.txt` - Abgleich mit `git rev-parse --short HEAD` zeigt,
+welcher Codestand tatsächlich installiert ist.
+
+Deinstallieren:
+
+```bash
+python3 scripts/generate_build_files.py --uninstall-desktop
+rm -rf ~/.local/share/tme
+```
+
+#### Nur Desktop-Eintrag ohne Build (Entwicklungsstand im Anwendungsmenü)
+
+Für einen Desktop-Eintrag, der auf den aktuellen Entwicklungsstand zeigt (venv +
+`ui/app.py`) statt auf ein gebautes Binary:
 
 ```bash
 python3 scripts/generate_build_files.py
 ```
 
-Unter Linux wird die `.desktop`-Datei automatisch mitgeneriert und nach
-`~/.local/share/applications/tme.desktop` geschrieben (inkl. Aufruf von
-`update-desktop-database`, falls installiert). `Exec=`/`TryExec=` zeigen dabei auf
-`.venv/bin/python3`, falls ein lokales venv existiert, sonst auf das im `PATH` gefundene
-`python3`.
-
-Auf anderen Plattformen ausgeführt (z. B. zum Testen) oder um die Generierung explizit
-zu steuern:
+Die `.desktop`-Datei wird **nicht** eingecheckt, sondern bei Bedarf lokal generiert – die
+hinterlegten `Exec=`/`Path=`/`Icon=`-Pfade würden sonst auf das System zeigen, auf dem
+sie erzeugt wurde. `Exec=`/`TryExec=` zeigen dabei auf `.venv/bin/python3`, falls ein
+lokales venv existiert, sonst auf das im `PATH` gefundene `python3`.
 
 ```bash
-python3 scripts/generate_build_files.py --with-desktop-entry   # erzwingen
-python3 scripts/generate_build_files.py --no-desktop-entry     # überspringen
+python3 scripts/generate_build_files.py --with-desktop-entry            # erzwingen
+python3 scripts/generate_build_files.py --no-desktop-entry              # überspringen
+python3 scripts/generate_build_files.py --binary-path /pfad/zum/Binary  # wie install_linux.sh es nutzt
 ```
 
-Wieder entfernen:
+Das Skript erzeugt außerdem standardmäßig `<name>.spec` (Standardname `TME.spec`) für
+einen möglichen Spec-basierten PyInstaller-Build - mit lokalen Absolut-Pfaden in
+`pathex`/`datas`. `build_linux.sh` nutzt das nicht (ruft PyInstaller direkt mit
+CLI-Optionen auf, analog zu `build_win.ps1`), daher wird diese Generierung unter Linux
+**standardmäßig übersprungen**; `TME.spec` wird auch nicht eingecheckt. Bei Bedarf
+explizit erzwingen:
 
 ```bash
-python3 scripts/generate_build_files.py --uninstall-desktop
+python3 scripts/generate_build_files.py --with-spec
 ```
+
+## Sprachnachrichten-Transkription (optional)
+
+Sprach-/Audionachrichten werden während eines Schedule-Laufs automatisch heruntergeladen
+und per [OpenAI Whisper](https://github.com/openai/whisper) transkribiert
+(`pipeline/speech_to_text.py`); das Transkript erscheint direkt unterhalb der
+jeweiligen Nachricht im ODT.
+
+Dafür sind zusätzliche, nicht standardmäßig installierte Abhängigkeiten nötig
+(`torch` inkl. CUDA-Paketen, `openai-whisper`, zusammen mehrere GB):
+
+```bash
+python3 -m pip install -r requirements-stt.txt
+```
+
+Ohne diese Installation läuft die App unverändert weiter - `transcribe_voice()`
+schlägt dann kontrolliert fehl (`SpeechToTextError`, z. B. weil `whisper` fehlt),
+der Lauf wird ohne Absturz fortgesetzt und Sprachnachrichten erscheinen im ODT
+einfach ohne Transkript. Unerwartete Transkriptionsfehler (z. B. bei bereits
+installiertem `whisper`) werden nach `data/tme.log` geloggt, brechen den Lauf
+aber ebenfalls nicht ab.
+
+Per Umgebungsvariable `STT_DEVICE=cuda` lässt sich (bei vorhandener GPU) CUDA statt
+CPU für die Transkription erzwingen; ohne Setzen der Variable wird immer CPU genutzt.
+
+## Animierte Custom-Emojis (Frame-Compositing)
+
+Animierte Telegram-Custom-Emojis (`.tgs`/`.webm`, z. B. Buchstaben-Sets mit
+Einblend- oder Schreib-Animation) wurden ursprünglich durch Rendern eines
+einzelnen Frames (Zeitpunkt 0) in ein PNG umgewandelt. Bei Animationen, deren
+Inhalt erst später sichtbar wird (Fade-in, verzögerter Layer-Einsatz), lieferte
+das leere oder unvollständige Bilder - z. B. fehlten bei manchen "Buchstaben"-
+Emojis die eigentlichen Buchstaben komplett, weil sie erst nach Frame 0
+eingeblendet werden.
+
+Die aktuelle Lösung (`pipeline/frame_compositing.py`) rendert stattdessen
+mehrere über die Animationsdauer verteilte Frames und legt sie per Alpha-
+Compositing übereinander - das Ergebnis-PNG enthält so alles, was irgendwann
+während der Animation sichtbar war. Die Anzahl der Sample-Frames ist über
+`DEFAULT_FRAME_SAMPLES` in `pipeline/frame_compositing.py` einstellbar (Default:
+10) - mehr Frames erhöhen die Trefferquote bei kurzen Einblend-Fenstern,
+verlangsamen aber die Erst-Erzeugung neuer Cache-Einträge entsprechend.
+
+Bekannte Grenzen: Bei Layern, die sich *bewegen* statt nur ein-/auszublenden,
+kann das zu sichtbarem "Ghosting" (mehrere überlappende Positionen im
+Ergebnisbild) führen. Trim-Path-Reveals (schrittweise gezeichnete Konturen)
+werden nur teilweise erfasst, da das Verfahren auf fertig gerenderten Frames
+arbeitet statt auf der Vektor-Animation selbst.
+
+## Custom-Emoji-Cache (cache/emoji/)
+
+Gerenderte PNGs für Custom-Emojis (inkl. animierter .tgs/.webm, siehe
+`pipeline/frame_compositing.py`) werden dauerhaft unter `cache/emoji/<doc_id>.png`
+zwischengespeichert - der Cache-Check prüft nur, ob die Datei existiert, nicht
+mit welchem Verfahren/welcher Version sie erzeugt wurde.
+
+Ändert sich künftig das Render-Verfahren (z. B. andere `DEFAULT_FRAME_SAMPLES`,
+andere Compositing-Logik), muss dafür `RENDERER_VERSION` in
+`pipeline/frame_compositing.py` erhöht werden, damit neu erzeugte Einträge
+korrekt versioniert werden. Bereits vorhandene Alt-Einträge werden dadurch
+*nicht* automatisch neu gerendert (das würde bei tausenden Cache-Dateien
+unnötig teuer). Stattdessen danach einmalig ausführen:
+
+```bash
+python3 scripts/rescan_emoji_cache.py                          # Dry-Run, nur Report
+python3 scripts/rescan_emoji_cache.py --apply                  # betroffene Alt-Einträge in cache/emoji/_quarantine/ verschieben
+python3 scripts/rescan_emoji_cache.py --apply --source-dir DIR # + direkter Rerender, falls Rohdateien <doc_id>.<ext> in DIR vorliegen
+```
+
+Das Skript erkennt Alt-Einträge heuristisch als "wahrscheinlich unvollständig"
+(fast leeres Bild - typisches Symptom eines zu früh gerenderten Frames). Ohne
+`--source-dir` werden nur diese nach `cache/emoji/_quarantine/` verschoben,
+statt den ganzen Cache zu verwerfen; beim nächsten echten Lauf werden sie
+automatisch neu von Telegram geladen und mit dem aktuellen Verfahren
+gerendert. Mit `--source-dir` (falls die ursprünglichen .tgs/.webm-Rohdateien
+noch vorliegen) rendert das Skript betroffene Einträge stattdessen direkt neu,
+ohne Quarantäne. Einschränkung: Einträge, die bei Frame 0 bereits ein
+vollständiges, nur um einzelne Elemente unvollständiges Bild zeigen, erkennt
+die Heuristik nicht (siehe Docstring in `scripts/rescan_emoji_cache.py`).
 
 ## Laufzeit-Hinweise
 

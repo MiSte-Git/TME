@@ -6,13 +6,19 @@ Emoji-ODT Pipeline Orchestrator (Stub)
 - Oder die vorhandenen Skripte über pipeline.adapters.existing_scripts aufrufen
 
 Beispiel:
-  python3 emoji_pipeline.py by-date --schedule input/links.txt --mode inline --translate 1 --lang de
-  python3 emoji_pipeline.py grouped-links --links input/links_groups.txt --lang de
+  python3 emoji_pipeline.py by-date --schedule input/example.json --mode inline --translate 1 --lang de
+  python3 emoji_pipeline.py collect-letters --links input/links.txt
 """
 from __future__ import annotations
 import argparse
+import sys
 from pathlib import Path
 from typing import Tuple
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from credentials import get_telegram_credentials
 from pipeline.adapters.existing_scripts import run_by_date
 
@@ -136,8 +142,11 @@ def main() -> None:
         out = recompose_to_odt(args.links, args.lang)
         print(f"Recompose-ODT: {out}")
 
-if __name__ == "__main__":
-    main()
+
 def _require_api_credentials() -> Tuple[int, str]:
     api_id, api_hash, phone = get_telegram_credentials()
     return api_id, api_hash
+
+
+if __name__ == "__main__":
+    main()

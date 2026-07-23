@@ -94,14 +94,49 @@ translation:
     {}                            # reserviert für künftige Optionen
   chatgpt:
     model: gpt-4o-mini
-  # Grobe Schätzpreise in USD, NICHT live abgefragt; bei Bedarf hier überschreiben.
+  # Grobe Schätzpreise in USD, NICHT live abgefragt (siehe pricing.py -
+  # Anbieter-Preise ändern sich häufig, hier bei Bedarf von Hand
+  # aktualisieren). Struktur: provider -> modell -> Preise + "checked_on"
+  # (Datum der letzten manuellen Prüfung). "default" greift, wenn kein
+  # Modell-spezifischer Eintrag existiert (z.B. bei chatgpt.model-Wechsel
+  # oben ohne passenden Preis-Eintrag hier).
   pricing:
     telegram:
-      usd_per_million_chars: 0.0
+      default:
+        usd_per_million_chars: 0.0
+        checked_on: "2026-07-22"
     deepl:
-      usd_per_million_chars: 20.0
+      default:
+        usd_per_million_chars: 20.0
+        checked_on: "2026-07-22"
     google:
-      usd_per_million_chars: 20.0
+      default:
+        usd_per_million_chars: 20.0
+        checked_on: "2026-07-22"
     chatgpt:
-      usd_per_million_input_tokens: 150.0
-      usd_per_million_output_tokens: 600.0
+      # Preise für gpt-4o-mini (siehe chatgpt.model oben) - NICHT für das
+      # größere/teurere gpt-4o.
+      gpt-4o-mini:
+        usd_per_million_input_tokens: 0.15
+        usd_per_million_output_tokens: 0.60
+        checked_on: "2026-07-22"
+      default:
+        usd_per_million_input_tokens: 0.15
+        usd_per_million_output_tokens: 0.60
+        checked_on: "2026-07-22"
+    # Noch kein eigener Gemini-Provider implementiert (siehe
+    # pipeline/translation/__init__.py::get_provider) - Preistabelle bereits
+    # vorbereitet für den Fall, dass ein Gemini-Provider ergänzt wird.
+    gemini:
+      gemini-2.5-flash-lite:
+        usd_per_million_input_tokens: 0.10
+        usd_per_million_output_tokens: 0.40
+        checked_on: "2026-07-22"
+      gemini-2.5-flash:
+        usd_per_million_input_tokens: 0.30
+        usd_per_million_output_tokens: 2.50
+        checked_on: "2026-07-22"
+      default:
+        usd_per_million_input_tokens: 0.10
+        usd_per_million_output_tokens: 0.40
+        checked_on: "2026-07-22"

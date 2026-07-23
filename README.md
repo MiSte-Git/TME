@@ -5,7 +5,7 @@
 Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dokumenten – inklusive Übersetzungen, Bild- und Emoji-Einbettung. Der Fokus liegt auf dem komfortablen UI-Workflow (`python3 ui/app.py`), der alle Schritte von der Schedule-Datei bis zum fertigen ODT orchestriert.
 
 ## Features
-- Schedule-Dateien (TXT oder JSON) einlesen, Nachrichten abrufen und als ODT exportieren
+- Schedule-Dateien (JSON, siehe `input/example.json`) einlesen, Nachrichten abrufen und als ODT exportieren
 - Optional Übersetzungen anhängen (inline, am Ende oder als separates Dokument)
 - Austauschbarer Übersetzungs-Provider: Telegram (Default, kein API-Key nötig),
   DeepL, Google Translate oder ChatGPT/OpenAI (`translation.provider` in
@@ -16,7 +16,16 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   und mitübersetzt (als Klartext, keine Rückübersetzung in Emoji-Sequenzen),
   außer sie stehen auf der erweiterbaren Ausnahmeliste `data/no_translate_words.json`
   (Tab „Nicht übersetzen" im UI, inkl. CSV-Import/Export)
-- Medien und Custom-Emojis als Bilder einbetten
+- Medien und Custom-Emojis als Bilder einbetten - bei animierten Custom-Emojis
+  (.tgs/.webm) werden mehrere Frames über die Animationsdauer per Alpha-
+  Compositing zusammengeführt, damit erst später einblendende Inhalte (z. B.
+  bei „geschriebenen" Buchstaben-Sets) nicht fehlen (Details, Grenzen und
+  Stellschrauben siehe [docs/DEPLOY.md](docs/DEPLOY.md))
+- Optional: automatische Transkription von Sprachnachrichten (OpenAI Whisper) -
+  das erkannte Transkript wird direkt unter der jeweiligen Nachricht ins ODT
+  eingefügt. Benötigt die zusätzlichen Abhängigkeiten aus `requirements-stt.txt`
+  (siehe unten); ohne diese Installation erscheinen Sprachnachrichten einfach
+  ohne Transkript im ODT, kein Fehler
 - Optional: Nachrichten mehrerer Kanäle chronologisch mischen statt blockweise pro
   Kanal ausgeben (`interleave_channels` in `config.yaml` bzw. Checkbox „Kanäle
   chronologisch mischen" im UI; Kanalname bleibt als Label pro Nachricht sichtbar)
@@ -53,6 +62,11 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   ```bash
   python3 -m pip install -r requirements.txt
   ```
+- Optional für automatische Sprachnachrichten-Transkription (siehe Features oben,
+  Details in [docs/DEPLOY.md](docs/DEPLOY.md)):
+  ```bash
+  python3 -m pip install -r requirements-stt.txt
+  ```
 - Telegram API-Credentials (https://my.telegram.org) hinterlegen - drei gleichwertige Wege:
   - Direkt im UI: fehlen die Zugangsdaten oder ist die Session abgelaufen, öffnet
     sich beim Start eines Laufs automatisch ein Login-Dialog, der sie abfragt
@@ -74,13 +88,16 @@ Werkzeugkasten zum Sammeln von Telegram-Nachrichten und dem Erzeugen von ODT-Dok
   zentrales Logging (`pipeline/logging_setup.py` → `data/tme.log`)
 - `credentials.py` – zentrale Zugangsdaten-Verwaltung (Telegram + Provider-
   API-Keys, ENV/OS-Keyring/`credentials.json`)
-- `input/` – Beispiel-Schedules (TXT/JSON)
+- `input/` – Beispiel-Schedules (JSON)
 - `output/` – erzeugte ODTs
 - `data/` – Laufzeitdaten (letter_map.json, reports, UI-Status, `tme.log`)
 - `media/` & `cache/` – gespeicherte Medien bzw. Emoji-PNGs
 - `scripts/` – Hilfsskripte (siehe [docs/DEPLOY.md](docs/DEPLOY.md)): Build
   (`build_win.ps1`, `build_mac.sh`), UI-Start unter Windows (`run_ui.ps1`),
   Konsolen-Login-Fallback (`telegram_login.py`)
+- Linux-Skripte im Repo-Root (siehe [docs/DEPLOY.md](docs/DEPLOY.md)):
+  Entwicklung (`run_linux_dev.sh`), Build (`build_linux.sh`), Installation
+  (`install_linux.sh`)
 
 ## Schnellstart (UI)
 1. Abhängigkeiten installieren und API-Credentials setzen.
@@ -97,18 +114,33 @@ Das erzeugte ODT enthält ein Inhaltsverzeichnis mit klickbaren Einträgen (Spru
 ## CLI-Workflows
 Das Skript `pipeline/emoji_pipeline.py` bündelt verschiedene Teilaufgaben:
 ```bash
-python3 pipeline/emoji_pipeline.py by-date --schedule input/links.txt --mode inline --translate 1 --lang de
+python3 pipeline/emoji_pipeline.py by-date --schedule input/example.json --mode inline --translate 1 --lang de
 python3 pipeline/emoji_pipeline.py collect-letters --links input/links.txt
 python3 pipeline/emoji_pipeline.py extract-plain --links input/links.txt
 ```
+`by-date` erwartet eine JSON-Schedule-Datei (siehe `input/example.json`);
+`collect-letters`/`extract-plain` erwarten dagegen eine reine Links-Liste
+(eine Telegram-Nachrichten-URL pro Zeile, siehe `input/links.txt`) - beide
+Formate sind bewusst unterschiedlich und nicht austauschbar.
 Details zu den Subcommands stehen im Quelltext (`pipeline/emoji_pipeline.py`). Für alle Befehle mit Telegram-Zugriff gelten die oben genannten API-Variablen.
 
 ## Mapping/Lettermap
 Der Lettermap-Tab im UI und die zugehörigen Dateien (`data/letter_map.json`, `data/lettermap_ignore.json`) waren ursprünglich für ein Emoji-zu-Buchstaben-Mapping vorgesehen. Aktuell ist dieser Schritt optional; die ODT-Erzeugung funktioniert auch ohne weitere Eingriffe. Das Mapping-Feature bleibt als Vorbereitung für künftige Erweiterungen im Projekt.
 
 ## Installation & Build (Desktop-Bundles)
-Für fertige Desktop-Bundles (macOS `.app`, Windows `.exe`, Linux-Desktop-Eintrag) sowie
+Für fertige Desktop-Bundles (macOS `.app`, Windows `.exe`, Linux-Binary) sowie
 Details zur Ablage der Telegram-API-Keys siehe [docs/DEPLOY.md](docs/DEPLOY.md).
+
+Unter Linux stehen drei Skripte im Repo-Root zur Verfügung:
+
+```bash
+./run_linux_dev.sh      # Entwicklung: startet ui/app.py aus dem aktuellen Arbeitsstand (venv wird bei Bedarf angelegt)
+./build_linux.sh        # Produktiv-Build: eigenständiges Binary via PyInstaller nach dist/
+./install_linux.sh      # Installation: kopiert nach ~/.local/share/tme/, Desktop-Eintrag zeigt danach direkt auf das Binary
+```
+
+Details zu Optionen (`--release`, `--stt`/`--with-stt` für die optionale
+Sprachnachrichten-Transkription, Zielpfade) siehe [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Hintergrund & Architektur
 Für Contributor:innen, die tiefer in Aufbau und Entstehung der Pipeline einsteigen wollen:
@@ -121,7 +153,10 @@ Für Contributor:innen, die tiefer in Aufbau und Entstehung der Pipeline einstei
   oder im Install-Befehl oben enthalten; wird ergänzt, sobald die Funktion umgesetzt ist.
 
 ## Entwicklung
-- Syntax-Check: `python3 -m compileall -q .`
+- Syntax-Check: `python3 -m compileall -q . -x "[\\/](\.venv|build|dist)[\\/]"`
+  (Ausschluss nötig, sonst scannt compileall bei lokalem `.venv` im Repo-Root
+  auch Fremdpakete mit - z. B. ein PySide6-Jinja2-Template, das als
+  ungültiges Python fehlschlägt, siehe auch `scripts/build_win.ps1`)
 - Debug-Ausgaben und Reports werden unter `data/` erzeugt (z. B. `missing_lettermap_docs.json`).
 - Lauf-Log: `data/tme.log` (Zeitstempel, effektive Optionen pro Lauf, Nachrichtenzählung, Fehler) - zusätzlich auf der Konsole ausgegeben.
 - Vor Pull-Requests bitte sicherstellen, dass UI und CLI-Läufe mit einer Beispiel-Schedule erfolgreich sind.
@@ -131,3 +166,5 @@ Copyright (C) 2026 MiSte-Git
 
 Dieses Projekt steht unter der GNU General Public License v3.0 (SPDX: `GPL-3.0-or-later`).
 Siehe beiliegende `LICENSE`-Datei für den vollständigen Lizenztext.
+
+Eingebundene Drittanbieter-Assets (Flaggen-Icons der Sprachauswahl) siehe `THIRD_PARTY_LICENSES.md`.

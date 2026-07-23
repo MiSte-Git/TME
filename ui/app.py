@@ -10,9 +10,18 @@ import threading
 import warnings
 from typing import Any, Callable, cast
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    # PyInstaller behandelt das Einstiegsskript (ui/app.py) als Top-Level-Modul:
+    # __file__ verliert dabei das "ui/"-Prefix und zeigt direkt auf
+    # sys._MEIPASS/app.py statt sys._MEIPASS/ui/app.py. Alle bisher auf
+    # Path(__file__) basierenden Ressourcenpfade (Uebersetzungen, Flaggen,
+    # Theme-QSS, Fenster-Icon) liefen dadurch im gebauten Bundle ins Leere.
+    ROOT = Path(sys._MEIPASS)
+else:
+    ROOT = Path(__file__).resolve().parents[1]
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+UI_DIR = ROOT / "ui"
 
 from credentials import get_telegram_credentials, save_telegram_credentials, get_provider_api_key_source
 
@@ -25,7 +34,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths
+from PySide6.QtCore import QObject, QThread, Signal, Qt, QLocale, QTranslator, QEvent, QUrl, QStandardPaths, QSize, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QDesktopServices, QGuiApplication
 from functools import partial
 from PySide6.QtWidgets import (
@@ -36,8 +45,10 @@ from PySide6.QtWidgets import (
     QInputDialog
 )
 
-from pipeline.runner_schedule import run_schedule
+from pipeline.runner_schedule import run_schedule, estimate_translatable_chars
 from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid, TelegramCredentialsMissing
+from pipeline.translation.deepl_quota import load_quota_state as _load_deepl_quota_state, would_exceed as _deepl_would_exceed, set_local_reset_day as _set_deepl_local_reset_day
+from pipeline.translation.pricing import estimate_cost_from_chars
 from ui.login_dialog import LoginDialog
 from ui.api_keys_dialog import ApiKeysDialog
 from pipeline.logging_setup import get_logger
@@ -47,7 +58,18 @@ from ui.lettermap_tab import LettermapTab
 from ui.schedule_editor_tab import ScheduleEditorTab
 from ui.no_translate_words_tab import NoTranslateWordsTab
 
-TRANSLATIONS_DIR = Path(__file__).parent / "translations"
+TRANSLATIONS_DIR = UI_DIR / "translations"
+FLAGS_DIR = UI_DIR / "assets" / "flags"
+
+
+def _flag_icon_path(code: str) -> Path | None:
+    # Qt lädt bei High-DPI automatisch die "<name>@2x.png"-Variante aus
+    # demselben Verzeichnis, sofern vorhanden - kein manuelles Multi-Size-Icon nötig.
+    for base in (FLAGS_DIR, Path.cwd() / "ui" / "assets" / "flags"):
+        p = base / f"{code}.png"
+        if p.exists():
+            return p
+    return None
 
 APP_NAME = "TME"
 ORG_NAME = "MiSte"  # beliebig, aber fix lassen für stabile Pfade
@@ -180,6 +202,34 @@ class ScheduleWorker(QObject):
             self.error.emit(str(exc))
 
 
+class CharPreviewWorker(QObject):
+    """Läuft im Hintergrund-Thread und ruft estimate_translatable_chars()
+    auf (siehe pipeline/runner_schedule.py) - macht dafür einen kurzen,
+    kostenlosen Telegram-API-Zugriff (die Schedule-JSON enthält selbst
+    keinen Nachrichtentext), aber KEINEN Übersetzungs-API-Call. Bewusst ein
+    eigener, viel simplerer Worker statt ScheduleWorker wiederzuverwenden -
+    keine Lettermap-/Cancel-/Resume-Logik nötig."""
+    finished = Signal(object)  # CharEstimateResult
+    error = Signal(str)
+
+    def __init__(self, schedule_path: Path, chronological_merge: bool, incremental_mode: bool) -> None:
+        super().__init__()
+        self.schedule_path = schedule_path
+        self.chronological_merge = chronological_merge
+        self.incremental_mode = incremental_mode
+
+    def run(self) -> None:
+        try:
+            result = asyncio.run(estimate_translatable_chars(
+                self.schedule_path,
+                chronological_merge=self.chronological_merge,
+                incremental_mode=self.incremental_mode,
+            ))
+            self.finished.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class ScheduleTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -202,6 +252,41 @@ class ScheduleTab(QWidget):
         pick_lay.addWidget(self.btn_pick)
         lay.addLayout(pick_lay)
 
+        # Zeichen-Vorschau VOR Lauf-Start (siehe _schedule_char_preview/
+        # _start_char_preview) - bewusst "Vorschau:"-Wortlaut, damit klar von
+        # cost_status_label ("Letzter Run: ...", NACH Lauf-Ende, siehe
+        # _on_worker_finished) unterscheidbar. Startet unsichtbar/leer, bis
+        # eine gültige Schedule-Datei gewählt und "Übersetzen" aktiv ist.
+        self.char_preview_label = QLabel("")
+        self.char_preview_label.setWordWrap(True)
+        self.char_preview_label.setVisible(False)
+        lay.addWidget(self.char_preview_label)
+        self._char_preview_timer = QTimer(self)
+        self._char_preview_timer.setSingleShot(True)
+        self._char_preview_timer.timeout.connect(self._start_char_preview)
+        self._char_preview_thread: QThread | None = None
+        self._char_preview_worker: CharPreviewWorker | None = None
+        # Erhöht sich bei jeder Vorschau-Anfrage - ein noch laufender, aber
+        # inzwischen überholter Hintergrund-Fetch (z.B. weil der Nutzer
+        # schnell eine andere Datei gewählt hat) darf sein Ergebnis dann
+        # nicht mehr anzeigen (siehe _on_char_preview_finished/_error).
+        self._char_preview_request_id = 0
+        # Merkt sich, ob während eines laufenden Vorschau-Fetches eine neue
+        # Anfrage nötig wurde - wird direkt danach nachgeholt, statt
+        # parallele Telegram-Verbindungen zu öffnen.
+        self._char_preview_rerun_pending = False
+
+        # DeepL-Freikontingent-Anzeige (siehe pipeline/translation/deepl_quota.py,
+        # _refresh_deepl_quota_display) - nur relevant/sichtbar, wenn
+        # provider_combo aktuell auf "deepl" steht; zeigt den zuletzt
+        # bekannten Stand (Live-Wert von DeepL bevorzugt, siehe Moduldoc)
+        # UND ggf. eine Überschreitungs-Warnung basierend auf der
+        # Zeichen-Vorschau (char_preview_label).
+        self.deepl_quota_label = QLabel("")
+        self.deepl_quota_label.setWordWrap(True)
+        self.deepl_quota_label.setVisible(False)
+        lay.addWidget(self.deepl_quota_label)
+
         self.cb_translate = QCheckBox(self.tr("Übersetzen"))
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
         self.lbl_provider = QLabel(self.tr("Übersetzungs-Provider:"))
@@ -221,7 +306,7 @@ class ScheduleTab(QWidget):
         self.cb_incremental = QCheckBox(self.tr("Inkrementelles Update (Store)")); self.cb_incremental.setChecked(False)
         self.lbl_mode = QLabel(self.tr("Modus:"))
         self.lbl_lang = QLabel(self.tr("Sprache:"))
-        self.lbl_src_lang = QLabel(self.tr("Quellsprache (Dateiname):"))
+        self.lbl_src_lang = QLabel(self.tr("Quellsprache:"))
         self.lbl_src_lang.setWordWrap(True)
         self.lbl_format = QLabel(self.tr("Ausgabeformat:"))
         self.format_combo = QComboBox()
@@ -292,7 +377,34 @@ class ScheduleTab(QWidget):
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
         self.status_label.setVisible(False)
+        # Zeigt u.a. Fehlermeldungen mit technischen Details (Pfade, IDs) an -
+        # muss zur Fehlersuche kopierbar sein, nicht nur lesbar.
+        self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        # Garantiert mindestens 2 Zeilen Platz, unabhängig davon, wie das
+        # Layout beim Sichtbarwerden weiterer Widgets (cost_status_label/
+        # btn_open_output, siehe _on_worker_finished) den verfügbaren Platz
+        # verteilt - QLabel.sizeHint() bei aktiviertem Wortumbruch spiegelt
+        # NICHT die tatsächlich bei der realen Breite benötigte Höhe wider,
+        # wodurch das Layout dieses Label sonst bis auf eine Zeile
+        # zusammenquetscht (Bug-Report: Text nach Lauf-Ende abgeschnitten).
+        self.status_label.setMinimumHeight(int(self.status_label.fontMetrics().lineSpacing() * 2.2))
         lay.addWidget(self.status_label)
+
+        # Geschätzte Übersetzungskosten des letzten abgeschlossenen Laufs -
+        # bewusst ein eigenes, dauerhaftes Label statt eines Popups (siehe
+        # _on_worker_finished): bleibt sichtbar, bis ein neuer Lauf gestartet
+        # wird (siehe run_schedule_file), nicht nur für ein paar Sekunden.
+        self.cost_status_label = QLabel("")
+        self.cost_status_label.setWordWrap(True)
+        self.cost_status_label.setVisible(False)
+        self.cost_status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.cost_status_label.setMinimumHeight(int(self.cost_status_label.fontMetrics().lineSpacing() * 1.6))
+        lay.addWidget(self.cost_status_label)
+        # Getrennt von isVisible() (siehe _on_worker_finished/
+        # _grow_window_for_newly_visible): cost_status_label wird vor jedem
+        # neuen Lauf wieder unsichtbar gemacht, soll das Fenster aber nur
+        # beim allerersten Erscheinen vergrößern, nicht bei jedem Lauf erneut.
+        self._cost_label_ever_shown = False
 
         self.btn_continue = QPushButton(self.tr("Fortsetzen"))
         self.btn_continue.setVisible(False)
@@ -316,17 +428,29 @@ class ScheduleTab(QWidget):
         # fehlende API-Zugangsdaten (True) vs. nur ungültige Session (False) -
         # siehe _on_credentials_missing/_on_session_invalid/_on_login_clicked.
         self._login_needs_credentials = False
+        # True, wenn der Login-Dialog ausgelöst wurde, weil ein Start-Versuch
+        # an fehlender/ungültiger Session bzw. fehlenden Zugangsdaten
+        # gescheitert ist (siehe _show_login_needed) - steuert, ob nach
+        # erfolgreichem Login in _on_login_clicked() automatisch fortgesetzt
+        # wird. Bleibt False bei einem manuellen, nicht laufbezogenen Klick
+        # auf "Jetzt einloggen…" (z. B. proaktive Einrichtung).
+        self._pending_run_after_login = False
         # Einmaliger Einrichtungs-Hinweis beim allerersten Start (siehe
         # maybe_show_first_run_hint()) - unabhängig von den reaktiven Checks
         # TelegramSessionInvalid/TelegramCredentialsMissing/
         # _ensure_provider_api_key, die weiterhin unverändert bestehen bleiben.
         self._first_run_hint_shown = False
+        # id(widget) -> Höhe, um die das Fenster beim letzten Sichtbarwerden
+        # dieses Widgets vergrößert wurde (siehe _set_toggle_widget_visible) -
+        # kein Eintrag, solange kein Ausgleich aussteht.
+        self._toggle_grow_amounts: dict[int, int] = {}
 
         lay.addStretch()
  
         self._load_state()
         self._install_state_handlers()
         self._sync_layout_enabled(self.cb_translate.isChecked())
+        self._refresh_deepl_quota_display()
 
     def _credentials_present(self) -> bool:
         try:
@@ -411,7 +535,7 @@ class ScheduleTab(QWidget):
         self.lbl_schedule.setText(self.tr("Telegram-Export:"))
         self.cb_translate.setText(self.tr("Übersetzen"))
         self.lbl_mode.setText(self.tr("Modus:"))
-        self.lbl_src_lang.setText(self.tr("Quellsprache (Dateiname):"))
+        self.lbl_src_lang.setText(self.tr("Quellsprache:"))
         self.lbl_lang.setText(self.tr("Sprache:"))
         self.cb_images.setText(self.tr("Bilder einbetten"))
         self.cb_emojis.setText(self.tr("Custom Emojis einbetten"))
@@ -469,13 +593,152 @@ class ScheduleTab(QWidget):
             self.schedule_edit.setText(p)
             self._save_state()
 
+    def _schedule_char_preview(self) -> None:
+        """Debounce-Trigger für die Zeichen-Vorschau (siehe
+        _start_char_preview) - startet/verlängert einen kurzen Timer, statt
+        bei jeder Änderung sofort einen Telegram-Abruf auszulösen (z.B. bei
+        schnellem Tippen im Datei-Pfad)."""
+        self._char_preview_timer.start(700)
+
+    def _start_char_preview(self) -> None:
+        text = self.schedule_edit.text().strip()
+        path = Path(text) if text else None
+        if not self.cb_translate.isChecked() or path is None or not path.exists() or path.suffix.lower() != ".json":
+            self._set_toggle_widget_visible(self.char_preview_label, False)
+            self.char_preview_label.setText("")
+            return
+        # Kein paralleler Telegram-Zugriff neben einem echten Lauf oder
+        # einer bereits laufenden Vorschau - stattdessen nachholen, sobald
+        # die aktuell laufende Anfrage fertig ist (siehe
+        # _on_char_preview_finished/_error).
+        if self.worker_thread is not None or self._char_preview_thread is not None:
+            self._char_preview_rerun_pending = True
+            return
+        self._char_preview_request_id += 1
+        request_id = self._char_preview_request_id
+        self._set_toggle_widget_visible(self.char_preview_label, True)
+        self.char_preview_label.setText(self.tr("Vorschau wird berechnet…"))
+
+        self._char_preview_worker = CharPreviewWorker(
+            path, chronological_merge=self.cb_interleave.isChecked(), incremental_mode=self.cb_incremental.isChecked(),
+        )
+        self._char_preview_thread = QThread(self)
+        self._char_preview_worker.moveToThread(self._char_preview_thread)
+        self._char_preview_thread.started.connect(self._char_preview_worker.run)
+        self._char_preview_worker.finished.connect(lambda result: self._on_char_preview_finished(request_id, result))
+        self._char_preview_worker.error.connect(lambda msg: self._on_char_preview_error(request_id, msg))
+        self._char_preview_worker.finished.connect(self._char_preview_thread.quit)
+        self._char_preview_worker.error.connect(self._char_preview_thread.quit)
+        self._char_preview_worker.finished.connect(self._char_preview_worker.deleteLater)
+        self._char_preview_worker.error.connect(self._char_preview_worker.deleteLater)
+        self._char_preview_thread.finished.connect(self._char_preview_thread.deleteLater)
+        self._char_preview_thread.finished.connect(self._on_char_preview_thread_finished)
+        self._char_preview_thread.start()
+
+    def _on_char_preview_thread_finished(self) -> None:
+        self._char_preview_thread = None
+        self._char_preview_worker = None
+        if self._char_preview_rerun_pending:
+            self._char_preview_rerun_pending = False
+            self._start_char_preview()
+
+    def _on_char_preview_finished(self, request_id: int, result: object) -> None:
+        if request_id != self._char_preview_request_id:
+            return  # überholt durch eine neuere Anfrage
+        message_count = getattr(result, "message_count", 0)
+        char_count = getattr(result, "char_count", 0)
+        text = self.tr("Vorschau: ~{chars} Zeichen aus {n} Nachricht(en) zu übersetzen").format(
+            chars=char_count, n=message_count,
+        )
+        # Kostenschätzung nur für zahlungspflichtige Provider (telegram ist
+        # kostenlos) - bei tokenbasierten Providern (chatgpt/gemini, siehe
+        # pricing.py::is_token_based_provider) über eine grobe Zeichen->
+        # Token-Umrechnung, da vor einem echten Lauf keine tatsächliche
+        # Tokenzahl von der API vorliegt - deshalb hier klar als Schätzung
+        # gekennzeichnet (siehe estimate_cost_from_chars-Docstring). Kein
+        # Modell übergeben: die UI kennt das konfigurierte Provider-Modell
+        # nicht (kommt aus config.yaml), estimate_cost_from_chars fällt
+        # dafür auf den "default"-Preiseintrag des Providers zurück.
+        provider_val = str(self.provider_combo.currentData() or "telegram")
+        if provider_val != "telegram" and char_count > 0:
+            cost, is_approximate = estimate_cost_from_chars(provider_val, char_count)
+            if is_approximate:
+                text += " " + self.tr(
+                    "– geschätzte Kosten: ~${cost:.4f} (grobe Schätzung, basierend auf ca. 4 Zeichen pro Token - "
+                    "tatsächliche Tokenisierung kann abweichen)"
+                ).format(cost=cost)
+            else:
+                text += " " + self.tr("– geschätzte Kosten: ~${cost:.4f}").format(cost=cost)
+        self.char_preview_label.setVisible(True)
+        self.char_preview_label.setText(text)
+        self._refresh_deepl_quota_display(preview_chars=char_count)
+
+    def _on_char_preview_error(self, request_id: int, message: str) -> None:
+        if request_id != self._char_preview_request_id:
+            return
+        logger.info("Zeichen-Vorschau nicht verfügbar: %s", message)
+        self.char_preview_label.setVisible(True)
+        self.char_preview_label.setText(self.tr("Vorschau nicht verfügbar (Telegram-Login prüfen)."))
+        self._refresh_deepl_quota_display()
+
+    def _refresh_deepl_quota_display(self, preview_chars: Optional[int] = None) -> None:
+        """Aktualisiert deepl_quota_label - nur relevant, wenn aktuell
+        DeepL als Provider gewählt ist (andere Provider haben andere/keine
+        Freikontingente, siehe pipeline/translation/deepl_quota.py). Liest
+        den zuletzt PERSISTIERTEN Stand (kein Live-API-Call hier - der
+        passiert einmal pro echtem Lauf in runner_schedule.py, siehe dort) -
+        daher reine, sofortige Datei-Lektüre, unkritisch im UI-Thread.
+
+        preview_chars: char_count aus der aktuellen Zeichen-Vorschau (siehe
+        _on_char_preview_finished) - wenn gesetzt, wird zusätzlich geprüft,
+        ob ein Lauf mit dieser Zeichenzahl das Freikontingent überschreiten
+        würde, und ggf. eine Warnung angehängt."""
+        if str(self.provider_combo.currentData() or "telegram") != "deepl":
+            self._set_toggle_widget_visible(self.deepl_quota_label, False)
+            return
+        state = _load_deepl_quota_state()
+        if state.source == "none":
+            self._set_toggle_widget_visible(self.deepl_quota_label, False)
+            return
+        text = self.tr(
+            "DeepL-Freikontingent diesen Zeitraum: ~{used} von {limit} Zeichen verbraucht ({remaining} übrig)."
+        ).format(used=state.character_count, limit=state.character_limit, remaining=state.remaining)
+        if preview_chars is not None and _deepl_would_exceed(state, preview_chars):
+            over = state.character_count + preview_chars - state.character_limit
+            text += " " + self.tr(
+                "⚠ Dieser Lauf würde das Freikontingent um ~{over} Zeichen überschreiten und zusätzliche Kosten verursachen."
+            ).format(over=over)
+        self.deepl_quota_label.setText(text)
+        self._set_toggle_widget_visible(self.deepl_quota_label, True)
+
     def run_schedule_file(self) -> None:
-        path = Path(self.schedule_edit.text())
+        text = self.schedule_edit.text().strip()
+        if not text:
+            # Path("") normalisiert zu Path(".") (Arbeitsverzeichnis), was
+            # .exists() faelschlich als True beantwortet - ohne diese explizite
+            # Vorab-Pruefung wuerde der leere Pfad unbemerkt bis zum JSON-
+            # Format-Check in runner_schedule.py durchlaufen und dort die
+            # irrefuehrende Meldung "Nur JSON-Schedule-Dateien werden
+            # unterstützt" statt eines Hinweises auf die fehlende Auswahl auslösen.
+            QMessageBox.warning(self, self.tr("Fehler"), self.tr("Bitte zuerst eine Schedule-Datei auswählen."))
+            return
+        path = Path(text)
         if not path.exists():
             QMessageBox.warning(self, self.tr("Fehler"), self.tr("Bitte eine gültige Schedule-Datei wählen."))
             return
         if self.worker_thread is not None:
             QMessageBox.information(self, self.tr("Läuft"), self.tr("Ein Durchlauf ist bereits aktiv. Bitte warten."))
+            return
+        if self._char_preview_thread is not None:
+            # Beide nutzen dieselbe Telethon-SQLite-Session ("tg_session") -
+            # zwei gleichzeitige Verbindungen darauf riskieren "database is
+            # locked"-Fehler. Die Zeichen-Vorschau ist kurz (nur Sammeln,
+            # keine Übersetzung), daher hier einfach kurz abwarten lassen
+            # statt den Lauf ungeprüft parallel zu starten.
+            QMessageBox.information(
+                self, self.tr("Läuft"),
+                self.tr("Zeichen-Vorschau wird gerade berechnet. Bitte kurz warten und erneut versuchen."),
+            )
             return
         # Ensure Telegram credentials before starting
         if not self._ensure_credentials():
@@ -487,8 +750,22 @@ class ScheduleTab(QWidget):
         target_lang = self.lang_edit.text().strip() or ("de" if translate else "de")
         source_lang = self.src_lang_combo.currentText().strip() or "de"
         self.btn_run.setEnabled(False)
-        self.progress.setVisible(True)
+        # Kostenanzeige des vorherigen Laufs verwerfen - sie soll nur bis zum
+        # Start des NÄCHSTEN Laufs bestehen bleiben (siehe cost_status_label).
+        self.cost_status_label.setVisible(False)
+        self.cost_status_label.setText("")
+        self._set_progress_visible(True)
         self.progress.setRange(0, 0)
+        # status_label startet unsichtbar (setVisible(False) in _build_ui) und
+        # wird hier beim allerersten Lauf zum ersten Mal sichtbar - bleibt
+        # danach für den Rest der App-Laufzeit sichtbar (wie btn_open_output),
+        # daher genügt isVisible() als einmaliger Check statt eines eigenen
+        # Flags. Ohne Kompensation quetscht dieses erstmalige Erscheinen
+        # (analog zum Fortschrittsbalken, siehe _set_progress_visible) andere
+        # Bereiche zusammen (beobachtet: Ausgabeformat-ComboBox in der
+        # "Ausgabe"-Gruppe wurde dabei unlesbar).
+        if not self.status_label.isVisible():
+            self._grow_window_for_newly_visible([self.status_label])
         self.status_label.setVisible(True)
         self.status_label.setText(self.tr("Starte…"))
         self.btn_continue.setVisible(False)
@@ -572,6 +849,70 @@ class ScheduleTab(QWidget):
         if self.lettermap_tab:
             self.lettermap_tab.on_mapping_finished()
 
+    def _grow_window_for_newly_visible(self, widgets: list) -> int:
+        """Vergrößert das umgebende Fenster um die Höhe, die die übergebenen,
+        gerade erstmals sichtbar gewordenen Widgets zusätzlich benötigen -
+        Qt vergrößert Top-Level-Fenster bei einem neu sichtbaren Kind-Widget
+        NICHT automatisch, sondern verteilt die zusätzlich benötigte Höhe
+        durch Zusammendrücken bestehender, flexibler Bereiche (z.B.
+        status_label) innerhalb der unveränderten Fenstergröße - dadurch
+        wurde der Statustext direkt nach Lauf-Ende abgeschnitten/unlesbar,
+        bis der Nutzer das Fenster manuell vergrößerte. Addiert bewusst nur
+        die zusätzlich benötigte Höhe auf die AKTUELLE Fenstergröße (statt
+        z.B. window.adjustSize()/sizeHint() zu verwenden), damit eine vom
+        Nutzer bereits größer gezogene Fenstergröße nicht verkleinert wird.
+        Gibt die addierte Höhe zurück, damit Aufrufer sie bei Bedarf später
+        wieder symmetrisch abziehen können (siehe _set_progress_visible)."""
+        win = self.window()
+        spacing = self.layout().spacing() if self.layout() is not None else 0
+        extra = sum(w.sizeHint().height() + spacing for w in widgets)
+        if extra > 0:
+            win.resize(win.width(), win.height() + extra)
+        return extra
+
+    def _set_toggle_widget_visible(self, widget: QWidget, visible: bool) -> None:
+        """Schaltet ein Widget mit eigener Layout-Zeile sichtbar/unsichtbar
+        und kompensiert dabei die Fenstergröße symmetrisch (wachsen beim
+        Sichtbarwerden, wieder schrumpfen beim Verstecken).
+
+        Für Widgets, die (anders als btn_open_output/cost_status_label, die
+        dauerhaft sichtbar bleiben bzw. nur einmal wachsen, siehe
+        _grow_window_for_newly_visible) MEHRFACH pro Session erneut
+        sichtbar<->unsichtbar umschalten (z.B. self.progress bei jedem Lauf,
+        char_preview_label bei jedem An-/Abwählen von "Übersetzen") - ohne
+        dieses symmetrische Zurückschrumpfen würde das Fenster bei jedem
+        weiteren Umschalten kumulativ weiterwachsen. Solche Widgets haben
+        (im Gegensatz zu btn_cancel, das sich nur eine bereits vorhandene
+        Zeile mit btn_run teilt) eine eigene Layout-Zeile - ihr
+        Sichtbarwerden ohne Fenster-Kompensation quetscht sonst z.B. die
+        QFormLayout-Zeilen der "Übersetzung"-Gruppe zusammen (Modus/
+        Provider/Quellsprache/Layout-ComboBoxen), was dort zu
+        Darstellungsfehlern führt (Rest-Pixel aus der vorherigen, noch
+        nicht ungültig gemachten Zeilenhöhe) - derselbe Grundmechanismus
+        wie der ursprüngliche Squeeze-Bug, nur an anderer Stelle."""
+        key = id(widget)
+        if visible:
+            if not widget.isVisible():
+                self._toggle_grow_amounts[key] = self._grow_window_for_newly_visible([widget])
+            widget.setVisible(True)
+        else:
+            widget.setVisible(False)
+            extra = self._toggle_grow_amounts.pop(key, 0)
+            if extra:
+                win = self.window()
+                # win.minimumHeight() statt minimumSizeHint(): Letzteres wird
+                # unmittelbar nach setVisible(False) noch aus dem ALTEN
+                # Layout-Zustand berechnet (Neuberechnung erfolgt erst im
+                # nächsten Event-Loop-Durchlauf) und würde die Fensterhöhe
+                # dadurch fälschlich nicht verkleinern, sondern erneut
+                # vergrößern. minimumHeight() ist die fest gesetzte Grenze aus
+                # MainWindow.setMinimumSize() und daher zeitlich stabil.
+                new_height = max(win.minimumHeight(), win.height() - extra)
+                win.resize(win.width(), new_height)
+
+    def _set_progress_visible(self, visible: bool) -> None:
+        self._set_toggle_widget_visible(self.progress, visible)
+
     def _on_worker_finished(self, result: object) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
@@ -589,7 +930,7 @@ class ScheduleTab(QWidget):
         docx_path = getattr(result, "docx_path", None)
         docx_translation_path = getattr(result, "docx_translation_path", None)
         docx_error = getattr(result, "docx_error", None)
-        translation_cost_summary = getattr(result, "translation_cost_summary", None)
+        translation_cost_totals = getattr(result, "translation_cost_totals", None)
         lines: list[str] = []
         if odt_path is not None:
             try:
@@ -612,27 +953,79 @@ class ScheduleTab(QWidget):
             lines.append(self.tr("Übersetzungs-DOCX erzeugt: {path}").format(path=docx_translation_path))
         if docx_error:
             lines.append(self.tr("Warnung: DOCX-Konvertierung fehlgeschlagen: {err}").format(err=docx_error))
-        if translation_cost_summary:
-            lines.append(self.tr("Übersetzungskosten (Schätzung):"))
-            for line in translation_cost_summary:
-                lines.append(f"  {line}")
         msg = "\n".join(lines)
         self.status_label.setText(self.tr("Fertig."))
-        # Merke Ausgabe-Pfad und zeige Button
+        # Übersetzungskosten bewusst NICHT im Popup, sondern dauerhaft in der
+        # Statuszeile (siehe cost_status_label) - bleibt sichtbar, bis der
+        # nächste Lauf gestartet wird (siehe run_schedule_file), statt nach
+        # dem Wegklicken des Popups verloren zu gehen. Aus Rohdaten
+        # (translation_cost_totals) statt aus vorformatierten Backend-Strings
+        # (translation_cost_summary, siehe pricing.py) gebaut, damit der
+        # komplette Text über self.tr() läuft und der Sprachumschaltung
+        # folgt - vorformatierte Backend-Strings sind reines Deutsch ohne
+        # Qt-Kontext (siehe _notify in runner_schedule.py).
+        if translation_cost_totals:
+            parts: list[str] = []
+            for provider, calls, char_count, input_tokens, output_tokens, cost in translation_cost_totals:
+                cost_str = f"{cost:.4f}"
+                if input_tokens or output_tokens:
+                    parts.append(
+                        self.tr(
+                            "{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), "
+                            "geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)"
+                        ).format(provider=provider, n=calls, tokens_in=input_tokens, tokens_out=output_tokens, cost=cost_str)
+                    )
+                else:
+                    parts.append(
+                        self.tr(
+                            "{provider}: {n} Nachricht(en), {chars} Zeichen, "
+                            "geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)"
+                        ).format(provider=provider, n=calls, chars=char_count, cost=cost_str)
+                    )
+            self.cost_status_label.setText(self.tr("Letzter Run: {summary}").format(summary="; ".join(parts)))
+        # DeepL-Freikontingent-Anzeige mit dem gerade von runner_schedule.py
+        # frisch persistierten Stand aktualisieren (siehe deepl_quota_state
+        # auf result und _refresh_deepl_quota_display - liest die Datei neu
+        # statt result.deepl_quota_state direkt zu nutzen, damit dieselbe
+        # Anzeige-Logik wie beim Provider-Wechsel gilt).
+        self._refresh_deepl_quota_display()
+        # Merke Ausgabe-Pfad und zeige Button. btn_open_output/cost_status_label
+        # waren bis hierhin ggf. unsichtbar (Visibility=False) - Qt vergrößert
+        # das Fenster beim Sichtbarwerden NICHT automatisch, sondern quetscht
+        # bestehende Bereiche (z.B. status_label) zusammen, um den neuen
+        # Platzbedarf innerhalb der unveränderten Fenstergröße unterzubringen
+        # (siehe _grow_window_for_newly_visible). Daher hier vorab prüfen, wer
+        # gerade zum ERSTEN Mal sichtbar wird, und das Fenster danach um genau
+        # den zusätzlichen Platzbedarf vergrößern. btn_open_output bleibt nach
+        # dem ersten Run für immer sichtbar (isVisible() genügt als Check);
+        # cost_status_label wird dagegen vor jedem neuen Run wieder auf
+        # unsichtbar zurückgesetzt (siehe run_schedule_file) - dafür ein
+        # eigenes, dauerhaftes Flag, damit das Fenster nicht bei JEDEM
+        # übersetzten Lauf erneut wächst, sondern nur beim allerersten Mal.
+        newly_visible = []
+        if not self.btn_open_output.isVisible():
+            newly_visible.append(self.btn_open_output)
+        if translation_cost_totals and not self._cost_label_ever_shown:
+            newly_visible.append(self.cost_status_label)
+            self._cost_label_ever_shown = True
+        if translation_cost_totals:
+            self.cost_status_label.setVisible(True)
         self._last_output_path = main_out
         self.btn_open_output.setVisible(True)
         self.btn_open_output.setEnabled(True)
+        if newly_visible:
+            self._grow_window_for_newly_visible(newly_visible)
         title = self.tr("Fertig (mit Warnung)") if docx_error else self.tr("Fertig")
         if docx_error:
             QMessageBox.warning(self, title, msg)
         else:
             QMessageBox.information(self, title, msg)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
 
     def _on_worker_error(self, message: str) -> None:
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
@@ -649,7 +1042,7 @@ class ScheduleTab(QWidget):
         logger.info("Schedule-Lauf abgebrochen (Bestätigung vom Worker).")
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
@@ -678,7 +1071,7 @@ class ScheduleTab(QWidget):
         # steuert self._login_needs_credentials (siehe _on_login_clicked).
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.progress.setVisible(False)
+        self._set_progress_visible(False)
         self.btn_run.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.btn_cancel.setEnabled(False)
@@ -695,6 +1088,7 @@ class ScheduleTab(QWidget):
         # der Nutzer den Dialog wegklickt und ihn später erneut öffnen will.
         # Löst nur hier aus (tatsächlicher Lauf mit TelegramSessionInvalid/
         # TelegramCredentialsMissing), nicht bei jedem App-Start.
+        self._pending_run_after_login = True
         self._on_login_clicked()
 
     def _on_login_clicked(self) -> None:
@@ -702,10 +1096,26 @@ class ScheduleTab(QWidget):
         dialog.exec()
         if dialog.login_result is not None:
             self.btn_login.setVisible(False)
-            self.status_label.setVisible(True)
-            self.status_label.setText(
-                self.tr("Login erfolgreich - du kannst den Lauf jetzt erneut starten.")
-            )
+            if self._pending_run_after_login:
+                # Login wurde durch einen gescheiterten Start-Versuch
+                # ausgelöst (siehe _show_login_needed) - ursprünglich
+                # angeforderten Lauf jetzt automatisch fortsetzen, statt den
+                # Nutzer erneut auf "Start" klicken zu lassen.
+                self._pending_run_after_login = False
+                self.status_label.setVisible(True)
+                self.status_label.setText(self.tr("Login erfolgreich - Lauf wird fortgesetzt…"))
+                self.run_schedule_file()
+            else:
+                self.status_label.setVisible(True)
+                self.status_label.setText(self.tr("Login erfolgreich."))
+        else:
+            # Login fehlgeschlagen oder vom Nutzer abgebrochen - Flag NICHT
+            # gesetzt lassen: sonst würde ein späterer, komplett unabhängiger
+            # Login (z.B. Stunden danach, ohne dass zwischenzeitlich erneut
+            # "Start" geklickt wurde) fälschlich automatisch einen Lauf
+            # auslösen. btn_login bleibt weiterhin sichtbar (siehe
+            # _show_login_needed), ein erneuter Klick öffnet den Dialog neu.
+            self._pending_run_after_login = False
 
     def maybe_show_first_run_hint(self) -> None:
         """Einmaliger, rein informativer Hinweis beim allerersten Start (siehe
@@ -746,8 +1156,20 @@ class ScheduleTab(QWidget):
         api_keys_dialog.exec()
 
     def _on_thread_finished(self) -> None:
-        self.progress.setRange(0, 1)
-        self.progress.setValue(0)
+        # KEIN self.progress.setRange()/setValue() hier: worker_thread.finished
+        # feuert erst NACH dem jeweiligen Ergebnis-Handler (_on_worker_finished/
+        # _on_worker_error/_on_worker_cancelled/_show_login_needed), der
+        # progress bereits auf seinen korrekten Endzustand gesetzt hat - und
+        # zwar über eine QUEUED Cross-Thread-Verbindung, die von der
+        # verschachtelten Event-Loop des "Fertig"-Bestätigungsdialogs
+        # (QMessageBox.exec() in _on_worker_finished) mitverarbeitet wird,
+        # ALSO WÄHREND der Dialog noch offen ist. Ein Reset auf setValue(0)
+        # hier hätte den zuvor gesetzten 100%-Endstand (siehe
+        # _on_worker_finished) sichtbar wieder auf "0%" zurückgeworfen, bevor
+        # der Nutzer den Dialog bestätigt hat (Bug-Report: Fortschrittsbalken
+        # zeigt "0%" während des offenen Bestätigungsdialogs) - rein
+        # kosmetisch/keine Datenverluste, da der Lauf zu diesem Zeitpunkt
+        # bereits vollständig abgeschlossen war, aber irreführend.
         self.worker_thread = None
         self.worker = None
         self.btn_cancel.setVisible(False)
@@ -805,6 +1227,7 @@ class ScheduleTab(QWidget):
             # _ensure_provider_api_key() kümmert sich bereits nur um genau
             # diesen einen Provider.
             self._ensure_provider_api_key(str(self.provider_combo.currentData() or "telegram"))
+        self._refresh_deepl_quota_display()
 
     def _install_state_handlers(self) -> None:
         self.schedule_edit.editingFinished.connect(self._save_state)
@@ -821,6 +1244,20 @@ class ScheduleTab(QWidget):
         self.format_combo.currentIndexChanged.connect(lambda _i: self._save_state())
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.layout_combo.currentIndexChanged.connect(lambda _i: self._save_state())
+        # Zeichen-Vorschau (siehe _schedule_char_preview): nur an Optionen
+        # gekoppelt, die die tatsächlich zu übersetzende Zeichenzahl
+        # beeinflussen - Datei-Auswahl (welche Nachrichten überhaupt),
+        # "Übersetzen" (ohne das gibt es nichts zu übersetzen) und
+        # "Inkrementelles Update (Store)" (bereits im Store bekannte
+        # Nachrichten werden server-seitig gar nicht erst nachgeladen, siehe
+        # estimate_translatable_chars). mode_combo/layout_combo/format_combo/
+        # src_lang/target_lang/cb_interleave ändern dagegen nur Platzierung/
+        # Reihenfolge/Ausgabeformat, NICHT welche Nachrichten übersetzt
+        # werden - dafür bewusst KEIN erneuter (kostenpflichtiger Zeit-,
+        # nicht Geld-)Telegram-Abruf ausgelöst.
+        self.schedule_edit.textChanged.connect(lambda _t: self._schedule_char_preview())
+        self.cb_translate.toggled.connect(lambda _checked: self._schedule_char_preview())
+        self.cb_incremental.toggled.connect(lambda _checked: self._schedule_char_preview())
 
     def _load_state(self) -> None:
         self._loading_state = True
@@ -930,8 +1367,7 @@ class MainWindow(QMainWindow):
         # showEvent) bei jedem Minimieren/Wiederherstellen erneut geprüft wird.
         self._first_run_hint_checked = False
         # App/Icon setzen, wenn vorhanden
-        root = Path(__file__).resolve().parents[1]
-        icon_path = root / "Telegram-LibreOffice.png"
+        icon_path = ROOT / "Telegram-LibreOffice.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.tabs = QTabWidget()
@@ -987,11 +1423,16 @@ class MainWindow(QMainWindow):
         lay.addStretch(1)
         for code, flag, tip in langs:
             btn = QToolButton()
-            btn.setText(flag)
+            icon_path = _flag_icon_path(code)
+            if icon_path is not None:
+                btn.setIcon(QIcon(str(icon_path)))
+            else:
+                # Fallback, falls die Icon-Datei fehlt (z.B. unvollständiges Bundle)
+                btn.setText(flag)
+            btn.setIconSize(QSize(22, 22))
             btn.setToolTip(tip)
             btn.setCheckable(True)
-            btn.setProperty("base_flag", flag)
-            btn.setStyleSheet("font-size: 22px; padding: 2px 6px;")
+            btn.setStyleSheet(self._LANG_BTN_STYLE_INACTIVE)
             btn.clicked.connect(lambda _=False, c=code: self._on_lang_clicked(c))
             lay.addWidget(btn)
             self.lang_flag_buttons[code] = btn
@@ -1000,14 +1441,20 @@ class MainWindow(QMainWindow):
         # highlight current
         self.update_lang_flag_highlight(_load_language_preference())
 
+    _LANG_BTN_STYLE_INACTIVE = (
+        "QToolButton { border: 2px solid transparent; border-radius: 4px; padding: 2px 4px; }"
+    )
+    _LANG_BTN_STYLE_ACTIVE = (
+        "QToolButton { border: 2px solid #4e9cff; border-radius: 4px; padding: 2px 4px;"
+        " background-color: rgba(78, 156, 255, 40); }"
+    )
+
     def update_lang_flag_highlight(self, cur: str) -> None:
         try:
             for code, btn in (self.lang_flag_buttons or {}).items():
                 is_cur = (code == cur)
                 btn.setChecked(is_cur)
-                base = btn.property("base_flag") or btn.text().replace("★", "").strip()
-                btn.setText(f"{base} ★" if is_cur else str(base))
-                btn.setStyleSheet("font-size: 22px; padding: 2px 6px;" + (" font-weight: bold;" if is_cur else ""))
+                btn.setStyleSheet(self._LANG_BTN_STYLE_ACTIVE if is_cur else self._LANG_BTN_STYLE_INACTIVE)
         except Exception:
             pass
 
@@ -1020,8 +1467,7 @@ class MainWindow(QMainWindow):
 
     def _open_doc(self, rel_path: str) -> None:
         try:
-            root = Path(__file__).resolve().parents[1]
-            p = root / rel_path
+            p = ROOT / rel_path
             if p.exists():
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
             else:
@@ -1061,6 +1507,34 @@ class MainWindow(QMainWindow):
     def _on_manage_api_keys(self) -> None:
         dialog = ApiKeysDialog(self)
         dialog.exec()
+
+    def _on_set_deepl_reset_day(self) -> None:
+        # Reiner Fallback für den lokalen Zähler, falls der Live-Check bei
+        # DeepL (GET /v2/usage, siehe deepl_provider.py::get_usage) mal
+        # nicht erreichbar ist - der Live-Wert wird immer bevorzugt und
+        # kennt seinen Reset-Zeitpunkt selbst (siehe deepl_quota.py-Moduldoc,
+        # DeepL liefert dafür kein Datum über die API). 0 = Fallback
+        # deaktivieren (Zähler wächst dann unbegrenzt, bis wieder ein
+        # Live-Check gelingt).
+        state = _load_deepl_quota_state()
+        current = state.local_reset_day or 0
+        day, ok = QInputDialog.getInt(
+            self,
+            self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)"),
+            self.tr(
+                "Tag des Monats, an dem dein DeepL-Nutzungszeitraum beginnt "
+                "(nur als Fallback genutzt, wenn der Live-Abgleich mit DeepL "
+                "nicht erreichbar ist - siehe DeepL-Kontoseite für das genaue "
+                "Datum). 0 = Fallback deaktivieren."
+            ),
+            current, 0, 28,
+        )
+        if ok:
+            _set_deepl_local_reset_day(day or None)
+            for i in range(self.tabs.count()):
+                w = self.tabs.widget(i)
+                if isinstance(w, ScheduleTab):
+                    w._refresh_deepl_quota_display()
 
     def _show_api_help(self) -> None:
         xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
@@ -1102,6 +1576,8 @@ class MainWindow(QMainWindow):
             self.settings_menu.setTitle(self.tr("Einstellungen"))
             if hasattr(self, "action_api_keys"):
                 self.action_api_keys.setText(self.tr("API-Keys verwalten…"))
+            if hasattr(self, "action_deepl_reset_day"):
+                self.action_deepl_reset_day.setText(self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)…"))
         if hasattr(self, "help_menu"):
             self.help_menu.setTitle(self.tr("Hilfe"))
             if hasattr(self, "action_api_help"):
@@ -1152,6 +1628,9 @@ class MainWindow(QMainWindow):
         self.action_api_keys = QAction(self.tr("API-Keys verwalten…"), self)
         self.action_api_keys.triggered.connect(self._on_manage_api_keys)
         self.settings_menu.addAction(self.action_api_keys)
+        self.action_deepl_reset_day = QAction(self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)…"), self)
+        self.action_deepl_reset_day.triggered.connect(self._on_set_deepl_reset_day)
+        self.settings_menu.addAction(self.action_deepl_reset_day)
         # Hilfe / Doku (ganz rechts)
         self.help_menu = menubar.addMenu(self.tr("Hilfe"))
         self.action_api_help = QAction(self.tr("Hinweis: Telegram API-Schlüssel"), self)
@@ -1171,7 +1650,7 @@ class MainWindow(QMainWindow):
 
 def _apply_theme(app: QApplication, theme: str) -> None:
     """Apply QSS theme based on name ('light' or 'dark'). Fallbacks gracefully."""
-    base = Path(__file__).parent
+    base = UI_DIR
     files = {
         "light": base / "theme_light.qss",
         "dark": base / "theme_dark.qss",

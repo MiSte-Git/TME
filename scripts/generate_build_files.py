@@ -198,30 +198,97 @@ def _run_update_desktop_database() -> None:
     subprocess.run([update_db, str(_desktop_applications_dir())], check=False)
 
 
-def generate_desktop_entry(repo_root: Path, entry: Path) -> str:
-    python_exec = _find_python_exec(repo_root)
-    icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+# Name[xx]=/Comment[xx]= für die 9 zusätzlich unterstützten UI-Sprachen
+# (siehe ui/translations/app_*.ts) - Desktop-Umgebungen (GNOME/KDE/...)
+# wählen anhand der aktuellen System-Locale automatisch die passende
+# Zeile, unabhängig von der in der App gewählten Sprache (dort separat
+# per QTranslator umgeschaltet, siehe ui/app.py::_apply_language). Ohne
+# passende Locale bleibt der unlokalisierte Name=/Comment= (Deutsch) der
+# Fallback. Name[xx] absichtlich übersetzt statt als Eigenname belassen -
+# "Telegram → ODT mit Emoji & Übersetzung" ist ein beschreibender Titel,
+# kein Markenname (übernimmt exakt die vorhandenen Übersetzungen des
+# Fenstertitels aus den .ts-Dateien).
+_DESKTOP_NAME_TRANSLATIONS = {
+    "en": "Telegram → ODT with emoji & translation",
+    "fr": "Telegram → ODT avec emoji et traduction",
+    "it": "Telegram → ODT con emoji e traduzione",
+    "ru": "Telegram → ODT с эмодзи и переводом",
+    "pl": "Telegram → ODT z emoji i tłumaczeniem",
+    "es": "Telegram → ODT con emoji y traducción",
+    "hr": "Telegram → ODT s emojijima i prijevodom",
+    "nl": "Telegram → ODT met emoji & vertaling",
+    "fi": "Telegram → ODT emojeilla ja käännöksellä",
+}
+_DESKTOP_COMMENT_TRANSLATIONS = {
+    "en": "Generate ODT from Telegram schedules, incl. emoji handling and translation",
+    "fr": "Génère un ODT à partir de plannings Telegram, y compris la gestion des emoji et la traduction",
+    "it": "Genera ODT dai programmi Telegram, inclusa la gestione degli emoji e la traduzione",
+    "ru": "Создание ODT из расписаний Telegram, включая обработку эмодзи и перевод",
+    "pl": "Generuje plik ODT na podstawie harmonogramów Telegram, w tym obsługę emoji i tłumaczenie",
+    "es": "Genera ODT a partir de programaciones de Telegram, incl. gestión de emoji y traducción",
+    "hr": "Generira ODT iz Telegram rasporeda, uključujući rukovanje emojijima i prijevod",
+    "nl": "Genereert ODT vanuit Telegram-schema's, incl. emoji-verwerking en vertaling",
+    "fi": "Luo ODT-tiedoston Telegram-aikatauluista, sis. emojien käsittelyn ja käännöksen",
+}
 
+
+def generate_desktop_entry(repo_root: Path, entry: Path, binary_path: Optional[Path] = None) -> str:
+    """Erzeugt den .desktop-Inhalt.
+
+    Standardmäßig zeigt Exec/TryExec auf den venv-Python-Interpreter plus
+    ui/app.py (Entwicklungs-Setup, Repo-Checkout bleibt Voraussetzung).
+
+    Ist binary_path gesetzt (siehe install_linux.sh), zeigt Exec/TryExec
+    stattdessen direkt auf das eigenständige PyInstaller-Binary - kein
+    Python/venv-Aufruf mehr nötig. Path= und Icon= verweisen dann auf das
+    Verzeichnis des Binaries statt auf den Repo-Root, damit der Eintrag auch
+    funktioniert, wenn das Repo-Checkout später nicht mehr vorhanden ist
+    (install_linux.sh kopiert Icon/config.yaml dafür mit an den Zielort).
+    """
+    if binary_path is not None:
+        exec_cmd = f'"{binary_path}"'
+        try_exec = str(binary_path)
+        work_dir = binary_path.parent
+        icon_path = binary_path.parent / "Telegram-Nachrichten Herunterladen.png"
+        try:
+            icon_exists = icon_path.exists()
+        except OSError:
+            icon_exists = False
+        if not icon_exists:
+            icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+    else:
+        python_exec = _find_python_exec(repo_root)
+        exec_cmd = f'{python_exec} "{entry}"'
+        try_exec = python_exec
+        work_dir = repo_root
+        icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+
+    name_lines = "\n".join(f"Name[{lang}]={text}" for lang, text in _DESKTOP_NAME_TRANSLATIONS.items())
+    comment_lines = "\n".join(f"Comment[{lang}]={text}" for lang, text in _DESKTOP_COMMENT_TRANSLATIONS.items())
     return f"""[Desktop Entry]
 Type=Application
 Version=1.0
 Name=Telegram → ODT mit Emoji & Übersetzung
+{name_lines}
 Comment=Erzeuge ODT aus Telegram-Schedules, inkl. Emoji-Handling und Übersetzung
-Exec={python_exec} "{entry}"
-Path={repo_root}
+{comment_lines}
+Exec={exec_cmd}
+Path={work_dir}
 Icon={icon_path}
 Terminal=false
 Categories=Office;Utility;
-TryExec={python_exec}
+TryExec={try_exec}
 """
 
 
-def install_desktop_entry(repo_root: Path, entry: Path, app_name: str) -> Path:
+def install_desktop_entry(
+    repo_root: Path, entry: Path, app_name: str, binary_path: Optional[Path] = None
+) -> Path:
     target_dir = _desktop_applications_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / _desktop_entry_filename(app_name)
 
-    content = generate_desktop_entry(repo_root, entry)
+    content = generate_desktop_entry(repo_root, entry, binary_path=binary_path)
     target_path.write_text(content, encoding="utf-8")
 
     _run_update_desktop_database()
@@ -248,6 +315,16 @@ def main() -> int:
         "--uninstall-desktop",
         action="store_true",
         help="Entfernt eine zuvor installierte .desktop-Datei und beendet, ohne Spec/Requirements zu generieren.",
+    )
+    ap.add_argument(
+        "--binary-path",
+        default=None,
+        help=(
+            "Pfad zu einem eigenständigen, bereits gebauten Binary (z. B. via "
+            "build_linux.sh + install_linux.sh). Wenn gesetzt, zeigt der "
+            ".desktop-Eintrag direkt auf dieses Binary statt auf einen "
+            "venv-Python-Aufruf von --entry."
+        ),
     )
     desktop_group = ap.add_mutually_exclusive_group()
     desktop_group.add_argument(
@@ -276,6 +353,25 @@ def main() -> int:
         dest="requirements",
         action="store_false",
         help="Überspringt die requirements.txt-Generierung (Standard).",
+    )
+    spec_group = ap.add_mutually_exclusive_group()
+    spec_group.add_argument(
+        "--with-spec",
+        dest="spec",
+        action="store_true",
+        default=None,
+        help=(
+            "Erzeugt/überschreibt <name>.spec (mit lokalen Absolut-Pfaden in "
+            "pathex/datas). Standard außerhalb von Linux; unter Linux Standard "
+            "übersprungen, da dort kein PyInstaller-Bundle genutzt wird (siehe "
+            "docs/DEPLOY.md)."
+        ),
+    )
+    spec_group.add_argument(
+        "--no-spec",
+        dest="spec",
+        action="store_false",
+        help="Überspringt die <name>.spec-Generierung, auch außerhalb von Linux.",
     )
     args = ap.parse_args()
 
@@ -311,16 +407,24 @@ def main() -> int:
     else:
         print(" - requirements.txt (übersprungen, siehe --with-requirements)")
 
-    spec = generate_spec(repo_root, entry, args.name)
-    (repo_root / f"{args.name}.spec").write_text(spec, encoding="utf-8")
-    print(f" - {args.name}.spec")
+    want_spec = args.spec
+    if want_spec is None:
+        want_spec = not sys.platform.startswith("linux")
+
+    if want_spec:
+        spec = generate_spec(repo_root, entry, args.name)
+        (repo_root / f"{args.name}.spec").write_text(spec, encoding="utf-8")
+        print(f" - {args.name}.spec")
+    else:
+        print(f" - {args.name}.spec (übersprungen, siehe --with-spec)")
 
     want_desktop = args.desktop_entry
     if want_desktop is None:
         want_desktop = sys.platform.startswith("linux")
 
     if want_desktop:
-        desktop_path = install_desktop_entry(repo_root, entry, args.name)
+        binary_path = Path(args.binary_path).resolve() if args.binary_path else None
+        desktop_path = install_desktop_entry(repo_root, entry, args.name, binary_path=binary_path)
         print(f" - {desktop_path} (installiert)")
 
     return 0

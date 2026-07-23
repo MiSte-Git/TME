@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Tuple
 import asyncio
 import json
 import os
@@ -15,6 +15,20 @@ import inspect
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+# QCoreApplication.translate() statt self.tr(): dieses Modul ist kein
+# QObject, braucht aber dieselbe Sprachumschaltung wie die UI (siehe
+# _notify weiter unten). translate() ist ein statisches Qt-Klassenmethode -
+# benötigt keine laufende QApplication/QCoreApplication-Instanz (liefert
+# dann einfach den unübersetzten Quelltext zurück, z.B. im reinen
+# CLI-Pfad über pipeline/adapters/existing_scripts.py) und funktioniert
+# automatisch, sobald irgendwo im Prozess (ui/app.py::_apply_language) ein
+# Translator auf die QCoreApplication installiert wurde. Kontext
+# "RunnerSchedule" muss als Literal übergeben werden (siehe .ts-Dateien) -
+# pyside6-lupdate erkennt nur direkte, wörtliche
+# QCoreApplication.translate("Context", "...")-Aufrufe, keine Indirektion
+# über eine Wrapper-Funktion oder Variablen.
+from PySide6.QtCore import QCoreApplication
 
 from credentials import get_telegram_credentials
 from telethon import TelegramClient, types
@@ -29,6 +43,7 @@ from .runs import EmojiRun, ImageRun, LineBreak, RecordPair, RunsRecord, TextRun
 from .message_collect import collect_messages_for_schedule
 from .message_store import MessageStore, channel_key_for_entity, render_records_from_store, render_record_pairs_from_store
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
+from .translation.deepl_quota import DeepLQuotaState, record_usage as _record_deepl_usage
 from .no_translate_words import load_no_translate_words_set
 from .message_filters import fetch_messages_for_section_day as _fetch_messages_for_section_day_robust
 from .logging_setup import get_logger
@@ -63,6 +78,24 @@ DEBUG_FETCH = False
 
 # Konfigurierbare Anzeige von Forward-Infos (siehe runner_by_ids._SHOW_FORWARD_INFO)
 _SHOW_FORWARD_INFO = True
+
+# Anzeigename je Übersetzungs-Provider (effective_translation_provider-Wert,
+# siehe run_schedule()) - für die ODT-Spaltenüberschrift ("Übersetzung (DE) –
+# DeepL") und den Ausgabe-Dateinamen (dort der kurze, dateinamensichere Tag
+# ohne Leerzeichen/Sonderzeichen). Eigennamen bleiben unübersetzt, daher keine
+# QCoreApplication.translate()-Anbindung nötig.
+_PROVIDER_DISPLAY_NAMES = {
+    "deepl": "DeepL",
+    "google": "Google",
+    "chatgpt": "ChatGPT (OpenAI)",
+    "telegram": "Telegram-nativ",
+}
+_PROVIDER_FILENAME_TAGS = {
+    "deepl": "DeepL",
+    "google": "Google",
+    "chatgpt": "ChatGPT",
+    "telegram": "Telegram",
+}
 
 
 def _get_display_author(msg, show_forward_info: bool) -> tuple[str | None, datetime | None]:
@@ -221,6 +254,41 @@ def _format_heading(date_iso: str, title: str) -> str:
     return f"{date_iso}  -  {title}".strip()
 
 
+def _duplicate_images_into_translation_record(
+    original_runs: List[Any],
+    translation_record: Optional["RunsRecord"],
+    chat: str,
+    message_id: int,
+) -> Optional["RunsRecord"]:
+    """side_by_side-Layout: Vollständige Nachrichtenbilder (ImageRun, aus
+    msg.media - siehe include_images weiter unten) landen bisher nirgends in
+    der Übersetzungsseite. Anders als Inline-Custom-Emojis (EmojiRun
+    überlebt den Masken-/Übersetzungs-Rundlauf in translate_runs()/
+    unmask_to_runs() von selbst, weil er Teil des maskierten Nachrichten-
+    texts ist) ist ein ImageRun nie Teil des übersetzten Texts - weder
+    translate_runs() noch der Telegram-native Pfad (_fetch_translation)
+    sehen ihn je zu Gesicht. Ohne diese explizite Kopie fehlt das Bild in
+    der Übersetzungsspalte komplett, unabhängig von Bildgröße/Style (nicht
+    nur bei G.InlineEmoji-großen Bildern gefiltert).
+
+    Bildposition: vorne in die Übersetzungs-Runs eingefügt, wie im Original
+    (dort steht das Bild ebenfalls vor dem Nachrichtentext, siehe
+    runs_list-Aufbau in run_schedule()).
+
+    translation_record ist None, wenn die Nachricht keinen Text/Caption
+    hatte (dann wird kein translate()-Aufruf ausgelöst) - in dem Fall wird
+    hier trotzdem ein Record nur mit dem duplizierten Bild angelegt, sonst
+    zeigt die Übersetzungsspalte statt des Bildes nur den
+    "Keine Übersetzung verfügbar"-Platzhalter."""
+    images = [r for r in original_runs if isinstance(r, ImageRun)]
+    if not images:
+        return translation_record
+    if translation_record is not None:
+        translation_record.runs = list(images) + list(translation_record.runs)
+        return translation_record
+    return RunsRecord(chat=chat, message_id=message_id, runs=list(images), meta=None)
+
+
 def _build_message_link(entity: Any, message: Any, original_link: Optional[str] = None, topic_id: Optional[int] = None) -> Optional[str]:
     if original_link:
         return original_link
@@ -284,10 +352,114 @@ class ScheduleRunResult:
     docx_path: Path | None = None
     docx_translation_path: Path | None = None
     docx_error: str | None = None
+    # Für Log-/Konsolenausgabe (siehe _notify) - bewusst nicht übersetzt.
     translation_cost_summary: List[str] | None = None
+    # Rohdaten (provider, calls, char_count, input_tokens, output_tokens,
+    # estimated_cost_usd) je Provider - für die UI-seitige, über Qt-i18n
+    # übersetzbare Anzeige (siehe ui/app.py::_on_worker_finished).
+    translation_cost_totals: List[Tuple[str, int, int, int, int, float]] | None = None
+    # Nur gesetzt, wenn effective_translation_provider == "deepl" war (siehe
+    # pipeline/translation/deepl_quota.py) - Freikontingent-Stand NACH
+    # diesem Lauf, für die UI-Anzeige (ui/app.py::_on_worker_finished).
+    deepl_quota_state: "DeepLQuotaState | None" = None
 
     def __str__(self) -> str:  # pragma: no cover - convenience
         return str(self.odt_path)
+
+
+@dataclass
+class CharEstimateResult:
+    """Rückgabe von estimate_translatable_chars() - reine Vorschau-Zahlen,
+    keine Übersetzung, keine Kosten."""
+    message_count: int
+    char_count: int
+
+
+async def estimate_translatable_chars(
+    schedule_path: Path,
+    *,
+    chronological_merge: Optional[bool] = None,
+    incremental_mode: Optional[bool] = None,
+    local_tz_override: Optional[str] = None,
+    config_path: Path = Path("config.yaml"),
+    cancel_event: Optional[Any] = None,
+) -> CharEstimateResult:
+    """Zeichen-Vorschau VOR einem echten Lauf (siehe ui/app.py, "Vorschau:
+    ~X Zeichen zu übersetzen").
+
+    Wichtig: die Schedule-JSON selbst enthält NUR Metadaten (Datum, Kanal,
+    Zeitfenster) - der eigentliche Nachrichtentext existiert erst zur
+    Laufzeit bei Telegram. Eine wirklich netzwerkfreie Zeichenzählung ist
+    daher technisch nicht möglich; diese Funktion verbindet sich kurz mit
+    Telegram und sammelt die Nachrichten genauso wie ein echter Lauf
+    (collect_messages_for_schedule) - aber OHNE zu übersetzen, ohne ODT/DOCX
+    zu schreiben und ohne Lettermap-Verarbeitung. Kostet daher keine
+    Übersetzungs-API-Gebühren (nur einen kostenlosen Telegram-API-Zugriff).
+
+    Berücksichtigt denselben min_id_by_fingerprint-Filter wie ein echter
+    Lauf im Store-/Incremental-Modus (bereits im Store bekannte Nachrichten
+    werden dabei server-seitig gar nicht erst zurückgeliefert) - die
+    Vorschau spiegelt damit exakt die Zeichenzahl wider, die ein
+    tatsächlicher Lauf mit denselben Optionen neu übersetzen würde.
+
+    Zeichenzählung: len(msg.message) je gesammelter Nachricht (roher
+    Klartext ohne Entity-/Tag-Overhead) - eine Annäherung an die tatsächlich
+    an den Übersetzungs-Provider gesendete Zeichenzahl (die u.a. noch
+    <ce id="N"/>-Platzhalter für Custom-Emojis enthält, siehe formatting.py),
+    für eine Vorschau ausreichend genau.
+    """
+    _apply_config_overrides(config_path)
+    cfg = _load_config(config_path)
+
+    eff_chronological_merge = (
+        chronological_merge if isinstance(chronological_merge, bool)
+        else bool(cfg.get("interleave_channels", False)) if isinstance(cfg, dict) else False
+    )
+    eff_incremental_mode = (
+        incremental_mode if isinstance(incremental_mode, bool)
+        else bool(cfg.get("incremental_mode", False)) if isinstance(cfg, dict) else False
+    )
+    local_tz = local_tz_override or (cfg.get("local_tz") if isinstance(cfg, dict) else None) or DEFAULT_LOCAL_TZ
+
+    api_id, api_hash, phone = get_telegram_credentials()
+
+    if schedule_path.suffix.lower() != ".json":
+        raise RuntimeError("Nur JSON-Schedule-Dateien werden unterstützt. Bitte die Schedule zuerst nach JSON konvertieren.")
+    schedule = load_schedule_document(schedule_path)
+    schedule.default_channel = _normalize_default_channel(schedule.default_channel)
+
+    store: Optional[MessageStore] = None
+    if eff_incremental_mode:
+        store = MessageStore.load(schedule_path.stem)
+
+    client = TelegramClient(
+        "tg_session",
+        api_id,
+        api_hash,
+        request_retries=_rbi._CLIENT_REQUEST_RETRIES,
+        timeout=_rbi._CLIENT_TIMEOUT,
+        auto_reconnect=_rbi._CLIENT_AUTO_RECONNECT,
+    )
+    await client.connect()
+    try:
+        if not await client.is_user_authorized():
+            raise TelegramSessionInvalid(
+                "Telegram-Session ungültig oder abgelaufen. "
+                "Bitte über scripts/telegram_login.py neu einloggen."
+            )
+        collected, _used_doc_ids, _resume_hints, _section_stats = await collect_messages_for_schedule(
+            client, schedule, local_tz, chronological_merge=eff_chronological_merge,
+            min_id_by_fingerprint=(store.min_ids_by_fingerprint() if store is not None else None),
+            cancel_event=cancel_event,
+        )
+    finally:
+        await client.disconnect()
+
+    total_chars = 0
+    for item in collected:
+        text = getattr(item.message, "message", None) or ""
+        total_chars += len(text)
+    return CharEstimateResult(message_count=len(collected), char_count=total_chars)
 
 
 async def run_schedule(
@@ -324,7 +496,7 @@ async def run_schedule(
     def _check_cancelled() -> None:
         if cancel_event is not None and cancel_event.is_set():
             logger.warning("Schedule-Lauf abgebrochen (Cancel-Event gesetzt).")
-            _notify("Lauf wurde abgebrochen.")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Lauf wurde abgebrochen."))
             raise ScheduleCancelled("Lauf wurde vom Nutzer abgebrochen.")
 
     _apply_config_overrides(config_path)
@@ -378,8 +550,11 @@ async def run_schedule(
             translation_provider_obj = get_provider(effective_translation_provider, translation_cfg)
         except TranslationError as exc:
             _notify(
-                f"Warnung: Übersetzungs-Provider '{effective_translation_provider}' nicht verfügbar "
-                f"({exc}). Übersetzung wird für diesen Lauf übersprungen."
+                QCoreApplication.translate(
+                    "RunnerSchedule",
+                    "Warnung: Übersetzungs-Provider '{provider}' nicht verfügbar "
+                    "({exc}). Übersetzung wird für diesen Lauf übersprungen.",
+                ).format(provider=effective_translation_provider, exc=exc)
             )
             translate = False
 
@@ -391,10 +566,11 @@ async def run_schedule(
     want_side_by_side = effective_layout == "side_by_side" and translate
 
     # Ausnahmeliste für Emoji-Wörter, die NICHT übersetzt werden sollen (siehe
-    # pipeline/emoji_words.py, data/no_translate_words.json). Nur relevant für
-    # externe Provider (deepl/google/chatgpt) - der Telegram-Pfad übersetzt
-    # ohnehin TextWithEntities nativ und läuft nicht über translate_runs().
-    no_translate_words = load_no_translate_words_set() if effective_translation_provider != "telegram" else set()
+    # pipeline/emoji_words.py, data/no_translate_words.json). Wird sowohl von
+    # translate_runs() (externe Provider) als auch von _fetch_translation()
+    # (Telegram-nativer Pfad, siehe expand_translatable_emoji_words_twe())
+    # genutzt - für alle Provider laden.
+    no_translate_words = load_no_translate_words_set()
 
     # Inkrementelles Dokument-Update (Store-Modus): expliziter Parameter hat
     # Vorrang; ohne expliziten Wert greift config.yaml (incremental_mode,
@@ -410,12 +586,12 @@ async def run_schedule(
         store = MessageStore.load(schedule_path.stem)
         for w in store.load_warnings:
             logger.warning("Message-Store (%s): %s", schedule_path.stem, w)
-            _notify(f"Warnung (Message-Store): {w}")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Warnung (Message-Store): {w}").format(w=w))
         logger.info(
             "Message-Store geladen (%s): %d bereits bekannte Nachricht(en), %d Warnung(en).",
             schedule_path.stem, len(store), len(store.load_warnings),
         )
-        _notify(f"Store-Modus aktiv: {len(store)} bereits bekannte Nachricht(en) im Store ({schedule_path.stem}).")
+        _notify(QCoreApplication.translate("RunnerSchedule", "Store-Modus aktiv: {n} bereits bekannte Nachricht(en) im Store ({name}).").format(n=len(store), name=schedule_path.stem))
 
     # Determine language codes for filenames
     cfg_source = str((cfg.get("source_lang") if isinstance(cfg, dict) else "") or (cfg.get("base_lang") if isinstance(cfg, dict) else "") or "").strip()
@@ -432,10 +608,10 @@ async def run_schedule(
             "Umgebungsvariablen setzen."
         )
         logger.error(error_msg)
-        _notify(f"Fehler: {error_msg}")
+        _notify(QCoreApplication.translate("RunnerSchedule", "Fehler: {msg}").format(msg=error_msg))
         raise TelegramCredentialsMissing(error_msg) from exc
 
-    _notify("Schedule wird geladen…")
+    _notify(QCoreApplication.translate("RunnerSchedule", "Schedule wird geladen…"))
     if schedule_path.suffix.lower() != ".json":
         raise RuntimeError("Nur JSON-Schedule-Dateien werden unterstützt. Bitte die Schedule zuerst nach JSON konvertieren.")
     schedule = load_schedule_document(schedule_path)
@@ -559,7 +735,7 @@ async def run_schedule(
             "Bitte über scripts/telegram_login.py neu einloggen."
         )
         logger.error(error_msg)
-        _notify(f"Fehler: {error_msg}")
+        _notify(QCoreApplication.translate("RunnerSchedule", "Fehler: {msg}").format(msg=error_msg))
         await client.disconnect()
         raise TelegramSessionInvalid(error_msg)
 
@@ -583,7 +759,7 @@ async def run_schedule(
                 pass
 
         _check_cancelled()
-        _notify("Nachrichten werden gesammelt…")
+        _notify(QCoreApplication.translate("RunnerSchedule", "Nachrichten werden gesammelt…"))
         collected, used_doc_ids, resume_hints, section_stats = await collect_messages_for_schedule(
             client, schedule, local_tz, chronological_merge=effective_chronological_merge,
             min_id_by_fingerprint=(store.min_ids_by_fingerprint() if store is not None else None),
@@ -601,9 +777,12 @@ async def run_schedule(
                 msg_id = hint.get("last_ok_id")
                 msg_dt = hint.get("last_ok_date")
                 _notify(
-                    f"WARN: Teil-Export für Section '{rh.get('section', '?')}' "
-                    f"stoppt bei msg_id={msg_id}, date={msg_dt}; "
-                    f"Resume-Hinweis: {hint} (Fehler: {err})"
+                    QCoreApplication.translate(
+                        "RunnerSchedule",
+                        "WARN: Teil-Export für Section '{section}' "
+                        "stoppt bei msg_id={msg_id}, date={msg_dt}; "
+                        "Resume-Hinweis: {hint} (Fehler: {err})",
+                    ).format(section=rh.get('section', '?'), msg_id=msg_id, msg_dt=msg_dt, hint=hint, err=err)
                 )
 
         out_dir = output_dir
@@ -621,6 +800,14 @@ async def run_schedule(
             code_suffix = f"_{source_up}"
         else:
             code_suffix = f"_{source_up}-{lang_up}" if translate else f"_{source_up}"
+            # Provider-Tag nur bei normalen (zeitgestempelten) Läufen anhängen,
+            # NICHT im Store-/Incremental-Modus (ts_part=="") - dort ist der
+            # Dateiname bewusst stabil über mehrere Läufe hinweg (dieselbe
+            # Datei wird fortgeschrieben statt neu erzeugt); ein Provider-Tag
+            # würde bei einem Providerwechsel zwischen zwei Incremental-Läufen
+            # eine neue Datei erzeugen und die alte als Karteileiche zurücklassen.
+            if translate and ts_part:
+                code_suffix += f"_{_PROVIDER_FILENAME_TAGS.get(effective_translation_provider, effective_translation_provider)}"
         out_path = out_dir / f"{out_basename}{ts_part}{code_suffix}.odt"
 
         safe_img_dir = Path("media/odt_safe"); safe_img_dir.mkdir(parents=True, exist_ok=True)
@@ -697,12 +884,25 @@ async def run_schedule(
                     missing_letters.add(orig_ch)
             return out_runs
 
-        def _apply_lettermap_to_textrun(tr: TextRun) -> List[TextRun | EmojiRun | LineBreak]:
+        def _apply_lettermap_to_textrun(tr: TextRun, allow_full_scope: bool = True) -> List[TextRun | EmojiRun | LineBreak]:
+            """allow_full_scope=False begrenzt lettermap_scope="all" auf das
+            sichere "emoji-only"-Verhalten (nur echte, positionsfest per Regex
+            erkennbare Keycap-Emoji-Sequenzen). Wichtig für bereits übersetzten
+            Text (siehe Aufrufer bei der Übersetzung): die volle "all"-Zuordnung
+            arbeitet zeichenweise und positionsunabhängig über letter_to_doc -
+            auf frisch übersetztem Klartext würde das einzelne Buchstaben, die
+            zufällig mit einem gemappten Buchstaben übereinstimmen, fälschlich
+            wieder in (semantisch sinnlose) Buchstaben-Emojis zurückkodieren,
+            unabhängig davon ob sie aus dem ursprünglichen Emoji-Wort stammen.
+            Für unübersetzten Originaltext bleibt "all" unverändert voll aktiv."""
             if not letter_to_doc or not lm_for_group:
                 return [tr]
-            if _rbi._LM_SCOPE == "all":
+            effective_scope = _rbi._LM_SCOPE
+            if effective_scope == "all" and not allow_full_scope:
+                effective_scope = "emoji-only"
+            if effective_scope == "all":
                 return _map_textrun_to_letter_runs(tr)
-            if _rbi._LM_SCOPE == "emoji-only":
+            if effective_scope == "emoji-only":
                 pattern = re.compile(r"([0-9])\uFE0F\u20E3")
                 pos = 0
                 txt = tr.text or ""
@@ -786,20 +986,20 @@ async def run_schedule(
         if missing_docs:
             rep_path = Path("data/missing_lettermap_docs.json"); rep_path.parent.mkdir(parents=True, exist_ok=True)
             rep_path.write_text(json.dumps({"missing_doc_ids": missing_docs}, ensure_ascii=False, indent=2), encoding="utf-8")
-            _notify(f"Hinweis: {len(missing_docs)} ungemappte Letter-Emojis (doc_id) → {rep_path}")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Hinweis: {n} ungemappte Letter-Emojis (doc_id) → {path}").format(n=len(missing_docs), path=rep_path))
             if wait_for_mapping_cb:
                 while True:
-                    _notify("Bitte Lettermap ergänzen und im UI auf 'Fortsetzen' klicken…")
+                    _notify(QCoreApplication.translate("RunnerSchedule", "Bitte Lettermap ergänzen und im UI auf 'Fortsetzen' klicken…"))
                     wait_for_mapping_cb()
                     letter_to_doc, mapped_doc_ids = _load_letter_map_data()
                     inv_map = _invert_letter(letter_to_doc)
                     ignored = _load_ignore_list()
                     missing_docs = sorted([d for d in used_doc_ids if (d not in inv_map and d not in ignored)])
                     if not missing_docs:
-                        _notify("Alle erforderlichen Lettermap-Zuordnungen vorhanden. Fahre fort…")
+                        _notify(QCoreApplication.translate("RunnerSchedule", "Alle erforderlichen Lettermap-Zuordnungen vorhanden. Fahre fort…"))
                         break
                     rep_path.write_text(json.dumps({"missing_doc_ids": missing_docs}, ensure_ascii=False, indent=2), encoding="utf-8")
-                    _notify(f"Es fehlen weiterhin {len(missing_docs)} doc_id-Zuordnungen. Bitte erneut anpassen und fortsetzen.")
+                    _notify(QCoreApplication.translate("RunnerSchedule", "Es fehlen weiterhin {n} doc_id-Zuordnungen. Bitte erneut anpassen und fortsetzen.").format(n=len(missing_docs)))
                 all_mapped = set(mapped_doc_ids)
 
         try:
@@ -808,7 +1008,7 @@ async def run_schedule(
                 missing_png_tracker.update(str(d) for d in missing_pngs)
                 rep_png = Path("data/missing_pngs.json"); rep_png.parent.mkdir(parents=True, exist_ok=True)
                 rep_png.write_text(json.dumps({"missing_pngs": sorted({str(d) for d in missing_pngs})}, ensure_ascii=False, indent=2), encoding="utf-8")
-                _notify(f"Hinweis: {len(missing_pngs)} PNGs fehlen → {rep_png}")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Hinweis: {n} PNGs fehlen → {path}").format(n=len(missing_pngs), path=rep_png))
         except Exception:
             pass
         initial_missing_pngs = set(missing_png_tracker)
@@ -844,7 +1044,7 @@ async def run_schedule(
             return sys.platform.startswith("win") or sys.platform == "darwin"
 
         if _rbi._LM_CONTINUE_WITHOUT_MAPPING:
-            _notify("Konfiguration erlaubt: weiter ohne Mapping. Nicht gemappte Buchstaben bleiben als Text.")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Konfiguration erlaubt: weiter ohne Mapping. Nicht gemappte Buchstaben bleiben als Text."))
         elif _rbi._LM_OPEN_UI_ON_MISSING and _can_open_ui() and not skip_lettermap_ui:
             import subprocess, sys
             try:
@@ -852,7 +1052,7 @@ async def run_schedule(
             except Exception:
                 proc = None
             if proc is not None:
-                _notify("Lettermap-UI geöffnet. Bitte Mapping ergänzen und Fenster schließen…")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Lettermap-UI geöffnet. Bitte Mapping ergänzen und Fenster schließen…"))
                 while proc.poll() is None:
                     try:
                         letter_map_path = Path("data/letter_map.json")
@@ -876,14 +1076,14 @@ async def run_schedule(
                     except Exception:
                         pass
                     if proc.poll() is not None:
-                        _notify("Hinweis: UI wurde geschlossen, es fehlen noch Zuordnungen. Fahre ohne Unterbruch fort.")
+                        _notify(QCoreApplication.translate("RunnerSchedule", "Hinweis: UI wurde geschlossen, es fehlen noch Zuordnungen. Fahre ohne Unterbruch fort."))
                         break
                     await asyncio.sleep(1.0)
-                _notify("Fahre fort…")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Fahre fort…"))
         elif skip_lettermap_ui and missing_docs:
-            _notify("Lettermap-UI bereits geöffnet – bitte im Lettermap-Tab fehlende Zuordnungen ergänzen und danach erneut ausführen, falls nötig.")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Lettermap-UI bereits geöffnet – bitte im Lettermap-Tab fehlende Zuordnungen ergänzen und danach erneut ausführen, falls nötig."))
         else:
-            _notify("Hinweis: Interaktives Mapping ist nicht verfügbar. Nicht gemappte Buchstaben bleiben als Text.")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Hinweis: Interaktives Mapping ist nicht verfügbar. Nicht gemappte Buchstaben bleiben als Text."))
 
         records: List[RunsRecord] = []
         translations_acc: List[RunsRecord] = []
@@ -1068,7 +1268,8 @@ async def run_schedule(
                         audio_path = Path(str(audio_path_str))
                         try:
                             stt_text = transcribe_voice(audio_path, language=(target_lang or "de"))
-                        except SpeechToTextError:
+                        except SpeechToTextError as exc:
+                            logger.warning("STT: Transkription für %s übersprungen: %s", audio_path, exc)
                             stt_text = None
                         if stt_text:
                             runs_list.append(LineBreak(kind="LineBreak"))
@@ -1149,8 +1350,11 @@ async def run_schedule(
                     if missing_after:
                         missing_png_tracker.update(missing_after)
                         _notify(
-                            f"Hinweis: {len(missing_after)} Emoji-PNGs fehlen weiterhin nach Generierung für Nachricht {msg.id}:"
-                            f" {', '.join(sorted(missing_after))}"
+                            QCoreApplication.translate(
+                                "RunnerSchedule",
+                                "Hinweis: {n} Emoji-PNGs fehlen weiterhin nach Generierung für Nachricht {msg_id}:"
+                                " {ids}",
+                            ).format(n=len(missing_after), msg_id=msg.id, ids=', '.join(sorted(missing_after)))
                         )
                 runs = build_runs_from_twe(twe)
                 ce_map = get_custom_emoji_cache()
@@ -1209,7 +1413,10 @@ async def run_schedule(
                         twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                         runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] | None = None
                         if effective_translation_provider == "telegram":
-                            tr = await _fetch_translation(client, item.entity, msg.id, twe, target_lang)
+                            tr = await _fetch_translation(
+                                client, item.entity, msg.id, twe, target_lang,
+                                doc_to_letters=inv_map, no_translate_words=no_translate_words,
+                            )
                             if tr is not None:
                                 tr_non_null = tr
                                 await _with_retries("load_custom_emoji_alts", lambda: load_custom_emoji_alts(client, tr_non_null))
@@ -1223,7 +1430,7 @@ async def run_schedule(
                             )
                             cost_tracker.add(tr_result)
                             for w in tr_result.warnings:
-                                _notify(f"Warnung (Übersetzung, {effective_translation_provider}): {w}")
+                                _notify(QCoreApplication.translate("RunnerSchedule", "Warnung (Übersetzung, {provider}): {w}").format(provider=effective_translation_provider, w=w))
                             runs_tr = translated_runs
                         if runs_tr is not None:
                             ce_map = get_custom_emoji_cache()
@@ -1237,7 +1444,11 @@ async def run_schedule(
                                         alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
                                         new_runs_tr.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
                                 elif isinstance(rr, TextRun):
-                                    mapped = _apply_lettermap_to_textrun(rr)
+                                    # allow_full_scope=False: rr stammt aus der
+                                    # Übersetzung (Telegram-nativ oder
+                                    # translate_runs()) - siehe Docstring von
+                                    # _apply_lettermap_to_textrun.
+                                    mapped = _apply_lettermap_to_textrun(rr, allow_full_scope=False)
                                     new_runs_tr.extend(mapped)
                                 else:
                                     new_runs_tr.append(rr)
@@ -1268,14 +1479,19 @@ async def run_schedule(
                             "Übersetzung (%s) für Nachricht %s fehlgeschlagen: %s",
                             effective_translation_provider, msg.id, exc,
                         )
-                        _notify(f"Warnung: Übersetzung ({effective_translation_provider}) für Nachricht {msg.id} fehlgeschlagen: {exc}")
+                        _notify(QCoreApplication.translate("RunnerSchedule", "Warnung: Übersetzung ({provider}) für Nachricht {msg_id} fehlgeschlagen: {exc}").format(provider=effective_translation_provider, msg_id=msg.id, exc=exc))
                     except Exception as exc:
                         logger.error(
                             "Unerwarteter Fehler bei Übersetzung (%s) für Nachricht %s: %s",
                             effective_translation_provider, msg.id, exc,
                             exc_info=True,
                         )
-                        _notify(f"Unerwarteter Fehler bei Übersetzung ({effective_translation_provider}) für Nachricht {msg.id}: {exc}")
+                        _notify(QCoreApplication.translate("RunnerSchedule", "Unerwarteter Fehler bei Übersetzung ({provider}) für Nachricht {msg_id}: {exc}").format(provider=effective_translation_provider, msg_id=msg.id, exc=exc))
+
+                if want_side_by_side:
+                    translation_record_for_store = _duplicate_images_into_translation_record(
+                        runs_list, translation_record_for_store, f"{chat_label} - {lang_up}", msg.id,
+                    )
 
                 if store is not None:
                     store.add_message(channel_key, msg.id, getattr(msg, "date", None), original_record, translation_record_for_store)
@@ -1294,13 +1510,13 @@ async def run_schedule(
             records.extend(pending_inline_translations)
 
         if store is not None:
-            _notify(f"Store-Modus: {skipped_via_store} bereits bekannte Nachricht(en) übersprungen, {len(collected) - skipped_via_store} neu verarbeitet.")
+            _notify(QCoreApplication.translate("RunnerSchedule", "Store-Modus: {skipped} bereits bekannte Nachricht(en) übersprungen, {processed} neu verarbeitet.").format(skipped=skipped_via_store, processed=len(collected) - skipped_via_store))
             for fp, stats in section_stats.items():
                 store.update_section_state(fp, stats["channel_key"], stats["last_message_id"], stats["last_message_date"])
             try:
                 store.save()
             except Exception as exc:
-                _notify(f"Warnung: Message-Store konnte nicht gespeichert werden ({exc}); bereits verarbeitete neue Nachrichten werden beim nächsten Lauf erneut geholt.")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Warnung: Message-Store konnte nicht gespeichert werden ({exc}); bereits verarbeitete neue Nachrichten werden beim nächsten Lauf erneut geholt.").format(exc=exc))
 
 
         if missing_png_tracker:
@@ -1308,7 +1524,7 @@ async def run_schedule(
             final_sorted = sorted(missing_png_tracker)
             rep_png.write_text(json.dumps({"missing_pngs": final_sorted}, ensure_ascii=False, indent=2), encoding="utf-8")
             if missing_png_tracker != initial_missing_pngs:
-                _notify(f"Hinweis: {len(final_sorted)} Emoji-PNGs fehlen weiterhin → {rep_png}")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Hinweis: {n} Emoji-PNGs fehlen weiterhin → {path}").format(n=len(final_sorted), path=rep_png))
 
         if store is not None:
             # Komplettes Dokument aus dem sortierten Store neu rendern statt
@@ -1341,8 +1557,11 @@ async def run_schedule(
                 "record_pairs" if want_side_by_side else "Records", out_path,
             )
             _notify(
-                "Achtung: Für diesen Lauf wurden 0 Nachrichten gefunden - Kanal, Zeitfenster oder "
-                f"Telegram-Session prüfen. Es wird trotzdem ein (leeres) ODT geschrieben ('{out_path}')."
+                QCoreApplication.translate(
+                    "RunnerSchedule",
+                    "Achtung: Für diesen Lauf wurden 0 Nachrichten gefunden - Kanal, Zeitfenster oder "
+                    "Telegram-Session prüfen. Es wird trotzdem ein (leeres) ODT geschrieben ('{path}').",
+                ).format(path=out_path)
             )
         else:
             logger.info(
@@ -1350,11 +1569,13 @@ async def run_schedule(
                 final_count, "record_pairs" if want_side_by_side else "Records", out_path,
             )
 
-        _notify("ODT wird geschrieben…")
+        _notify(QCoreApplication.translate("RunnerSchedule", "ODT wird geschrieben…"))
         if want_side_by_side:
+            provider_display = _PROVIDER_DISPLAY_NAMES.get(effective_translation_provider, effective_translation_provider)
             write_odt_for_record_pairs(
                 record_pairs, out_path, styles, doc_title=doc_title_base,
-                original_label=f"Original ({source_up})", translation_label=f"Übersetzung ({lang_up})",
+                original_label=f"Original ({source_up})",
+                translation_label=f"Übersetzung ({lang_up}) – {provider_display}",
             )
         else:
             write_odt_for_records(records, out_path, styles, doc_title=doc_title_base)
@@ -1366,8 +1587,11 @@ async def run_schedule(
             if resume_hints:
                 stop_id = (resume_hints[0].get("hint", {}) or {}).get("last_ok_id")
                 tr_title = f"{tr_title} (Teil-Export, Stop bei msg_id {stop_id})"
-            extra_path = out_dir / f"{out_basename}{ts_part}_{lang_up}.odt"
-            _notify("Übersetzungs-ODT wird geschrieben…")
+            extra_suffix = f"_{lang_up}"
+            if ts_part:
+                extra_suffix += f"_{_PROVIDER_FILENAME_TAGS.get(effective_translation_provider, effective_translation_provider)}"
+            extra_path = out_dir / f"{out_basename}{ts_part}{extra_suffix}.odt"
+            _notify(QCoreApplication.translate("RunnerSchedule", "Übersetzungs-ODT wird geschrieben…"))
             write_odt_for_records(translations_acc, extra_path, styles, doc_title=tr_title)
             logger.info("Übersetzungs-ODT geschrieben: %s (%d Eintrag/Einträge).", extra_path, len(translations_acc))
 
@@ -1376,7 +1600,7 @@ async def run_schedule(
                 rep_path = Path("data/missing_lettermap.json")
                 rep_path.parent.mkdir(parents=True, exist_ok=True)
                 rep_path.write_text(json.dumps({"missing": sorted(missing_letters)}, ensure_ascii=False, indent=2), encoding="utf-8")
-                _notify(f"Hinweis: {len(missing_letters)} nicht zugeordnete Zeichen → {rep_path}")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Hinweis: {n} nicht zugeordnete Zeichen → {path}").format(n=len(missing_letters), path=rep_path))
         except Exception:
             pass
 
@@ -1384,7 +1608,7 @@ async def run_schedule(
         docx_translation_path: Optional[Path] = None
         docx_errors: List[str] = []
         if want_docx:
-            _notify("DOCX wird erzeugt…")
+            _notify(QCoreApplication.translate("RunnerSchedule", "DOCX wird erzeugt…"))
             prefer_raw = _rbi._DOCX_OPTIONS.get("converter")
             prefer = str(prefer_raw) if isinstance(prefer_raw, str) and prefer_raw.strip() else None
             out_dir_cfg = _rbi._DOCX_OPTIONS.get("out_dir")
@@ -1396,15 +1620,15 @@ async def run_schedule(
                 # ODT bleibt in jedem Fall erhalten; Fehler brechen den Lauf nicht ab.
                 try:
                     docx_file = convert_odt_to_docx(odt_file, outdir=docx_outdir, prefer=prefer, reference_docx=ref_doc)
-                    _notify(f"{label}-DOCX erzeugt: {docx_file}")
+                    _notify(QCoreApplication.translate("RunnerSchedule", "{label}-DOCX erzeugt: {path}").format(label=label, path=docx_file))
                     return docx_file, None
                 except (DocxConversionError, FileNotFoundError) as exc:
                     err = str(exc)
-                    _notify(f"Warnung: {label}-DOCX-Konvertierung fehlgeschlagen: {err}")
+                    _notify(QCoreApplication.translate("RunnerSchedule", "Warnung: {label}-DOCX-Konvertierung fehlgeschlagen: {err}").format(label=label, err=err))
                     return None, err
                 except Exception as exc:
                     err = f"Unerwarteter Fehler: {exc}"
-                    _notify(f"Warnung: {label}-DOCX-Konvertierung fehlgeschlagen: {err}")
+                    _notify(QCoreApplication.translate("RunnerSchedule", "Warnung: {label}-DOCX-Konvertierung fehlgeschlagen: {err}").format(label=label, err=err))
                     return None, err
 
             docx_path, err_main = _convert_to_docx_safe(out_path, "Original")
@@ -1416,11 +1640,38 @@ async def run_schedule(
                     docx_errors.append(err_extra)
 
         cost_summary_lines = cost_tracker.summary_lines() if cost_tracker.has_data() else None
+        cost_totals = cost_tracker.provider_totals() if cost_tracker.has_data() else None
         if cost_summary_lines:
             for line in cost_summary_lines:
-                _notify(f"Übersetzungskosten: {line}")
+                _notify(QCoreApplication.translate("RunnerSchedule", "Übersetzungskosten: {line}").format(line=line))
 
-        _notify("Fertig.")
+        # DeepL-Freikontingent-Tracking (siehe pipeline/translation/deepl_quota.py):
+        # EINMAL pro Lauf, nicht pro Nachricht (get_usage() ist ein eigener
+        # GET-Aufruf) - andere Provider haben andere/keine Freikontingente,
+        # daher nur für "deepl" relevant.
+        deepl_quota_state: Optional[DeepLQuotaState] = None
+        if effective_translation_provider == "deepl" and translation_provider_obj is not None and cost_totals:
+            deepl_chars_this_run = next((c for p, _calls, c, *_ in cost_totals if p == "deepl"), 0)
+            live_usage = None
+            try:
+                live_usage = await translation_provider_obj.get_usage()
+            except Exception as exc:
+                logger.warning(
+                    "DeepL-Kontingent-Live-Check fehlgeschlagen (nutze lokalen Fallback-Zähler): %s", exc,
+                )
+            deepl_quota_state = _record_deepl_usage(deepl_chars_this_run, live_usage)
+            _notify(
+                QCoreApplication.translate(
+                    "RunnerSchedule",
+                    "DeepL-Freikontingent diesen Zeitraum: ~{used} von {limit} Zeichen verbraucht ({remaining} übrig).",
+                ).format(
+                    used=deepl_quota_state.character_count,
+                    limit=deepl_quota_state.character_limit,
+                    remaining=deepl_quota_state.remaining,
+                )
+            )
+
+        _notify(QCoreApplication.translate("RunnerSchedule", "Fertig."))
         return ScheduleRunResult(
             odt_path=out_path,
             odt_translation_path=extra_path,
@@ -1428,6 +1679,8 @@ async def run_schedule(
             docx_translation_path=docx_translation_path,
             docx_error="; ".join(docx_errors) if docx_errors else None,
             translation_cost_summary=cost_summary_lines,
+            translation_cost_totals=cost_totals,
+            deepl_quota_state=deepl_quota_state,
         )
     finally:
         if client is not None:

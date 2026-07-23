@@ -21,6 +21,11 @@ from .recompose import _text_to_runs as lettermap_text_to_runs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .no_translate_words import load_no_translate_words_set
+from .emoji_words import (
+    expand_translatable_emoji_words_twe,
+    find_emoji_words_in_entities,
+    is_translatable,
+)
 from .logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -317,7 +322,41 @@ def parse_groups_file(path: Path) -> Tuple[str | None, List[Tuple[str, List[str]
     return doc_title, groups
 
 
-async def _fetch_translation(client: TelegramClient, entity, msg_id: int, twe: types.TextWithEntities, to_lang: str) -> types.TextWithEntities | None:
+async def _fetch_translation(
+    client: TelegramClient,
+    entity,
+    msg_id: int,
+    twe: types.TextWithEntities,
+    to_lang: str,
+    doc_to_letters: Dict[str, str] | None = None,
+    no_translate_words: set[str] | None = None,
+) -> types.TextWithEntities | None:
+    # Enthält twe übersetzungspflichtige Buchstaben-Emoji-Wörter (siehe
+    # pipeline/emoji_words.py)? peer+id und text sind bei TranslateTextRequest
+    # gegenseitig exklusiv (Telegram übersetzt im peer+id-Modus seine eigene
+    # serverseitige Kopie der Nachricht und ignoriert unser twe komplett) -
+    # daher muss der peer+id-Versuch für betroffene Nachrichten übersprungen
+    # werden, sonst würde die lokale Expansion nie zum Tragen kommen. Ohne
+    # solche Wörter bleibt das Verhalten unverändert (peer+id zuerst, Fallback
+    # auf text mit dem unveränderten twe).
+    words = find_emoji_words_in_entities(twe.entities or [], doc_to_letters or {})
+    has_translatable_words = any(
+        is_translatable(decoded, no_translate_words or set()) for _start, _end, decoded, _group in words
+    )
+
+    if has_translatable_words:
+        expanded_twe = expand_translatable_emoji_words_twe(
+            twe, doc_to_letters or {}, no_translate_words or set()
+        )
+        res = await _with_retries(
+            "TranslateTextRequest(text, emoji-word-expanded)",
+            lambda: client(functions.messages.TranslateTextRequest(text=[expanded_twe], to_lang=to_lang)),
+        )
+        res_result = getattr(res, "result", None)
+        if isinstance(res_result, list) and res_result:
+            return res_result[0]
+        return None
+
     # 1) Peer+ID bevorzugt
     res = await _with_retries(
         "TranslateTextRequest(peer,id)",
@@ -379,7 +418,10 @@ async def run_by_ids(
             )
             translate = False
 
-    no_translate_words = load_no_translate_words_set() if effective_translation_provider != "telegram" else set()
+    # Für alle Provider laden - genutzt sowohl von translate_runs() (externe
+    # Provider) als auch von _fetch_translation() (Telegram-nativer Pfad,
+    # siehe expand_translatable_emoji_words_twe() in pipeline/emoji_words.py).
+    no_translate_words = load_no_translate_words_set()
 
     doc_title, groups = parse_groups_file(links_file)
 
@@ -457,6 +499,13 @@ async def run_by_ids(
         return False
 
     def _map_textrun_to_letter_runs(tr: TextRun) -> List[TextRun | EmojiRun | LineBreak]:
+        """Zeichenweise, positionsunabhängige Zuordnung über letter_to_doc
+        (lettermap_scope="all"). WICHTIG: nur für ursprünglichen, unübersetzten
+        Nachrichtentext sicher - auf bereits übersetztem Klartext würden
+        einzelne Buchstaben, die zufällig mit einem gemappten Buchstaben
+        übereinstimmen, fälschlich in unpassende Buchstaben-Emojis
+        zurückkodiert. Für übersetzten Text stattdessen _lettermap_keycap_only()
+        verwenden (siehe dort)."""
         s = tr.text or ""
         if not s:
             return [tr]
@@ -489,6 +538,36 @@ async def run_by_ids(
                 out.append(TextRun(kind="TextRun", text=ch, href=tr.href, bold=tr.bold, italic=tr.italic, underline=tr.underline, strike=tr.strike, code=tr.code, spoiler=tr.spoiler))
                 missing_letters.add(ch)
         return out
+
+    def _lettermap_keycap_only(tr: TextRun) -> List[TextRun | EmojiRun | LineBreak]:
+        """Sichere Teilmenge von _map_textrun_to_letter_runs: bildet
+        ausschließlich echte Keycap-Emoji-Sequenzen (Ziffer + U+FE0F + U+20E3)
+        ab, per Regex positionsfest erkannt - daher auch auf bereits
+        übersetzten Text anwendbar, ohne beliebige Buchstaben des
+        Übersetzungsergebnisses fälschlich zurückzukodieren (anders als die
+        volle "all"-Zuordnung, die zeichenweise über den ganzen Text läuft)."""
+        pattern = re.compile(r"([0-9])\uFE0F\u20E3")
+        pos = 0
+        txt = tr.text or ""
+        out: List[TextRun | EmojiRun | LineBreak] = []
+        for m in pattern.finditer(txt):
+            a, b = m.span()
+            digit = m.group(1)
+            if a > pos:
+                seg = txt[pos:a]
+                if seg:
+                    out.append(TextRun(kind="TextRun", text=seg, href=tr.href, bold=tr.bold, italic=tr.italic, underline=tr.underline, strike=tr.strike, code=tr.code, spoiler=tr.spoiler))
+            did = letter_to_doc.get(digit)
+            if did and ((Path("cache/emoji") / f"{did}.png").exists() or _ensure_png_from_export(did)):
+                out.append(EmojiRun(kind="EmojiRun", document_id=did))
+            else:
+                out.append(TextRun(kind="TextRun", text=m.group(0), href=tr.href, bold=tr.bold, italic=tr.italic, underline=tr.underline, strike=tr.strike, code=tr.code, spoiler=tr.spoiler))
+            pos = b
+        if pos < len(txt):
+            tail = txt[pos:]
+            if tail:
+                out.append(TextRun(kind="TextRun", text=tail, href=tr.href, bold=tr.bold, italic=tr.italic, underline=tr.underline, strike=tr.strike, code=tr.code, spoiler=tr.spoiler))
+        return out or [tr]
 
     # Etwas robustere Client-Parameter (kleine Zeitouts; Auto-Reconnect aktiv)
     client = TelegramClient(
@@ -796,26 +875,7 @@ async def run_by_ids(
                                 mapped_runs = _map_textrun_to_letter_runs(rr)
                                 new_runs.extend(mapped_runs)
                             elif _LM_SCOPE == "emoji-only":
-                                # Nur Keycap-Emoji-Sequenzen (0-9 FE0F 20E3) zu Bildern wandeln
-                                pattern = re.compile(r"([0-9])\uFE0F\u20E3")
-                                pos = 0
-                                txt = rr.text or ""
-                                for m in pattern.finditer(txt):
-                                    a, b = m.span(); digit = m.group(1)
-                                    if a > pos:
-                                        seg = txt[pos:a]
-                                        if seg:
-                                            new_runs.append(TextRun(kind="TextRun", text=seg, href=rr.href, bold=rr.bold, italic=rr.italic, underline=rr.underline, strike=rr.strike, code=rr.code, spoiler=rr.spoiler))
-                                    did = letter_to_doc.get(digit)
-                                    if did and ((Path("cache/emoji") / f"{did}.png").exists() or _ensure_png_from_export(did)):
-                                        new_runs.append(EmojiRun(kind="EmojiRun", document_id=did))
-                                    else:
-                                        new_runs.append(TextRun(kind="TextRun", text=m.group(0), href=rr.href, bold=rr.bold, italic=rr.italic, underline=rr.underline, strike=rr.strike, code=rr.code, spoiler=rr.spoiler))
-                                    pos = b
-                                if pos < len(txt):
-                                    tail = txt[pos:]
-                                    if tail:
-                                        new_runs.append(TextRun(kind="TextRun", text=tail, href=rr.href, bold=rr.bold, italic=rr.italic, underline=rr.underline, strike=rr.strike, code=rr.code, spoiler=rr.spoiler))
+                                new_runs.extend(_lettermap_keycap_only(rr))
                             else:
                                 new_runs.append(rr)
                         else:
@@ -836,7 +896,10 @@ async def run_by_ids(
                     twe = types.TextWithEntities(text=msg.message or "", entities=msg.entities or [])
                     runs_tr: List[TextRun | EmojiRun | LineBreak | ImageRun] | None = None
                     if effective_translation_provider == "telegram":
-                        tr = await _fetch_translation(client, entity, msg.id, twe, target_lang)
+                        tr = await _fetch_translation(
+                            client, entity, msg.id, twe, target_lang,
+                            doc_to_letters=inv_map, no_translate_words=no_translate_words,
+                        )
                         if tr is None:
                             continue
                         tr_non_null = tr
@@ -864,8 +927,21 @@ async def run_by_ids(
                                 alt = ce_map.get(int(rr.document_id)) if rr.document_id.isdigit() else None
                                 new_runs_tr.append(TextRun(kind="TextRun", text=alt or f"[CE:{rr.document_id}]"))
                         elif isinstance(rr, TextRun) and letter_to_doc:
-                            mapped_runs = _map_textrun_to_letter_runs(rr)
-                            new_runs_tr.extend(mapped_runs)
+                            # rr stammt aus der Übersetzung (Telegram-nativ oder
+                            # translate_runs()) - hier NIE die volle
+                            # zeichenweise/positionsunabhängige "all"-Zuordnung
+                            # anwenden (siehe Docstring von
+                            # _map_textrun_to_letter_runs), sonst würden
+                            # zufällig passende Buchstaben im übersetzten
+                            # Klartext fälschlich zu Buchstaben-Emojis. Nur die
+                            # sichere Keycap-Teilmenge ist hier zulässig, und
+                            # auch nur, wenn der konfigurierte Scope Keycaps
+                            # überhaupt einschließt (all/emoji-only, nicht none).
+                            if _LM_SCOPE in ("all", "emoji-only"):
+                                mapped_runs = _lettermap_keycap_only(rr)
+                                new_runs_tr.extend(mapped_runs)
+                            else:
+                                new_runs_tr.append(rr)
                         else:
                             new_runs_tr.append(rr)
                     runs_tr = new_runs_tr
