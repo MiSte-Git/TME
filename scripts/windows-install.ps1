@@ -128,6 +128,41 @@ if (Test-Path $VersionSrc) {
   Write-Host "BUILD_VERSION.txt nach $InstallDir kopiert."
 }
 
+# config.yaml (falls vorhanden) neben das Binary kopieren, analog zu
+# install_linux.sh - mehrere Config-Reader (z.B. pipeline/runner_by_ids.py::
+# _apply_config_overrides, pipeline/runner_schedule.py::_load_config,
+# ui/lettermap_tab.py::_load_case_mode) laden sie ueber einen arbeits-
+# verzeichnis-relativen Pfad (Path("config.yaml")), nicht aus dem
+# PyInstaller-Bundle - ohne diese Kopie fallen sie beim installierten Build
+# lautlos auf Code-Defaults zurueck (Retry-/Timeout-Werte, Preistabelle,
+# Lettermap-Einstellungen, output.make_docx, ...).
+#
+# Update-Fall: Eine bereits vorhandene, vom Repo-Original abweichende
+# config.yaml (z.B. lokal vom Nutzer angepasster Uebersetzungs-Provider oder
+# eigene Preistabelle) wird bewusst NICHT ueberschrieben, um solche
+# Anpassungen bei einer Re-Installation nicht stillschweigend zu verlieren -
+# stattdessen nur ein Hinweis mit Pfad zur Repo-Version zum manuellen
+# Abgleich. Ist die vorhandene Datei identisch zum Repo-Original, ist ein
+# Ueberschreiben ohnehin folgenlos, wird aber ebenfalls uebersprungen (kein
+# unnoetiger Schreibzugriff).
+$ConfigSrc = Join-Path $RepoRoot "config.yaml"
+$ConfigDest = Join-Path $InstallDir "config.yaml"
+if (Test-Path $ConfigSrc) {
+  if (-not (Test-Path $ConfigDest)) {
+    Copy-Item -Path $ConfigSrc -Destination $ConfigDest -Force
+    Write-Host "config.yaml nach $InstallDir kopiert."
+  } else {
+    $ConfigSrcHash = (Get-FileHash -Path $ConfigSrc -Algorithm SHA256).Hash
+    $ConfigDestHash = (Get-FileHash -Path $ConfigDest -Algorithm SHA256).Hash
+    if ($ConfigSrcHash -eq $ConfigDestHash) {
+      Write-Host "config.yaml bereits vorhanden und identisch mit dem Repo-Original - kein Kopiervorgang."
+    } else {
+      Write-Host "config.yaml bereits vorhanden, wird NICHT ueberschrieben (weicht vom Repo-Original ab)."
+      Write-Host "Repo-Version liegt zum Vergleich unter: $ConfigSrc"
+    }
+  }
+}
+
 # Start Menu shortcut
 if ($AllUsers) {
   $ProgramsRoot = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
