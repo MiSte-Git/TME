@@ -116,6 +116,18 @@ if ($IsOneDir) {
   Copy-Item -Path $SourceExe -Destination $DestExe -Force
 }
 
+# Versionsstempel (siehe scripts\build_win.ps1) zusaetzlich als Klartext ins
+# Zielverzeichnis kopieren, falls vorhanden. ui\app.py selbst liest ihre eigene,
+# bereits per --add-data gebuendelte Kopie (ueber sys._MEIPASS, unabhaengig vom
+# Arbeitsverzeichnis) und loggt sie beim Start nach data\tme.log - diese Kopie
+# hier dient nur der Pruefung von aussen ("type BUILD_VERSION.txt"), ohne die
+# App starten zu muessen.
+$VersionSrc = Join-Path $RepoRoot "dist\BUILD_VERSION.txt"
+if (Test-Path $VersionSrc) {
+  Copy-Item -Path $VersionSrc -Destination (Join-Path $InstallDir "BUILD_VERSION.txt") -Force
+  Write-Host "BUILD_VERSION.txt nach $InstallDir kopiert."
+}
+
 # Start Menu shortcut
 if ($AllUsers) {
   $ProgramsRoot = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"

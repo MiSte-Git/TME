@@ -6,6 +6,7 @@ import sys
 import asyncio
 import json
 import os
+import subprocess
 import threading
 import warnings
 from typing import Any, Callable, cast
@@ -1780,6 +1781,21 @@ def _set_language(lang: str) -> None:
 
 
 def main() -> None:
+    # Versionsstempel (siehe scripts\build_win.ps1/build_linux.sh) loggen, damit
+    # sich ohne manuelle Datei-Timestamp-Forensik pruefen laesst, welcher Commit
+    # tatsaechlich laeuft. ROOT zeigt im gefrorenen Fall auf sys._MEIPASS (wohin
+    # --add-data den Stempel legt), im Dev-Fall auf den Repo-Root - daher der
+    # Git-Fallback dort statt einer Datei.
+    version_file = ROOT / "BUILD_VERSION.txt"
+    if version_file.exists():
+        logger.info("Build-Version: %s", version_file.read_text(encoding="utf-8").splitlines()[0])
+    else:
+        dev_hash = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        logger.info("Build-Version: dev (kein Stempel, git HEAD=%s)", dev_hash or "unbekannt")
+
     app = QApplication(sys.argv)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)

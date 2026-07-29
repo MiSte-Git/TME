@@ -131,6 +131,34 @@ $Icon = Join-Path $RepoRoot "ui\assets\app.ico"
 $IconArgs = @()
 if (Test-Path $Icon) { $IconArgs = @("--icon", $Icon) }
 
+# Versionsstempel des aktuell gebauten Codestands (Git-Kurzhash + "-dirty" bei
+# uncommitteten Aenderungen). Analog zu build_linux.sh: wird sowohl ins Bundle
+# (--add-data) als auch als eigenstaendige Datei neben dist\ abgelegt, damit
+# sich nach dem Build UND nach der Installation nachweisen laesst, welcher
+# Commit tatsaechlich verwendet wurde (siehe ui\app.py, das den Stempel beim
+# Start nach data\tme.log loggt).
+$GitHash = (git -C $RepoRoot rev-parse --short HEAD 2>$null)
+if (-not $GitHash) { $GitHash = "unknown" }
+$GitDirty = if ((git -C $RepoRoot status --porcelain 2>$null)) { "-dirty" } else { "" }
+$BuildVersion = "$GitHash$GitDirty"
+# Eigenes, GUID-benanntes Temp-Verzeichnis statt GUID-benannter Datei: PyInstallers
+# --add-data behaelt beim Bundlen den Quell-Dateinamen bei (kein Rename moeglich) -
+# die Datei selbst muss also exakt "BUILD_VERSION.txt" heissen, damit ui\app.py sie
+# im gefrorenen Bundle unter diesem Namen findet. Die GUID sitzt nur im Verzeichnis-
+# namen, um Kollisionen bei parallelen Builds zu vermeiden.
+$VersionTmpDir = Join-Path $env:TEMP "TME_BUILD_VERSION_$([guid]::NewGuid())"
+New-Item -ItemType Directory -Path $VersionTmpDir -Force | Out-Null
+$VersionFile = Join-Path $VersionTmpDir "BUILD_VERSION.txt"
+# -Encoding ascii statt utf8: Windows PowerShell 5.1s "utf8" schreibt immer ein
+# UTF-8-BOM voran, das beim Python-seitigen read_text(encoding="utf-8") als
+# sichtbares Zeichen vor "commit=" landen wuerde. Inhalt ist ohnehin reines ASCII
+# (Hash + Zeitstempel).
+@(
+  "commit=$BuildVersion",
+  "built=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+) | Set-Content -Encoding ascii $VersionFile
+Write-Host "Build-Version: $BuildVersion"
+
 $ModeArgs = if ($Release) { @("--onefile") } else { @("--onedir") }
 # --clean wirft den PyInstaller-Analyse-Cache (build\TME\) weg und erzwingt eine
 # komplette Neu-Analyse aller Imports - der groesste Zeitfaktor bei wiederholten
@@ -181,6 +209,7 @@ if (Test-Path $FlagsDir) {
     $DataArgs += @("--add-data", "$($_.FullName);ui\assets\flags")
   }
 }
+$DataArgs += @("--add-data", "$VersionFile;.")
 
 Write-Host "Building EXE via PyInstaller..."
 # Alle Flags zu EINEM Array zusammenfassen und nur einmal splatten (@PyInstallerArgs).
@@ -198,6 +227,14 @@ $DistDir = Join-Path $RepoRoot "dist"
 if (-not (Test-Path $DistDir)) {
   throw "dist\ not found. PyInstaller likely failed."
 }
+
+# Zusaetzlich als Klartextdatei direkt neben dist\ ablegen - beim --onefile-
+# Modus liegt die im Bundle enthaltene Kopie nur im Laufzeit-Extraktions-
+# verzeichnis und ist ohne App-Start nicht einsehbar. So kann windows-
+# install.ps1 (und jeder Mensch per "type dist\BUILD_VERSION.txt") den
+# Codestand von dist\ pruefen, ohne die App zu starten.
+Copy-Item $VersionFile (Join-Path $DistDir "BUILD_VERSION.txt") -Force
+Remove-Item $VersionTmpDir -Recurse -Force -ErrorAction SilentlyContinue
 
 $Exe = Get-ChildItem -Path $DistDir -Recurse -Filter "TME.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $Exe) {
