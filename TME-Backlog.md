@@ -55,6 +55,26 @@ Stack: Python, Telethon, PySide6, odfpy, PyInstaller. Ziel: Linux + Windows.
 
 5. **Lettermap/Emoji-Wort-OCR-Auto-Vorschlag** — frühere Analyse ergab: aktuell kein automatischer OCR-Vorschlag implementiert (siehe Punkt 2). Falls gewünscht, wäre ein Tesseract-basierter Vorschlagsschritt gegen die gecachten Emoji-PNGs denkbar, mit expliziter Einschränkung: unzuverlässig bei verzierten/künstlerischen Schriftstilen, eher Vorschlag als Automatik.
 
+6. **[Bug] ChatGPT-Übersetzung schlägt still fehl** — Dokument wird mit leerer Übersetzung erstellt, ohne Fehlermeldung oder Hinweis (z.B. bei fehlendem/ungültigem API-Key). Soll: bei fehlgeschlagener Übersetzung eine klare Meldung mit konkretem Behebungsvorschlag (API-Key prüfen, Guthaben, Netzwerk etc.) statt stillschweigendem Leerlauf.
+
+7. **[Bug] DOCX-Export nicht funktionsfähig** — "Docx zum Docx erstellen" ist noch nicht installiert bzw. funktioniert nicht. Vermutlich fehlende Abhängigkeit (z.B. Pandoc, siehe `output.converter`/`pandoc_reference_docx` in `config.yaml`). Root Cause noch offen.
+
+8. **[Bug] Shell-Fenster poppen während der Übersetzung auf, Desktop flackert** — vermutlich ein Subprocess-Aufruf (Übersetzungs-Pfad oder DOCX-Konvertierung) ohne Fenster-Unterdrückung unter Windows (fehlt z.B. `subprocess.CREATE_NO_WINDOW`-Flag oder `startupinfo` mit `SW_HIDE`). Möglicher Zusammenhang mit Punkt 7 (ggf. derselbe externe Prozess, z.B. Pandoc) — noch nicht bestätigt, nur Vermutung.
+
+9. **[UI/UX] "Kanal (optional)"-Feld irreführend beschriftet** — beim Sammeln eines ganzen Kanals ist die Eingabe eines Kanal-Links faktisch erforderlich, das Feld heißt aber "optional". Label/Hilfetext sollte klarstellen, wann das Feld zwingend ist.
+
+10. **[UI/UX] Fehlende Eingabe-Plausibilitätsprüfung beim Start** — keine Validierung, ob die eingegebenen Parameter für den gewählten Modus sinnvoll/vollständig sind. Sollte vor Start geprüft und mit klarer Fehlermeldung abgefangen werden.
+
+11. **[UI/UX] Datumsfelder nicht kontextabhängig deaktiviert** — sollten ausgegraut sein, wenn "Nach Datum holen" nicht angewählt ist.
+
+12. **[UI/UX] Textfelder benötigen Doppelklick vor Eingabe** — sollte mit einfachem Klick funktionieren (Fokus-/Klick-Handling prüfen).
+
+13. **[UI/UX] "Übersetzen"-Bereich im Schedule-Editor entfernen** — vermutlich redundant/veraltet gegenüber aktuellem Übersetzungs-Workflow. Genauer Umfang noch zu klären.
+
+14. **[UI/UX] Start-Button-Beschriftung im Telegram-Export-Tab** — aktuell "Telegram-Export → ODT erzeugen", soll zu "Starten" vereinfacht werden, da seit Feature 6 (Format-Wahl) nicht mehr zwingend ODT erzeugt wird, auch DOCX ist möglich.
+
+*Rückmeldungen vom 2026-07-30, noch nicht analysiert/reproduziert — nächste Session: priorisieren und einzeln in Analyse-Prompts überführen.*
+
 ---
 
 ## Key Learnings & Prinzipien
