@@ -36,6 +36,37 @@ _PAGE_USABLE_WIDTH_CM = 17.0
 # gequetscht werden: 29,7cm Seitenbreite abzüglich je 2cm Rand links/rechts.
 _PAGE_USABLE_WIDTH_LANDSCAPE_CM = 25.7
 
+# A4-Papiermaße (kurze/lange Kante) und vertikaler Rand - einzige Quelle der
+# Wahrheit für _add_footer (Seitenlayout) UND _max_image_height_cm weiter
+# unten, damit beide nicht unabhängig voneinander gepflegt werden. Portrait:
+# Seitenhöhe = lange Kante; Querformat (side_by_side): Seitenhöhe = kurze
+# Kante (siehe _add_footer).
+_PAGE_A4_SHORT_CM = 21.0
+_PAGE_A4_LONG_CM = 29.7
+_PAGE_MARGIN_VERTICAL_CM = 1.5
+
+_IMAGE_HEIGHT_BUFFER_CM = 3.0
+
+
+def _max_image_height_cm(landscape: bool) -> float:
+    """Obergrenze für die Höhe eingebetteter Bilder, abgeleitet aus dem
+    tatsächlichen Seitenlayout (Querformat für side_by_side, sonst Portrait -
+    siehe _add_footer) statt einer hartcodierten Konstante: Portrait hat
+    durch die deutlich größere Seitenhöhe entsprechend mehr Spielraum als
+    Querformat.
+
+    Hintergrund: as-char-verankerte Bilder, deren Höhe an die nutzbare
+    Seitenhöhe heranreicht, lassen LibreOffice/Word beim Seitenumbruch den
+    nachfolgenden Text im selben Absatz/derselben Tabellenzelle verschwinden,
+    statt ihn auf der Folgeseite fortzusetzen (reproduziert: Kipppunkt lag bei
+    ~17,0-17,78cm Bildhöhe bei ~18cm nutzbarer Höhe im Querformat). Der Puffer
+    deckt die Header-Zeile/den Zeitstempel und sonstigen Inhalt vor dem Bild
+    auf derselben Seite ab, damit spürbar Abstand zum beobachteten Kipppunkt
+    bleibt."""
+    page_height_cm = _PAGE_A4_SHORT_CM if landscape else _PAGE_A4_LONG_CM
+    usable_height_cm = page_height_cm - 2 * _PAGE_MARGIN_VERTICAL_CM
+    return usable_height_cm - _IMAGE_HEIGHT_BUFFER_CM
+
 
 def _make_reference_ref(reference_format: str, ref_name: str) -> Any:
     """ReferenceRef(**kwargs) mappt referenceformat/refname in dieser odfpy-
@@ -237,33 +268,45 @@ def _add_emoji_as_char(doc: OpenDocumentText, para: P, doc_id: str, g_style_obj:
 _MIN_IMAGE_HEIGHT_CM = 6.0
 
 
-def _compute_image_height_cm(img_path: Path, width_cm: float) -> float:
-    """Bildhöhe proportional zur Breite (Seitenverhältnis via PIL, falls die
-    Datei lesbar ist), mit Mindesthöhe - gemeinsam genutzt von
-    _add_image_block (tatsächliches Rendern) und _estimate_section_lines
-    (grobe Zeilen-Schätzung fürs side_by_side-Ausgleichen, siehe
-    write_odt_for_record_pairs)."""
+def _fit_image_box_cm(img_path: Path, width_cm: float, max_height_cm: Optional[float]) -> Tuple[float, float]:
+    """Bounding-Box-Skalierung: Bildhöhe zunächst proportional zur Breite
+    (Seitenverhältnis via PIL, falls die Datei lesbar ist), mit Mindesthöhe.
+    Überschreitet das Ergebnis max_height_cm (falls gesetzt - siehe
+    _max_image_height_cm), wird seitenverhältnistreu auf max_height_cm
+    herunterskaliert und width_cm dabei proportional mitverkleinert (die
+    Bildbreite ist damit eine obere Grenze, kein fester Wert mehr) - verhindert
+    as-char-Frames, die an die Seitenhöhe heranreichen und beim Rendern
+    (LibreOffice/Word) nachfolgenden Text im selben Absatz/derselben Zelle
+    verschwinden lassen (siehe _max_image_height_cm). Gemeinsam genutzt von
+    _add_image_block (tatsächliches Rendern)."""
     height_cm = _MIN_IMAGE_HEIGHT_CM
     try:
         with PILImage.open(img_path) as im:
             w, h = im.size
             if w > 0 and h > 0:
-                height_cm = width_cm * (h / w)
+                height_cm = max(width_cm * (h / w), _MIN_IMAGE_HEIGHT_CM)
     except Exception:
         pass
-    return max(height_cm, _MIN_IMAGE_HEIGHT_CM)
+    if max_height_cm is not None and height_cm > max_height_cm:
+        scale = max_height_cm / height_cm
+        height_cm = max_height_cm
+        width_cm = width_cm * scale
+    return width_cm, height_cm
 
 
-def _add_image_block(doc: OpenDocumentText, img_path: Path, p: P, g_style_obj: Style, width_cm: float = 15.0) -> None:
+def _add_image_block(
+    doc: OpenDocumentText, img_path: Path, p: P, g_style_obj: Style,
+    width_cm: float = 15.0, max_height_cm: Optional[float] = None,
+) -> None:
     if not img_path.exists():
         p.addElement(Span(text=f"[IMG missing: {img_path.name}]"))
         return
     # Referenzname im ODT (von odfpy generiert)
     rel_href = doc.addPicture(str(img_path))
-    # Frame mit Breite/Höhe – as-char verankert, mit Mindesthöhe (siehe
-    # _compute_image_height_cm).
-    height_cm_calc = _compute_image_height_cm(img_path, width_cm)
-    frame = Frame(stylename=g_style_obj, width=f"{width_cm}cm", height=f"{height_cm_calc:.3f}cm", anchortype="as-char")
+    # Frame mit Breite/Höhe – as-char verankert, Bounding-Box-Skalierung mit
+    # Mindesthöhe und optionaler Maximalhöhe (siehe _fit_image_box_cm).
+    width_cm_calc, height_cm_calc = _fit_image_box_cm(img_path, width_cm, max_height_cm)
+    frame = Frame(stylename=g_style_obj, width=f"{width_cm_calc:.3f}cm", height=f"{height_cm_calc:.3f}cm", anchortype="as-char")
     frame.addElement(DrawImage(href=rel_href, type="simple", show="embed", actuate="onLoad"))
     p.addElement(frame)
 
@@ -315,6 +358,7 @@ def render_runs_into_container(
     style_names: Dict[str, Any],
     base_para_style: str,
     max_image_width_cm: Optional[float] = None,
+    max_image_height_cm: Optional[float] = None,
 ) -> None:
     """Rendert eine vollständige Run-Liste (Nachrichtentext) als Absätze in
     `container` - das kann doc.text (linear, bisheriges Verhalten) oder eine
@@ -327,7 +371,12 @@ def render_runs_into_container(
     max_image_width_cm: falls gesetzt, wird die (im Run fest hinterlegte)
     Bildbreite auf diesen Wert gedeckelt - nötig im side_by_side-Layout,
     wo die feste Standardbreite (10cm) nicht in eine ca. 8cm schmale
-    Tabellenspalte passt. Ohne Angabe (linear) unverändertes Verhalten."""
+    Tabellenspalte passt. Ohne Angabe (linear) unverändertes Verhalten.
+
+    max_image_height_cm: falls gesetzt, wird die Bildhöhe (siehe
+    _fit_image_box_cm) auf diesen Wert gedeckelt und die Breite dabei
+    proportional mitverkleinert - siehe _max_image_height_cm (aus dem
+    jeweiligen Seitenlayout abgeleitet, Portrait vs. side_by_side-Querformat)."""
     p = P(stylename=base_para_style)
     for r in runs:
         if isinstance(r, ImageRun):
@@ -335,7 +384,7 @@ def render_runs_into_container(
             width_cm = r.width_cm
             if max_image_width_cm is not None and width_cm > max_image_width_cm:
                 width_cm = max_image_width_cm
-            _add_image_block(doc, Path(r.path), p_img, style_names["G.InlineEmojiObj"], width_cm=width_cm)
+            _add_image_block(doc, Path(r.path), p_img, style_names["G.InlineEmojiObj"], width_cm=width_cm, max_height_cm=max_image_height_cm)
             container.addElement(p_img)
         else:
             _render_run_into_paragraph(doc, p, r, style_names)
@@ -386,10 +435,11 @@ def _build_header_paragraph(
 
 def _add_footer(doc, styles_map, landscape: bool = False):
     pl = PageLayout(name="pm1")
-    page_width, page_height = ("29.7cm", "21cm") if landscape else ("21cm", "29.7cm")
-    pl.addElement(PageLayoutProperties(pagewidth=page_width, pageheight=page_height,
+    page_width_cm = _PAGE_A4_LONG_CM if landscape else _PAGE_A4_SHORT_CM
+    page_height_cm = _PAGE_A4_SHORT_CM if landscape else _PAGE_A4_LONG_CM
+    pl.addElement(PageLayoutProperties(pagewidth=f"{page_width_cm}cm", pageheight=f"{page_height_cm}cm",
                                        printorientation="landscape" if landscape else "portrait",
-                                       margintop="1.5cm", marginbottom="1.5cm",
+                                       margintop=f"{_PAGE_MARGIN_VERTICAL_CM}cm", marginbottom=f"{_PAGE_MARGIN_VERTICAL_CM}cm",
                                        marginleft="2cm", marginright="2cm"))
     doc.automaticstyles.addElement(pl)
     mp = MasterPage(name="Standard", pagelayoutname=pl)
@@ -499,6 +549,9 @@ def _populate_toc(body: IndexBody, style_names: Dict[str, Any], entries: List[Tu
 def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dict[str, Any], doc_title: str | None = None) -> Path:
     doc = OpenDocumentText()
     style_names = _ensure_min_styles(doc, styles or {})
+    # Portrait-Layout (siehe _add_footer weiter unten) - entsprechend
+    # großzügigere Bildhöhenbegrenzung als im side_by_side-Querformat.
+    max_img_height_cm = _max_image_height_cm(landscape=False)
     # Dokumenttitel (optional)
     if doc_title:
         tstyle = Style(name="TitlePara", family="paragraph")
@@ -564,7 +617,7 @@ def write_odt_for_records(records: List[RunsRecord], out_path: Path, styles: Dic
         if p_header is not None:
             doc.text.addElement(p_header)
         # Jede Nachricht als Absatzblock (nutze Defaultstil)
-        render_runs_into_container(doc, doc.text, rec.runs, style_names, style_names.get("P.Base"))
+        render_runs_into_container(doc, doc.text, rec.runs, style_names, style_names.get("P.Base"), max_image_height_cm=max_img_height_cm)
         separator_style = style_names.get("P.MessageSeparator")
         if separator_style:
             doc.text.addElement(P(stylename=separator_style))
@@ -619,6 +672,9 @@ def write_odt_for_record_pairs(
     col_width_cm = style_names["_side_by_side_col_width_cm"]
     # Zellpolsterung beidseitig abziehen, nie unter eine sinnvolle Mindestbreite fallen.
     max_img_width_cm = max(col_width_cm - 0.4, 2.0)
+    # Querformat (siehe _add_footer(..., landscape=True) unten) - entsprechend
+    # knappere Bildhöhenbegrenzung als im Portrait-Layout (write_odt_for_records).
+    max_img_height_cm = _max_image_height_cm(landscape=True)
 
     if doc_title:
         tstyle = Style(name="TitlePara", family="paragraph")
@@ -736,10 +792,10 @@ def write_odt_for_record_pairs(
             # die Schätz-Heuristik war dadurch nicht nur unnötig, sondern
             # blähte das Dokument durch Leerabsätze spürbar auf und lief bei
             # größeren Längenunterschieden trotzdem sichtbar auseinander).
-            render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
-            render_runs_into_container(doc, cell_tr, pair.translation.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
+            render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm, max_image_height_cm=max_img_height_cm)
+            render_runs_into_container(doc, cell_tr, pair.translation.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm, max_image_height_cm=max_img_height_cm)
         else:
-            render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm)
+            render_runs_into_container(doc, cell_orig, rec.runs, style_names, style_names.get("P.CellBase"), max_image_width_cm=max_img_width_cm, max_image_height_cm=max_img_height_cm)
             p_missing = P(stylename=style_names.get("P.CellBase"))
             p_missing.addElement(Span(text=_MISSING_TRANSLATION_PLACEHOLDER))
             cell_tr.addElement(p_missing)
