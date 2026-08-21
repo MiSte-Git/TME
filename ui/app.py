@@ -357,7 +357,10 @@ class ScheduleTab(QWidget):
 
         run_lay = QHBoxLayout()
         run_lay.setSpacing(8)
-        self.btn_run = QPushButton(self.tr("Schedule → ODT erzeugen"))
+        # Bewusst kurz gehalten (statt z.B. "... → ODT erzeugen"): seit
+        # Feature 6 (Format-Wahl) erzeugt der Lauf nicht mehr zwingend ODT,
+        # auch DOCX bzw. beides ist möglich (siehe TME-Backlog.md Punkt 14).
+        self.btn_run = QPushButton(self.tr("Starten"))
         self.btn_run.clicked.connect(self.run_schedule_file)
         run_lay.addWidget(self.btn_run)
         self.btn_cancel = QPushButton(self.tr("Abbrechen"))
@@ -571,7 +574,7 @@ class ScheduleTab(QWidget):
             _lidx = self.layout_combo.findData(_layout_current)
             if _lidx >= 0:
                 self.layout_combo.setCurrentIndex(_lidx)
-        self.btn_run.setText(self.tr("Telegram-Export → ODT erzeugen"))
+        self.btn_run.setText(self.tr("Starten"))
         self.btn_cancel.setText(self.tr("Abbrechen"))
         self.btn_login.setText(self.tr("Jetzt einloggen…"))
         self.btn_open_output.setText(self.tr("Ausgabeordner öffnen"))

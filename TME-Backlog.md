@@ -68,6 +68,26 @@ Analyse + Umsetzung im Arbeitsverzeichnis, **noch NICHT committet** und **noch N
 
 ---
 
+## Session 2026-08-21 (Teil 2) — UI/UX-Fixes Punkt 9–14 (Claude, per Cowork)
+
+Analyse + Umsetzung im Arbeitsverzeichnis. Anders als bei Punkt 1–8 sind das reine Qt-Widget-/Validierungslogik-Änderungen ohne Windows-spezifisches Verhalten — deshalb hier **real gegen echte `PySide6`-Widgets verifiziert** (Offscreen-`QApplication`, `QT_QPA_PLATFORM=offscreen`, kein Mock): `ScheduleEditorTab` instanziiert, Zeilen hinzugefügt, Checkbox umgeschaltet, `_collect_schedule()` mit den unten beschriebenen Fehlerfällen aufgerufen — alle Assertions grün. **Noch NICHT committet** (kein Shell/Git-Zugriff in dieser Session, siehe unten).
+
+9. **[UI/UX] "Kanal (optional)"-Feld irreführend beschriftet** — Root Cause bestätigt: `schedule_json.schedule_to_blocks()` wirft bereits zur Laufzeit einen Fehler, wenn `fetch_by_date=True` und weder Zeilen-Kanal noch `default_channel` gesetzt sind ("benötigt einen default_channel, da keine Links angegeben sind") — das Feld ist also bedingt zwingend, nicht generell optional. Fix in `ui/schedule_editor_tab.py`: Spaltenüberschrift von "Kanal (optional)" zu "Kanal (siehe Hinweis)", Tooltip der Spalte präzisiert ("Erforderlich, wenn 'Nach Datum holen' aktiv ist und kein Default-Channel gesetzt ist - sonst wird der Lauf fehlschlagen"), Hinweistext unter der Tabelle umformuliert und erklärt jetzt explizit beide Wege (Zeilen-Kanal vs. Default-Channel).
+
+10. **[UI/UX] Fehlende Eingabe-Plausibilitätsprüfung beim Start** — Der "Telegram-Export"-Tab (`ui/app.py::run_schedule_file()`) hatte bereits umfangreiche Preflight-Checks (leerer Pfad, Datei existiert, Credentials, API-Key, DOCX-Konverter aus Punkt 7). Die eigentliche Lücke lag im Schedule-Editor: `_collect_schedule()` prüfte nur Datum/Titel, nicht aber die Kanal/Links-Kombination aus Punkt 9 — der Fehler aus `schedule_to_blocks()` (siehe oben) schlug bisher erst mitten im echten Lauf zu, nach Telegram-Login und Zeichen-Vorschau. Fix: `_collect_schedule()` prüft jetzt pro Zeile zusätzlich (a) `fetch_by_date=True` ohne Zeilen-Kanal und ohne Default-Channel → Fehler, (b) `fetch_by_date=False` ohne Links → Fehler ("würde keine Nachrichten enthalten"), jeweils mit Zeilennummer in der Meldung. Beide Fälle greifen sowohl beim "Speichern" als auch beim "Speichern & Starten" (ruft intern `_save_doc()` auf).
+
+11. **[UI/UX] Datumsfelder nicht kontextabhängig deaktiviert** — Präzisierung nach Code-Analyse: Die Spalte "Datum" selbst wird immer benötigt (dient als Überschrift, unabhängig vom Lade-Modus). Gemeint sind die Zeitfenster-Spalten "Von"/"Bis" (Zeitpunkt innerhalb des Tages) — die werden nur ausgewertet, wenn "Nach Datum holen" für die Zeile aktiv ist; bei expliziten Links spielen sie keine Rolle. Fix: neue Methode `_update_time_fields_enabled(row)`, verdrahtet über `itemChanged`-Signal auf die Checkbox-Spalte sowie explizit beim Anlegen/Laden von Zeilen — schaltet "Von"/"Bis" der jeweiligen Zeile per Item-Flags (`ItemIsEnabled`/`ItemIsEditable`) aus, sobald "Nach Datum holen" abgewählt wird, und wieder ein beim erneuten Anwählen (Werte bleiben dabei erhalten, werden nicht geleert).
+
+12. **[UI/UX] Textfelder benötigen Doppelklick vor Eingabe** — Root Cause: `QTableWidget` verlangt per Qt-Default einen Doppelklick (oder F2/Enter), um eine Zelle in den Editier-Modus zu versetzen — reines Anklicken markiert die Zelle nur. Fix: `EditTriggers` auf `CurrentChanged | EditKeyPressed | AnyKeyPressed` gesetzt — ein einfacher Klick macht die Zelle zur aktuellen Zelle und öffnet damit sofort den Editor; Tippen sowie F2/Enter funktionieren weiterhin. Nebenbefund dabei: die Checkbox-Zelle (Spalte "Nach Datum holen") hatte bisher zusätzlich zum Checkbox-Flag auch `ItemIsEditable` gesetzt (Altlast) — mit `CurrentChanged` hätte das versucht, beim Anklicken zusätzlich einen (leeren) Text-Editor über der Checkbox zu öffnen. Das `ItemIsEditable`-Flag wird jetzt für diese Zelle gar nicht mehr gesetzt (nur noch `ItemIsUserCheckable` + `ItemIsEnabled` + `ItemIsSelectable`), das Umschalten der Checkbox selbst ist davon unberührt.
+
+13. **[UI/UX] "Übersetzen"-Bereich im Schedule-Editor entfernen** — Bestätigt redundant: `_run_now()` sprang schon bisher immer in den "Telegram-Export"-Tab und rief dort `run_schedule_file()` auf; die tatsächlich wirksamen, persistierten Übersetzungseinstellungen (`cb_translate`/`mode_combo`/`lang_edit`, inkl. `_save_state()`) leben in `ScheduleTab` (`ui/app.py`). Der Editor-Tab hatte eine eigene, nicht persistierte Kopie dieser drei Widgets, die beim Klick auf "Starten" die echten Einstellungen im Export-Tab stumm überschrieben hat — bei jedem Öffnen einer neuen/geladenen Schedule-Datei stand die lokale Kopie wieder auf den Defaults (unchecked/"inline"/leer), was leicht zu einem versehentlich deaktivierten Übersetzen-Lauf führen konnte, ohne dass im Editor-Tab ersichtlich war, dass die Export-Tab-Einstellung gerade überschrieben wird. Fix: `translate_cb`/`mode_combo`/`lang_edit` sowie die zugehörige UI-Zeile komplett aus `ScheduleEditorTab` entfernt; `_run_now()` überschreibt die Export-Tab-Einstellungen nicht mehr, sondern übernimmt einfach das dort bereits Konfigurierte. Nebenbefund im selben Codebereich mitgefixt: der "Starten"-Button dieses Tabs hatte zwei widersprüchliche Beschriftungen (Konstruktor: "Schedule → ODT erzeugen", `retranslate()`: "Telegram-Export → ODT erzeugen") — vereinheitlicht zu "Speichern & Starten" (bewusst nicht nur "Starten" wie in Punkt 14, da dieser Button zusätzlich speichert und in den Export-Tab wechselt).
+
+14. **[UI/UX] Start-Button-Beschriftung im Telegram-Export-Tab** — `ui/app.py`: beide Stellen (`QPushButton`-Konstruktion, vorher "Schedule → ODT erzeugen", sowie `retranslate()`, vorher "Telegram-Export → ODT erzeugen" — die beiden waren zusätzlich inkonsistent zueinander) auf "Starten" vereinheitlicht.
+
+**Nicht committet.** Michael: bitte Diff sichten (insbesondere Punkt 10/11, da hier neues Verhalten beim Speichern/Editieren entsteht), kurz im echten UI durchklicken, dann committen — Windows-spezifisches Risiko besteht hier anders als bei Punkt 1–8 nicht, da reine Qt-Widget-Logik ohne Plattformabhängigkeit.
+
+---
+
 ## Offene Punkte (nächste Schritte)
 
 1. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
@@ -86,19 +106,19 @@ Analyse + Umsetzung im Arbeitsverzeichnis, **noch NICHT committet** und **noch N
 
 8. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
-9. **[UI/UX] "Kanal (optional)"-Feld irreführend beschriftet** — beim Sammeln eines ganzen Kanals ist die Eingabe eines Kanal-Links faktisch erforderlich, das Feld heißt aber "optional". Label/Hilfetext sollte klarstellen, wann das Feld zwingend ist.
+9. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
 
-10. **[UI/UX] Fehlende Eingabe-Plausibilitätsprüfung beim Start** — keine Validierung, ob die eingegebenen Parameter für den gewählten Modus sinnvoll/vollständig sind. Sollte vor Start geprüft und mit klarer Fehlermeldung abgefangen werden.
+10. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
 
-11. **[UI/UX] Datumsfelder nicht kontextabhängig deaktiviert** — sollten ausgegraut sein, wenn "Nach Datum holen" nicht angewählt ist.
+11. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
 
-12. **[UI/UX] Textfelder benötigen Doppelklick vor Eingabe** — sollte mit einfachem Klick funktionieren (Fokus-/Klick-Handling prüfen).
+12. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
 
-13. **[UI/UX] "Übersetzen"-Bereich im Schedule-Editor entfernen** — vermutlich redundant/veraltet gegenüber aktuellem Übersetzungs-Workflow. Genauer Umfang noch zu klären.
+13. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
 
-14. **[UI/UX] Start-Button-Beschriftung im Telegram-Export-Tab** — aktuell "Telegram-Export → ODT erzeugen", soll zu "Starten" vereinfacht werden, da seit Feature 6 (Format-Wahl) nicht mehr zwingend ODT erzeugt wird, auch DOCX ist möglich.
+14. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
 
-*Rückmeldungen vom 2026-07-30, noch nicht analysiert/reproduziert — nächste Session: priorisieren und einzeln in Analyse-Prompts überführen.*
+*Rückmeldungen vom 2026-07-30. Punkte 1, 2, 6, 7, 8, 9–14 mittlerweile analysiert und gefixt (siehe Sessions 2026-08-21 oben), noch nicht committet. Offen bleiben nur Punkt 3 (Feature 5, Architekturentscheidung getroffen, Umsetzung nicht begonnen) und Punkt 5 (OCR-Auto-Vorschlag, nicht begonnen).*
 
 ---
 

@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QTableWidget, QTableWidgetItem, QFileDialog, QMessageBox, QHeaderView,
-    QCheckBox, QComboBox, QAbstractItemView
+    QComboBox, QAbstractItemView
 )
 
 from schedule_json import (
@@ -69,6 +69,17 @@ class ScheduleEditorTab(QWidget):
         # und Zeilenumbruch in den Titelzellen.
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # Punkt 12: Standardmäßig verlangt QTableWidget einen Doppelklick (oder
+        # F2/Enter) zum Editieren einer Zelle. CurrentChanged öffnet den Editor
+        # bereits, sobald eine Zelle per einfachem Klick (oder Tastatur) zur
+        # aktuellen Zelle wird - AnyKeyPressed/EditKeyPressed bleiben zusätzlich
+        # erhalten, damit Tippen bzw. F2/Enter weiterhin funktionieren. Die
+        # Checkbox-Spalte (6) ist davon unberührt, da sie keinen Text-Editor hat.
+        self.table.setEditTriggers(
+            QAbstractItemView.EditTrigger.CurrentChanged
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+            | QAbstractItemView.EditTrigger.AnyKeyPressed
+        )
         self.table.setHorizontalHeaderLabels([
             self.tr("Datum\n(YYYY-MM-DD)"),
             self.tr("Von\n(HH:MM[:SS])"),
@@ -77,7 +88,7 @@ class ScheduleEditorTab(QWidget):
             self.tr("Untertitel (optional)"),
             self.tr("Links / @Benutzernamen (mit ; trennen)"),
             self.tr("Nach Datum holen"),
-            self.tr("Kanal (optional)"),
+            self.tr("Kanal (siehe Hinweis)"),
         ])
         self.table.verticalHeader().setVisible(False)
         hh = self.table.horizontalHeader()
@@ -105,8 +116,9 @@ class ScheduleEditorTab(QWidget):
             model.setHeaderData(3, Qt.Orientation.Horizontal, self.tr("Titel des Abschnitts"), Qt.ItemDataRole.ToolTipRole)
             model.setHeaderData(4, Qt.Orientation.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ItemDataRole.ToolTipRole)
             model.setHeaderData(5, Qt.Orientation.Horizontal, self.tr("Telegram-Links oder @Benutzernamen; mehrere mit ; trennen"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(6, Qt.Orientation.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(7, Qt.Orientation.Horizontal, self.tr("Spezifischer Kanal für diesen Abschnitt (optional)"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(6, Qt.Orientation.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden. Wenn abgewählt, werden stattdessen die Links dieser Zeile verwendet (Von/Bis werden dann ignoriert)."), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(7, Qt.Orientation.Horizontal, self.tr("Kanal für diesen Abschnitt. Erforderlich, wenn 'Nach Datum holen' aktiv ist und kein Default-Channel gesetzt ist - sonst wird der Lauf fehlschlagen. Ohne 'Nach Datum holen' wird diese Spalte nicht benötigt (Links gelten dann)."), Qt.ItemDataRole.ToolTipRole)
+        self.table.itemChanged.connect(self._on_table_item_changed)
         lay.addWidget(self.table)
 
         # Section actions
@@ -122,22 +134,33 @@ class ScheduleEditorTab(QWidget):
         lay.addLayout(sec_bar)
 
         # Bottom run bar
+        # Punkt 13: Die frühere eigene "Übersetzen"/Modus/Sprache-Auswahl
+        # dieses Tabs wurde entfernt - sie war ein veralteter Duplikat der
+        # tatsächlich wirksamen, persistierten Einstellungen im
+        # "Telegram-Export"-Tab (dort: cb_translate/mode_combo/lang_edit in
+        # ScheduleTab, siehe ui/app.py). _run_now() sprang beim Start ohnehin
+        # in diesen Tab und überschrieb dessen Einstellungen stumm mit den
+        # hier lokal (und nicht persistent) gewählten Werten - verwirrend und
+        # redundant. Jetzt gilt beim Starten einfach das, was im
+        # Telegram-Export-Tab bereits konfiguriert ist.
         run_bar = QHBoxLayout(); run_bar.setSpacing(8)
-        self.translate_cb = QCheckBox(self.tr("Übersetzen"))
-        self.mode_combo = QComboBox(); self.mode_combo.addItems(["inline", "end", "separate"])
-        self.lang_edit = QLineEdit(); self.lang_edit.setPlaceholderText("de")
-        run_bar.addWidget(self.translate_cb)
-        run_bar.addWidget(QLabel(self.tr("Modus:")))
-        run_bar.addWidget(self.mode_combo)
-        run_bar.addWidget(QLabel(self.tr("Sprache:")))
-        run_bar.addWidget(self.lang_edit)
-        self.btn_run = QPushButton(self.tr("Telegram-Export → ODT erzeugen")); self.btn_run.clicked.connect(self._run_now)
+        # "Speichern & Starten" statt nur "Starten": der Klick speichert die
+        # Schedule-Datei, wechselt in den Telegram-Export-Tab und startet dort
+        # den Lauf - eine reine "Starten"-Beschriftung würde das Speichern
+        # verschweigen (siehe auch Punkt 14, dort trifft "Starten" zu, weil
+        # der dortige Button nur startet, nicht zusätzlich speichert/wechselt).
+        self.btn_run = QPushButton(self.tr("Speichern && Starten")); self.btn_run.clicked.connect(self._run_now)
         run_bar.addStretch(1)
         run_bar.addWidget(self.btn_run)
         lay.addLayout(run_bar)
 
         # Info
-        info = QLabel(self.tr("Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden."))
+        info = QLabel(self.tr(
+            "Hinweis: Datum im Format YYYY-MM-DD. Bei aktiviertem 'Nach Datum holen' muss ein Kanal "
+            "bekannt sein - entweder in der Spalte 'Kanal' dieser Zeile oder als Default-Channel oben "
+            "für alle Abschnitte. Ist 'Nach Datum holen' abgewählt, werden stattdessen die angegebenen "
+            "Links verwendet und Von/Bis sowie Kanal spielen keine Rolle."
+        ))
         info.setWordWrap(True)
         lay.addWidget(info)
 
@@ -171,10 +194,9 @@ class ScheduleEditorTab(QWidget):
             self.tr("Untertitel (optional)"),
             self.tr("Links / @Benutzernamen (mit ; trennen)"),
             self.tr("Nach Datum holen"),
-            self.tr("Kanal (optional)"),
+            self.tr("Kanal (siehe Hinweis)"),
         ])
-        self.translate_cb.setText(self.tr("Übersetzen"))
-        self.btn_run.setText(self.tr("Schedule → ODT erzeugen"))
+        self.btn_run.setText(self.tr("Speichern && Starten"))
         if hasattr(self, "add_position"):
             current_data = self.add_position.currentData()
             self._set_add_position_items()
@@ -235,10 +257,20 @@ class ScheduleEditorTab(QWidget):
                 it_sub.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 4, it_sub)
                 self.table.setItem(row, 5, QTableWidgetItem(";".join(sec.links)))
-                cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                # ItemIsEditable bewusst NICHT gesetzt (siehe Punkt 12): ohne
+                # das würde der neue CurrentChanged-EditTrigger versuchen,
+                # beim Anklicken auch über der Checkbox einen Text-Editor zu
+                # öffnen - die Checkbox selbst wird über ItemIsUserCheckable
+                # unabhängig davon bedienbar.
+                cb = QTableWidgetItem()
+                cb.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 cb.setCheckState(Qt.CheckState.Checked if sec.fetch_by_date else Qt.CheckState.Unchecked)
                 self.table.setItem(row, 6, cb)
                 self.table.setItem(row, 7, QTableWidgetItem(sec.channel or ""))
+                # itemChanged wird während self._building unterdrückt (siehe
+                # _on_table_item_changed) - Von/Bis-Zustand daher hier explizit
+                # nachziehen (Punkt 11).
+                self._update_time_fields_enabled(row)
         finally:
             self._building = False
 
@@ -273,6 +305,22 @@ class ScheduleEditorTab(QWidget):
             if not title_text:
                 raise ValueError(self.tr("Titel fehlt in Zeile {row}").format(row=row+1))
             links = [seg.strip() for seg in links_text.split(";") if seg.strip()]
+            # Punkt 10: Eingabe-Plausibilitätsprüfung, die die von
+            # schedule_json.schedule_to_blocks() ohnehin durchgesetzte Regel
+            # (siehe dort: "benötigt einen default_channel, da keine Links
+            # angegeben sind") schon hier beim Speichern/Start meldet - statt
+            # erst tief im Lauf nach Telegram-Login und Zeichen-Vorschau.
+            effective_channel = channel_text or default_channel
+            if fetch_flag and not effective_channel:
+                raise ValueError(self.tr(
+                    "Zeile {row}: 'Nach Datum holen' ist aktiv, aber es ist weder ein Kanal für diesen "
+                    "Abschnitt (Spalte 'Kanal') noch ein Default-Channel gesetzt."
+                ).format(row=row + 1))
+            if not fetch_flag and not links:
+                raise ValueError(self.tr(
+                    "Zeile {row}: 'Nach Datum holen' ist abgewählt, aber es sind keine Links angegeben. "
+                    "Dieser Abschnitt würde keine Nachrichten enthalten."
+                ).format(row=row + 1))
             # Zeiten als Strings speichern; Validierung übernimmt schedule_json.
             sections.append(ScheduleSection(
                 date=date_obj,
@@ -355,15 +403,53 @@ class ScheduleEditorTab(QWidget):
         it_sub.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.setItem(insert_pos, 4, it_sub)
         self.table.setItem(insert_pos, 5, QTableWidgetItem(""))
-        cb = QTableWidgetItem(); cb.setFlags(cb.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        # ItemIsEditable bewusst NICHT gesetzt (siehe Punkt 12, analog zu
+        # _populate_from_schedule oben).
+        cb = QTableWidgetItem()
+        cb.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
         cb.setCheckState(Qt.CheckState.Checked)
         self.table.setItem(insert_pos, 6, cb)
         self.table.setItem(insert_pos, 7, QTableWidgetItem(""))
+        self._update_time_fields_enabled(insert_pos)
 
     def _remove_row(self) -> None:
         row = self.table.currentRow()
         if row >= 0:
             self.table.removeRow(row)
+
+    def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
+        """Reagiert auf Änderungen an Tabellenzellen - aktuell nur relevant für
+        die 'Nach Datum holen'-Checkbox (Spalte 6): schaltet Von/Bis (Punkt 11)
+        für die jeweilige Zeile passend um. Während _populate_from_schedule()
+        (self._building) unterdrückt, da dort jede Zeile am Ende explizit
+        _update_time_fields_enabled() aufruft (vermeidet N unnötige
+        Zwischenaufrufe während des Befüllens)."""
+        if self._building:
+            return
+        if item.column() == 6:
+            self._update_time_fields_enabled(item.row())
+
+    def _update_time_fields_enabled(self, row: int) -> None:
+        """Punkt 11: Von/Bis (Spalten 1/2) sind nur relevant, wenn diese Zeile
+        per 'Nach Datum holen' (Spalte 6) aus dem Kanal lädt - bei expliziten
+        Links (Checkbox abgewählt) werden sie ignoriert (siehe
+        _collect_schedule/schedule_json). Werden hier ausgegraut und
+        nicht-editierbar geschaltet statt geleert, damit ein zuvor
+        eingegebener Wert beim Wiederanschalten erhalten bleibt."""
+        fetch_item = self.table.item(row, 6)
+        enabled = True
+        if fetch_item is not None and (fetch_item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
+            enabled = fetch_item.checkState() == Qt.CheckState.Checked
+        for col in (1, 2):
+            cell = self.table.item(row, col)
+            if cell is None:
+                continue
+            flags = cell.flags()
+            if enabled:
+                flags |= (Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable)
+            else:
+                flags &= ~(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable)
+            cell.setFlags(flags)
 
     def _run_now(self) -> None:
         # Ensure saved JSON exists
@@ -372,32 +458,33 @@ class ScheduleEditorTab(QWidget):
             self._save_doc()
             if self.current_path is None or not Path(str(self.current_path)).exists():
                 return
-        # Switch to Schedule tab and reuse its mechanism
+        # Switch to Schedule tab and reuse its mechanism. Punkt 13: die
+        # Übersetzungseinstellungen kommen jetzt ausschließlich vom
+        # Telegram-Export-Tab (st.cb_translate/mode_combo/lang_edit) - dieser
+        # Tab hat dafür keine eigene, davon abweichende Auswahl mehr.
         try:
             mw = self.window()
-            translate = self.translate_cb.isChecked()
-            target_lang = (self.lang_edit.text() or "").strip() or ("de" if translate else "de")
             if hasattr(mw, "schedule_tab") and hasattr(mw, "tabs"):
                 st = getattr(mw, "schedule_tab")
                 tabs = getattr(mw, "tabs", None)
                 st.schedule_edit.setText(str(self.current_path))
-                st.cb_translate.setChecked(translate)
-                st.mode_combo.setCurrentText(self.mode_combo.currentText())
-                st.lang_edit.setText(target_lang)
                 if tabs is not None and hasattr(tabs, "setCurrentWidget"):
                     tabs.setCurrentWidget(st)
                 st.run_schedule_file()
             else:
-                # Fallback: basic run (no UI progress)
+                # Fallback: basic run (no UI progress), ohne Übersetzung - die
+                # dafür nötigen, persistierten Einstellungen leben im
+                # Telegram-Export-Tab (mw.schedule_tab), der in diesem Zweig
+                # nicht existiert.
                 from .app import ScheduleWorker  # type: ignore
                 from PySide6.QtCore import QThread
                 import threading
                 mapping_event = threading.Event()
                 worker = ScheduleWorker(
                     schedule_path=Path(str(self.current_path)),
-                    translate=translate,
-                    translation_mode=self.mode_combo.currentText(),
-                    target_lang=target_lang,
+                    translate=False,
+                    translation_mode="inline",
+                    target_lang="de",
                     include_images=True,
                     include_emojis=True,
                     mapping_event=mapping_event,
