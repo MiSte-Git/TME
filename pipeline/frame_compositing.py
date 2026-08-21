@@ -16,6 +16,7 @@ pipeline/extract_ce.py (ensure_pngs_for_doc_ids).
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -178,6 +179,36 @@ def composite_pngs(frame_paths: Sequence[Path], out_png: Path) -> bool:
     return True
 
 
+def _find_bundled_tool(name: str) -> "str | None":
+    """Sucht ein externes Kommandozeilen-Tool (ffmpeg/ffprobe) zuerst auf
+    PATH (Dev-Umgebung/System-Installation), dann im PyInstaller-Bundle-
+    Verzeichnis selbst (sys._MEIPASS bei --onefile, sonst das Verzeichnis
+    der ausfuehrbaren Datei bei --onedir).
+
+    Hintergrund (TME-Backlog.md, Punkt 1): shutil.which() allein findet nur
+    Tools, die auf PATH liegen - ein gebuendeltes ffmpeg (siehe --add-binary
+    in scripts/build_win.ps1, build_linux.sh, TME_mac.spec) landet im
+    Bundle-Root, nicht auf PATH. Wird ffmpeg auf dem Build-Rechner nicht
+    gefunden, buendeln diese Skripte es gar nicht erst mit - dann bleibt
+    diese Funktion hier ohne Fund (kein Hard-Fail, siehe render_webm_multiframe).
+    """
+    import shutil
+
+    found = shutil.which(name)
+    if found:
+        return found
+
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    if not bundle_dir and getattr(sys, "frozen", False):
+        bundle_dir = str(Path(sys.executable).parent)
+    if bundle_dir:
+        exe_name = f"{name}.exe" if sys.platform.startswith("win") else name
+        candidate = Path(bundle_dir) / exe_name
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
 def render_tgs_multiframe(
     raw_path: Path,
     out_png: Path,
@@ -185,56 +216,67 @@ def render_tgs_multiframe(
     size: "int | None" = None,
 ) -> bool:
     """Rendert mehrere ueber die Composition-Laenge verteilte Frames aus einer
-    gzip-komprimierten TGS/Lottie-Datei (unabhaengig von deren tatsaechlicher
-    Dateiendung - wird hier immer explizit entpackt, siehe Hinweis unten) via
-    lottie_convert.py und komponiert sie per composite_pngs() zu out_png.
+    gzip-komprimierten TGS/Lottie-Datei ueber die lottie-Python-Bibliothek
+    (direkter In-Prozess-Aufruf, nicht mehr per Subprocess) und komponiert
+    sie per composite_pngs() zu out_png.
 
-    Hinweis: lottie_convert.py waehlt den Importer anhand der Dateiendung -
-    eine z.B. als "<id>.bin" zwischengespeicherte Rohdatei wuerde mit
-    "Unknown importer" fehlschlagen. Deshalb wird hier immer zuerst nach
-    .json entpackt, bevor lottie_convert.py aufgerufen wird.
+    Hinweis (TME-Backlog.md, Punkt 1): Vor diesem Fix wurde hierfuer das
+    externe Skript lottie_convert.py per subprocess ueber sys.executable
+    aufgerufen. In einem PyInstaller-gefrorenen Build zeigt sys.executable
+    aber auf die gefrorene TME.exe selbst, nicht auf einen echten
+    Python-Interpreter - lottie_convert.py liesse sich darueber gar nicht
+    ausfuehren, selbst wenn die Datei mitgebuendelt wuerde (das eigentliche
+    Ziel des ersten Fix-Versuchs). Der direkte Bibliotheksaufruf umgeht das
+    Problem vollstaendig: PyInstaller buendelt die lottie-Bibliothek
+    automatisch, weil sie hier direkt importiert wird - kein manuelles
+    --add-data/--add-binary noetig (anders als ffmpeg fuer den WEBM-Pfad,
+    siehe render_webm_multiframe/_find_bundled_tool).
+
+    Benoetigt zusaetzlich zu 'lottie' auch 'cairosvg' als PNG-Render-Backend
+    von lottie (siehe requirements.txt) - ohne cairosvg ist
+    lottie.exporters.cairo.export_png gar nicht definiert und der Import
+    schlaegt fehl (siehe except ImportError unten). ACHTUNG: cairosvg haengt
+    nativ von libcairo ab - ob PyInstaller das auf Windows zuverlaessig mit-
+    buendelt, ist bisher NICHT durch einen echten Build/Install/Export-
+    Zyklus verifiziert (siehe Projekt-Prinzip "nur echte Laeufe zaehlen" in
+    TME-Backlog.md) und sollte als erster Schritt nach diesem Fix geprueft
+    werden.
 
     Gibt True zurueck, wenn mindestens ein Frame erfolgreich gerendert und
-    out_png geschrieben wurde (sonst False, z.B. wenn lottie_convert.py nicht
-    installiert ist oder die Datei kein gueltiges gzip/Lottie-JSON ist).
+    out_png geschrieben wurde (sonst False, z.B. wenn lottie/cairosvg nicht
+    installiert sind oder die Datei kein gueltiges gzip/Lottie-JSON ist).
     """
-    import gzip
-    import json
-    import shutil
-    import subprocess
-    import sys
     import tempfile
 
-    lc = shutil.which("lottie_convert.py")
-    if not lc:
+    try:
+        from lottie.parsers.tgs import parse_tgs
+        from lottie.exporters.cairo import export_png
+    except ImportError:
         return False
+
+    try:
+        animation = parse_tgs(str(raw_path))
+    except Exception:
+        return False
+
+    if size:
+        try:
+            animation.scale(size, size)
+        except Exception:
+            pass
+
+    ip = int(animation.in_point or 0)
+    op = int(animation.out_point or 0)
+    last_frame = max(op - 1, ip)
+    indices = sample_indices(ip, last_frame, frame_samples)
 
     with tempfile.TemporaryDirectory(prefix="tgs_render_") as tmpdir:
         tmpdir_p = Path(tmpdir)
-        json_path = tmpdir_p / "anim.json"
-        try:
-            with gzip.open(raw_path, "rb") as gz, open(json_path, "wb") as jf:
-                jf.write(gz.read())
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-        except Exception:
-            return False
-
-        ip = int(data.get("ip", 0) or 0)
-        op = int(data.get("op", 0) or 0)
-        last_frame = max(op - 1, ip)
-        indices = sample_indices(ip, last_frame, frame_samples)
-
         frame_files: list[Path] = []
         for idx in indices:
             frame_png = tmpdir_p / f"frame_{idx}.png"
-            # lottie_convert.py explizit ueber sys.executable starten statt
-            # direkt auszufuehren: dessen Shebang-Zeile bricht, wenn der
-            # venv-Pfad ein Leerzeichen enthaelt (haeufig bei diesem Projekt).
-            cmd = [sys.executable, lc, str(json_path), str(frame_png), "--frame", str(idx)]
-            if size:
-                cmd += ["--width", str(size), "--height", str(size)]
             try:
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                export_png(animation, str(frame_png), frame=idx)
             except Exception:
                 continue
             if frame_png.exists():
@@ -252,24 +294,32 @@ def render_webm_multiframe(
     Videodatei (.webm) via ffmpeg/ffprobe-Seeks und komponiert sie per
     composite_pngs() zu out_png.
 
+    ffmpeg/ffprobe werden ueber _find_bundled_tool() gesucht (PATH zuerst,
+    dann das PyInstaller-Bundle-Verzeichnis, siehe --add-binary in
+    scripts/build_win.ps1/build_linux.sh/TME_mac.spec). Die Aufrufe selbst
+    laufen ueber subprocess_utils.run_hidden(), das unter Windows das
+    andernfalls kurz aufpoppende Konsolenfenster unterdrueckt (TME-Backlog.md
+    Punkt 8).
+
     Gibt True zurueck, wenn mindestens ein Frame erfolgreich extrahiert und
     out_png geschrieben wurde (sonst False, z.B. wenn ffmpeg nicht installiert
     ist). Ist ffprobe nicht verfuegbar oder liefert keine Dauer, wird auf ein
     einzelnes Frame bei Zeitstempel 0 zurueckgefallen (bisheriges Verhalten).
     """
-    import shutil
     import subprocess
     import tempfile
 
-    ff = shutil.which("ffmpeg")
+    from .subprocess_utils import run_hidden
+
+    ff = _find_bundled_tool("ffmpeg")
     if not ff:
         return False
 
     duration = 0.0
-    ffprobe = shutil.which("ffprobe")
+    ffprobe = _find_bundled_tool("ffprobe")
     if ffprobe:
         try:
-            proc = subprocess.run(
+            proc = run_hidden(
                 [
                     ffprobe, "-v", "error", "-show_entries", "format=duration",
                     "-of", "default=noprint_wrappers=1:nokey=1", str(raw_path),
@@ -292,7 +342,7 @@ def render_webm_multiframe(
                 "-frames:v", "1", "-pix_fmt", "rgba", str(frame_png),
             ]
             try:
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                run_hidden(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 continue
             if frame_png.exists():

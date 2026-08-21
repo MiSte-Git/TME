@@ -121,6 +121,45 @@ etc. sowie eingebettete Custom-Emojis API-seitig zuverlässig (Tag-Handling).
 Bei ChatGPT ist das Best-Effort per Prompt-Anweisung, ohne API-seitige
 Garantie - siehe `pipeline/translation/formatting.py` für Details.
 
+## DOCX-Export (LibreOffice/Pandoc)
+
+`output.make_docx: true` (bzw. die Formatwahl "Nur DOCX"/"ODT + DOCX" im UI)
+erzeugt zusätzlich zum ODT eine DOCX-Datei - dafür wird zur Laufzeit **eines**
+der folgenden Tools auf dem PATH benötigt, keines von beiden wird
+mitgebündelt oder automatisch installiert (siehe `pipeline/docx_convert.py`):
+
+- **LibreOffice** (`soffice`) - Standard (`output.converter: libreoffice`),
+  konvertiert headless (`--headless --convert-to docx`). Empfohlen, da meist
+  ohnehin für ODT-Betrachtung installiert.
+- **Pandoc** (`pandoc`) - Alternative (`output.converter: pandoc`), optional
+  mit eigener `pandoc_reference_docx`-Vorlage für Formatierung/Styles.
+
+Ist keines von beiden installiert, bricht die DOCX-Konvertierung mit einer
+klaren Fehlermeldung ab; das ODT bleibt in jedem Fall erhalten. Das UI warnt
+seit Kurzem bereits vor Start eines Laufs, wenn DOCX gewählt ist, aber kein
+Tool gefunden wird (Preflight-Check via `has_docx_converter()`).
+
+## Optionale Laufzeit-Abhängigkeiten (ffmpeg, cairosvg)
+
+Für animierte Custom-Emojis (Telegram-"Premium"-Emoji-Sets) werden zwei
+weitere Tools/Bibliotheken herangezogen - fehlen sie, werden betroffene
+Emojis als Text-Platzhalter (🔠 bzw. `[CE:<id>]`) statt als Bild ausgegeben,
+kein Absturz:
+
+- **ffmpeg** (inkl. `ffprobe`) auf dem PATH - für WEBM-Custom-Emojis. Die
+  Build-Skripte (`scripts/build_win.ps1`, `build_linux.sh`, `TME_mac.spec`)
+  bündeln ffmpeg/ffprobe automatisch mit ins Bundle, **wenn sie auf dem
+  Build-Rechner gefunden werden** - für den Endnutzer ist dann keine eigene
+  Installation nötig. Ist ffmpeg beim Bauen nicht vorhanden, bleibt
+  WEBM-Rendering in diesem Build deaktiviert (Build-Log warnt entsprechend).
+- **cairosvg** (Python-Paket, siehe `requirements.txt`) - Render-Backend der
+  `lottie`-Bibliothek für TGS/Lottie-Custom-Emojis (`pipeline/frame_compositing.py`).
+  Wird wie jede andere Python-Abhängigkeit von PyInstaller automatisch
+  mitgebündelt. cairosvg hängt nativ von libcairo ab - ob das PyInstaller
+  unter Windows zuverlässig bündelt, ist noch nicht durch einen echten
+  Build/Install/Export-Zyklus verifiziert; im Zweifel nach einem Release-Build
+  gezielt mit einem TGS-Custom-Emoji testen.
+
 ## Übersetzungsdateien (*.qm)
 
 - UI-Texte sind lokalisiert. Die kompilierten Qt-Übersetzungen (`ui/translations/app_*.qm`) werden mit ausgeliefert.
@@ -136,8 +175,13 @@ cd ui/translations
 Voraussetzungen (einmalig):
 
 ```bash
-python3 -m pip install pyinstaller PySide6 telethon odfpy pillow PyYAML lottie keyring
+python3 -m pip install pyinstaller PySide6 telethon odfpy pillow PyYAML lottie cairosvg keyring
 ```
+
+(`cairosvg` wird von `lottie` als PNG-Render-Backend benötigt, siehe
+"Optionale Laufzeit-Abhängigkeiten" oben - ohne cairosvg im Build-venv
+schlägt der Import in `pipeline/frame_compositing.py` fehl und TGS-Custom-
+Emojis bleiben Text-Platzhalter.)
 
 ### macOS
 

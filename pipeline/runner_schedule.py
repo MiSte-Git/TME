@@ -38,6 +38,7 @@ from .assets import get_custom_emoji_cache, load_custom_emoji_alts, load_assets
 from .fetch import ensure_join_channel, parse_channel, parse_link
 from .odt_writer import write_odt_for_records, write_odt_for_record_pairs
 from .docx_convert import convert_odt_to_docx, DocxConversionError
+from .lettermap import lettermap_file_path
 from .speech_to_text import transcribe_voice, SpeechToTextError
 from .runs import EmojiRun, ImageRun, LineBreak, RecordPair, RunsRecord, TextRun, build_runs_from_twe
 from .message_collect import collect_messages_for_schedule
@@ -352,6 +353,18 @@ class ScheduleRunResult:
     docx_path: Path | None = None
     docx_translation_path: Path | None = None
     docx_error: str | None = None
+    # Übersetzungsfehler/-warnungen (fehlgeschlagene TranslationError- und
+    # unerwartete Exception-Fälle, siehe Except-Blöcke unten sowie
+    # tr_result.warnings aus translate_runs()) - VORHER nur ins Log
+    # (logger.warning/error) und als transiente _notify()-Statuszeile
+    # geschrieben, die von der nächsten Fortschrittsmeldung sofort wieder
+    # überschrieben wurde (siehe ui/app.py::_on_worker_status) und am
+    # Lauf-Ende endgültig durch "Fertig." ersetzt - ein Nutzer bekam einen
+    # Fehlschlag praktisch nie zu sehen (TME-Backlog.md Punkt 6: "Dokument
+    # wird mit leerer Übersetzung erstellt, ohne Fehlermeldung"). Analog zu
+    # docx_error jetzt Teil des Ergebnisses, damit ui/app.py::_on_worker_finished
+    # es dauerhaft im Abschluss-Dialog anzeigen kann.
+    translation_errors: List[str] | None = None
     # Für Log-/Konsolenausgabe (siehe _notify) - bewusst nicht übersetzt.
     translation_cost_summary: List[str] | None = None
     # Rohdaten (provider, calls, char_count, input_tokens, output_tokens,
@@ -545,17 +558,37 @@ async def run_schedule(
 
     translation_provider_obj = None
     cost_tracker = TranslationCostTracker()
+    # Übersetzungsfehler/-warnungen dieses Laufs, gesammelt für
+    # ScheduleRunResult.translation_errors (siehe dort - macht sie im
+    # Abschluss-Dialog sichtbar statt nur transient/geloggt, TME-Backlog.md
+    # Punkt 6).
+    translation_errors: List[str] = []
+    _TRANSLATION_ERRORS_CAP = 20
+
+    def _record_translation_error(msg: str) -> None:
+        # Deckelt die im Abschluss-Dialog gesammelt angezeigten Fehler (z.B.
+        # bei ungültigem API-Key schlägt sonst JEDE Nachricht einzeln fehl) -
+        # der vollständige Verlauf bleibt in jedem Fall im Log (tme.log).
+        if len(translation_errors) < _TRANSLATION_ERRORS_CAP:
+            translation_errors.append(msg)
+        elif len(translation_errors) == _TRANSLATION_ERRORS_CAP:
+            translation_errors.append(
+                QCoreApplication.translate(
+                    "RunnerSchedule", "… weitere Übersetzungsfehler nur im Log (tme.log)."
+                )
+            )
+
     if translate and effective_translation_provider != "telegram":
         try:
             translation_provider_obj = get_provider(effective_translation_provider, translation_cfg)
         except TranslationError as exc:
-            _notify(
-                QCoreApplication.translate(
-                    "RunnerSchedule",
-                    "Warnung: Übersetzungs-Provider '{provider}' nicht verfügbar "
-                    "({exc}). Übersetzung wird für diesen Lauf übersprungen.",
-                ).format(provider=effective_translation_provider, exc=exc)
-            )
+            err_msg = QCoreApplication.translate(
+                "RunnerSchedule",
+                "Warnung: Übersetzungs-Provider '{provider}' nicht verfügbar "
+                "({exc}). Übersetzung wird für diesen Lauf übersprungen.",
+            ).format(provider=effective_translation_provider, exc=exc)
+            _notify(err_msg)
+            _record_translation_error(err_msg)
             translate = False
 
     # Ohne aktive Uebersetzung ergibt die Zweispalten-Tabelle (Original|
@@ -665,7 +698,7 @@ async def run_schedule(
             sec_topic_id if sec_topic_id is not None else "-",
         )
 
-    letter_map_path = Path("data/letter_map.json")
+    letter_map_path = lettermap_file_path()
 
     def _load_letter_map_data() -> tuple[Dict[str, str], set[str]]:
         letter_map: Dict[str, str] = {}
@@ -1055,7 +1088,7 @@ async def run_schedule(
                 _notify(QCoreApplication.translate("RunnerSchedule", "Lettermap-UI geöffnet. Bitte Mapping ergänzen und Fenster schließen…"))
                 while proc.poll() is None:
                     try:
-                        letter_map_path = Path("data/letter_map.json")
+                        letter_map_path = lettermap_file_path()
                         if letter_map_path.exists():
                             data = json.loads(letter_map_path.read_text(encoding="utf-8"))
                             if isinstance(data, dict):
@@ -1430,7 +1463,9 @@ async def run_schedule(
                             )
                             cost_tracker.add(tr_result)
                             for w in tr_result.warnings:
-                                _notify(QCoreApplication.translate("RunnerSchedule", "Warnung (Übersetzung, {provider}): {w}").format(provider=effective_translation_provider, w=w))
+                                w_msg = QCoreApplication.translate("RunnerSchedule", "Warnung (Übersetzung, {provider}): {w}").format(provider=effective_translation_provider, w=w)
+                                _notify(w_msg)
+                                _record_translation_error(w_msg)
                             runs_tr = translated_runs
                         if runs_tr is not None:
                             ce_map = get_custom_emoji_cache()
@@ -1479,14 +1514,18 @@ async def run_schedule(
                             "Übersetzung (%s) für Nachricht %s fehlgeschlagen: %s",
                             effective_translation_provider, msg.id, exc,
                         )
-                        _notify(QCoreApplication.translate("RunnerSchedule", "Warnung: Übersetzung ({provider}) für Nachricht {msg_id} fehlgeschlagen: {exc}").format(provider=effective_translation_provider, msg_id=msg.id, exc=exc))
+                        err_msg = QCoreApplication.translate("RunnerSchedule", "Warnung: Übersetzung ({provider}) für Nachricht {msg_id} fehlgeschlagen: {exc}").format(provider=effective_translation_provider, msg_id=msg.id, exc=exc)
+                        _notify(err_msg)
+                        _record_translation_error(err_msg)
                     except Exception as exc:
                         logger.error(
                             "Unerwarteter Fehler bei Übersetzung (%s) für Nachricht %s: %s",
                             effective_translation_provider, msg.id, exc,
                             exc_info=True,
                         )
-                        _notify(QCoreApplication.translate("RunnerSchedule", "Unerwarteter Fehler bei Übersetzung ({provider}) für Nachricht {msg_id}: {exc}").format(provider=effective_translation_provider, msg_id=msg.id, exc=exc))
+                        err_msg = QCoreApplication.translate("RunnerSchedule", "Unerwarteter Fehler bei Übersetzung ({provider}) für Nachricht {msg_id}: {exc}").format(provider=effective_translation_provider, msg_id=msg.id, exc=exc)
+                        _notify(err_msg)
+                        _record_translation_error(err_msg)
 
                 if want_side_by_side:
                     translation_record_for_store = _duplicate_images_into_translation_record(
@@ -1678,6 +1717,7 @@ async def run_schedule(
             docx_path=docx_path,
             docx_translation_path=docx_translation_path,
             docx_error="; ".join(docx_errors) if docx_errors else None,
+            translation_errors=translation_errors or None,
             translation_cost_summary=cost_summary_lines,
             translation_cost_totals=cost_totals,
             deepl_quota_state=deepl_quota_state,

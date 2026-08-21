@@ -211,6 +211,27 @@ if (Test-Path $FlagsDir) {
 }
 $DataArgs += @("--add-data", "$VersionFile;.")
 
+# ffmpeg/ffprobe fuer WEBM-Custom-Emoji-Rendering (siehe
+# pipeline/frame_compositing.py::render_webm_multiframe/_find_bundled_tool) -
+# nur gebuendelt, wenn auf dem Build-Rechner via PATH gefunden. Kein
+# Hard-Fail ohne die beiden: WEBM-Rendering faellt dann wie bisher auf
+# "kein PNG" zurueck (siehe TME-Backlog.md Punkt 1). Landet im Bundle-Root
+# (".") - _find_bundled_tool() sucht dort explizit, wenn PATH nichts liefert.
+$FfmpegCmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
+if ($FfmpegCmd) {
+  $DataArgs += @("--add-binary", "$($FfmpegCmd.Source);.")
+  Write-Host "ffmpeg gefunden, wird gebuendelt: $($FfmpegCmd.Source)"
+} else {
+  Write-Warning "ffmpeg nicht auf PATH gefunden - WEBM-Custom-Emoji-Rendering bleibt in diesem Build deaktiviert."
+}
+$FfprobeCmd = Get-Command ffprobe -ErrorAction SilentlyContinue
+if ($FfprobeCmd) {
+  $DataArgs += @("--add-binary", "$($FfprobeCmd.Source);.")
+  Write-Host "ffprobe gefunden, wird gebuendelt: $($FfprobeCmd.Source)"
+} else {
+  Write-Warning "ffprobe nicht auf PATH gefunden - WEBM-Multi-Frame-Sampling faellt in diesem Build auf Frame 0 zurueck."
+}
+
 Write-Host "Building EXE via PyInstaller..."
 # Alle Flags zu EINEM Array zusammenfassen und nur einmal splatten (@PyInstallerArgs).
 # Mehrere getrennte @Array-Splats in einer einzigen backtick-fortgesetzten

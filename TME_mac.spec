@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+import shutil
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent
@@ -30,6 +31,20 @@ for p in project_root.glob("ui/translations/app_*.qm"):
 for p in project_root.glob("ui/assets/flags/*.png"):
     _datas.append((str(p), "ui/assets/flags"))
 
+# ffmpeg/ffprobe fuer WEBM-Custom-Emoji-Rendering (siehe
+# pipeline/frame_compositing.py::render_webm_multiframe/_find_bundled_tool) -
+# nur gebuendelt, wenn auf dem Build-Rechner via PATH gefunden. Kein
+# Hard-Fail ohne die beiden: WEBM-Rendering faellt dann wie bisher auf
+# "kein PNG" zurueck (siehe TME-Backlog.md Punkt 1). Landet im Bundle-Root
+# (".") - _find_bundled_tool() sucht dort explizit, wenn PATH nichts liefert.
+_binaries = []
+_ffmpeg_bin = shutil.which("ffmpeg")
+if _ffmpeg_bin:
+    _binaries.append((_ffmpeg_bin, "."))
+_ffprobe_bin = shutil.which("ffprobe")
+if _ffprobe_bin:
+    _binaries.append((_ffprobe_bin, "."))
+
 block_cipher = None
 
 # keyring waehlt sein Backend zur Laufzeit dynamisch ueber importlib.metadata-
@@ -50,7 +65,7 @@ _keyring_hidden_imports = [
 a = Analysis(
     ['ui/app.py'],
     pathex=[str(project_root)],
-    binaries=[],
+    binaries=_binaries,
     datas=_datas,
     hiddenimports=_keyring_hidden_imports,
     hookspath=[],

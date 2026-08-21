@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
+
+from .subprocess_utils import run_hidden
 
 class DocxConversionError(RuntimeError):
     """Raised when DOCX conversion fails."""
@@ -23,6 +24,20 @@ def _lookup_pandoc() -> tuple[str, list[str]] | None:
     return None
 
 
+def has_docx_converter(prefer: str | None = None) -> bool:
+    """Preflight-Check: True, wenn LibreOffice (soffice) oder Pandoc auf PATH
+    gefunden wird (siehe TME-Backlog.md Punkt 7 - weder wird eines von
+    beiden mitgebündelt noch dokumentiert/installiert; docs/DEPLOY.md
+    erwähnte diese Voraussetzung bisher gar nicht). Von der UI genutzt, um
+    schon VOR einem Lauf zu warnen statt erst nach dem kompletten
+    Export/Übersetzungs-Durchlauf zu scheitern (siehe ui/app.py)."""
+    try:
+        _which_tool(prefer)
+        return True
+    except DocxConversionError:
+        return False
+
+
 def _which_tool(prefer: str | None = None) -> tuple[str, list[str]]:
     """Return (tool_name, base_command)."""
     prefer_norm = (prefer or "").strip().lower() or None
@@ -34,7 +49,8 @@ def _which_tool(prefer: str | None = None) -> tuple[str, list[str]]:
         choice = _lookup_libreoffice() or _lookup_pandoc()
     if not choice:
         raise DocxConversionError(
-            "Kein Konvertierungstool gefunden. Bitte LibreOffice (soffice) oder Pandoc installieren."
+            "Kein Konvertierungstool gefunden. Bitte LibreOffice (soffice) oder Pandoc installieren "
+            "(siehe docs/DEPLOY.md, Abschnitt DOCX-Export)."
         )
     return choice
 
@@ -62,7 +78,7 @@ def convert_odt_to_docx(
     tool, base_cmd = _which_tool(prefer)
     if tool == "libreoffice":
         cmd = base_cmd + ["--convert-to", "docx", "--outdir", str(destination_dir), str(odt_path)]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = run_hidden(cmd, capture_output=True, text=True)
         if proc.returncode != 0 or not docx_path.exists():
             detail = proc.stderr.strip() or proc.stdout.strip()
             raise DocxConversionError(f"LibreOffice-Konvertierung fehlgeschlagen: {detail}")
@@ -75,12 +91,12 @@ def convert_odt_to_docx(
         if not ref_path.exists():
             raise DocxConversionError(f"Pandoc-Referenzdatei nicht gefunden: {ref_path}")
         cmd += ["--reference-doc", str(ref_path)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = run_hidden(cmd, capture_output=True, text=True)
     if proc.returncode != 0 or not docx_path.exists():
         detail = proc.stderr.strip() or proc.stdout.strip()
         raise DocxConversionError(f"Pandoc-Konvertierung fehlgeschlagen: {detail}")
     return docx_path
 
 
-__all__ = ["convert_odt_to_docx", "DocxConversionError"]
+__all__ = ["convert_odt_to_docx", "DocxConversionError", "has_docx_converter"]
 

@@ -152,6 +152,27 @@ if [ -d "$REPO_ROOT/ui/assets/flags" ]; then
   done < <(find "$REPO_ROOT/ui/assets/flags" -maxdepth 1 -name "*.png" -print0)
 fi
 
+# ffmpeg/ffprobe fuer WEBM-Custom-Emoji-Rendering (siehe
+# pipeline/frame_compositing.py::render_webm_multiframe/_find_bundled_tool) -
+# nur gebuendelt, wenn auf dem Build-Rechner via PATH gefunden. Kein
+# Hard-Fail ohne die beiden: WEBM-Rendering faellt dann wie bisher auf
+# "kein PNG" zurueck (siehe TME-Backlog.md Punkt 1). Landet im Bundle-Root
+# (".") - _find_bundled_tool() sucht dort explizit, wenn PATH nichts liefert.
+FFMPEG_BIN="$(command -v ffmpeg || true)"
+if [ -n "$FFMPEG_BIN" ]; then
+  DATA_ARGS+=(--add-binary "$FFMPEG_BIN:.")
+  echo "ffmpeg gefunden, wird gebuendelt: $FFMPEG_BIN"
+else
+  echo "Warnung: ffmpeg nicht auf PATH gefunden - WEBM-Custom-Emoji-Rendering bleibt in diesem Build deaktiviert."
+fi
+FFPROBE_BIN="$(command -v ffprobe || true)"
+if [ -n "$FFPROBE_BIN" ]; then
+  DATA_ARGS+=(--add-binary "$FFPROBE_BIN:.")
+  echo "ffprobe gefunden, wird gebuendelt: $FFPROBE_BIN"
+else
+  echo "Warnung: ffprobe nicht auf PATH gefunden - WEBM-Multi-Frame-Sampling faellt in diesem Build auf Frame 0 zurueck."
+fi
+
 echo "Building binary via PyInstaller..."
 "$BUILD_PY" -m PyInstaller --noconfirm "${CLEAN_ARGS[@]}" "${MODE_ARGS[@]}" \
   --windowed --name TME "${KEYRING_HIDDEN[@]}" "${DATA_ARGS[@]}" "$ENTRY"

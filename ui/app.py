@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 )
 
 from pipeline.runner_schedule import run_schedule, estimate_translatable_chars
+from pipeline.docx_convert import has_docx_converter
 from pipeline.runner_base_imports import ScheduleCancelled, TelegramSessionInvalid, TelegramCredentialsMissing
 from pipeline.translation.deepl_quota import load_quota_state as _load_deepl_quota_state, would_exceed as _deepl_would_exceed, set_local_reset_day as _set_deepl_local_reset_day
 from pipeline.translation.pricing import estimate_cost_from_chars
@@ -748,6 +749,27 @@ class ScheduleTab(QWidget):
         provider_val = str(self.provider_combo.currentData() or "telegram")
         if translate and not self._ensure_provider_api_key(provider_val):
             return
+        # Preflight statt Scheitern erst NACH dem kompletten Export-/
+        # Übersetzungs-Lauf: ohne LibreOffice/Pandoc bricht die DOCX-
+        # Konvertierung ohnehin ab (siehe pipeline/docx_convert.py), aber das
+        # ODT-Original ist dann schon fertig - das kostet bei aktivierter
+        # Übersetzung unnötig Zeit/API-Kosten, nur um am Ende dieselbe
+        # Fehlermeldung zu sehen, die hier schon vorab bekannt ist (siehe
+        # TME-Backlog.md Punkt 7 - weder Bundling noch Doku für diese
+        # Abhängigkeit vorhanden).
+        wants_docx = str(self.format_combo.currentData() or "odt") in ("docx", "both")
+        if wants_docx and not has_docx_converter():
+            ans = QMessageBox.warning(
+                self, self.tr("DOCX-Konvertierung nicht verfügbar"),
+                self.tr(
+                    "Weder LibreOffice (soffice) noch Pandoc wurden gefunden. DOCX-Export wird "
+                    "fehlschlagen (siehe docs/DEPLOY.md). Trotzdem nur mit ODT fortfahren?"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if ans != QMessageBox.StandardButton.Yes:
+                return
         target_lang = self.lang_edit.text().strip() or ("de" if translate else "de")
         source_lang = self.src_lang_combo.currentText().strip() or "de"
         self.btn_run.setEnabled(False)
@@ -931,6 +953,7 @@ class ScheduleTab(QWidget):
         docx_path = getattr(result, "docx_path", None)
         docx_translation_path = getattr(result, "docx_translation_path", None)
         docx_error = getattr(result, "docx_error", None)
+        translation_errors = getattr(result, "translation_errors", None)
         translation_cost_totals = getattr(result, "translation_cost_totals", None)
         lines: list[str] = []
         if odt_path is not None:
@@ -954,6 +977,14 @@ class ScheduleTab(QWidget):
             lines.append(self.tr("Übersetzungs-DOCX erzeugt: {path}").format(path=docx_translation_path))
         if docx_error:
             lines.append(self.tr("Warnung: DOCX-Konvertierung fehlgeschlagen: {err}").format(err=docx_error))
+        if translation_errors:
+            # Vorher gingen Übersetzungsfehler nur ins Log und in die
+            # transiente Statuszeile (sofort von der nächsten Fortschritts-
+            # meldung überschrieben) - der Nutzer bekam sie nie zu Gesicht,
+            # das Dokument wirkte fertig, obwohl Übersetzungen fehlten (siehe
+            # TME-Backlog.md Punkt 6, pipeline/runner_schedule.py::ScheduleRunResult).
+            lines.append(self.tr("Warnung(en) bei der Übersetzung:"))
+            lines.extend(f"– {e}" for e in translation_errors)
         msg = "\n".join(lines)
         self.status_label.setText(self.tr("Fertig."))
         # Übersetzungskosten bewusst NICHT im Popup, sondern dauerhaft in der
@@ -1016,8 +1047,9 @@ class ScheduleTab(QWidget):
         self.btn_open_output.setEnabled(True)
         if newly_visible:
             self._grow_window_for_newly_visible(newly_visible)
-        title = self.tr("Fertig (mit Warnung)") if docx_error else self.tr("Fertig")
-        if docx_error:
+        has_warning = bool(docx_error) or bool(translation_errors)
+        title = self.tr("Fertig (mit Warnung)") if has_warning else self.tr("Fertig")
+        if has_warning:
             QMessageBox.warning(self, title, msg)
         else:
             QMessageBox.information(self, title, msg)

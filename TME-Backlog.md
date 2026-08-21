@@ -40,14 +40,39 @@ Stack: Python, Telethon, PySide6, odfpy, PyInstaller. Ziel: Linux + Windows.
 
 ---
 
+## Session 2026-08-21 — Fixes für Punkt 1, 2, 6, 7, 8 (Claude, per Cowork)
+
+Analyse + Umsetzung im Arbeitsverzeichnis, **noch NICHT committet** und **noch NICHT durch einen echten Build/Install/Export-Zyklus verifiziert** (kein Windows-Zugriff in dieser Session) — nächster Schritt vor dem Committen: genau dieser reale Testlauf, insbesondere für Punkt 1 (siehe Risikohinweis dort). Wo möglich, wurden Teile der neuen Logik hier in einer Linux-Sandbox mit echten Tools (ffmpeg, LibreOffice, lottie+cairosvg) end-to-end gegen synthetische Test-Dateien verifiziert (kein simulierter Mock) — siehe je Punkt unten.
+
+1. **Custom-Emoji-Cache leer** — zwei unabhängige Fixes statt einem:
+   - WEBM-Pfad: ffmpeg/ffprobe werden jetzt in `build_win.ps1`/`build_linux.sh`/`TME_mac.spec` gebündelt (`--add-binary`, nur wenn auf dem Build-Rechner via PATH gefunden), plus Laufzeit-Fallback-Suche `_find_bundled_tool()` in `frame_compositing.py` (PATH → Bundle-Root). **Real verifiziert:** `render_webm_multiframe()` gegen ein synthetisches WEBM per echtem ffmpeg-Aufruf getestet, PNG korrekt erzeugt.
+   - TGS-Pfad: **nicht wie ursprünglich geplant gebündelt**, sondern `render_tgs_multiframe()` komplett umgebaut — ruft die `lottie`-Bibliothek jetzt direkt in-process auf (`lottie.parsers.tgs.parse_tgs` + `lottie.exporters.cairo.export_png`) statt `lottie_convert.py` per Subprocess. Grund: `lottie_convert.py` wurde bisher über `sys.executable` gestartet — in einem PyInstaller-gefrorenen Build zeigt das auf die gefrorene `TME.exe` selbst, nicht auf einen echten Python-Interpreter; das Skript wäre damit selbst nach Bundling gar nicht ausführbar gewesen. `requirements.txt` um `cairosvg` ergänzt (bisher nur indirekt vorausgesetzt, nirgends deklariert — ohne cairosvg ist `lottie.exporters.cairo.export_png` gar nicht definiert). **Real verifiziert:** `render_tgs_multiframe()` gegen eine synthetische, minimal gültige .tgs-Datei getestet (echter `lottie`+`cairosvg`-Aufruf, kein Mock) — 128×128-RGBA-PNG korrekt erzeugt.
+     **Restrisiko (noch offen):** cairosvg hängt nativ von libcairo ab; ob PyInstaller das unter Windows zuverlässig bündelt, ist NICHT verifiziert — erster Test nach diesem Fix: Release-Build mit einem echten TGS-Custom-Emoji-Export durchspielen.
+   - `extract_ce.py`: stille `except Exception: pass`-Blöcke geben jetzt eine `logger.warning()`-Zeile aus (auch wenn WEBM/TGS-Rendering ohne Exception `False` liefert, z.B. weil ein Tool fehlt) — der tote Import in `runner_schedule.py:1344` (Nebenbefund, kein aktiver Bug) wurde NICHT angefasst, war nicht Teil der beauftragten fünf Punkte.
+
+2. **Lettermap-Mapping auf Windows verschwunden** — Pfad-Umstellung umgesetzt (die bevorzugte Lösung aus der Analyse). Neue Funktion `lettermap_file_path()` in `pipeline/lettermap.py` löst `QStandardPaths.AppConfigLocation` auf (derselbe Ort wie `ui_theme.json`/`ui_lang.json`, siehe Punkt 4) und migriert einmalig eine vorhandene `data/letter_map.json` dorthin (Original bleibt erhalten). Fallback auf das alte CWD-relative Verhalten, wenn PySide6/QApplication nicht verfügbar ist (reine CLI-Nutzung). Alle vier weiteren Stellen, die den alten Pfad hart codiert hatten (`lettermap_tools.py`, `runner_by_ids.py`, `runner_schedule.py` ×2, `emoji_pipeline.py`), wurden auf die zentrale Funktion umgestellt — sonst hätte der Fix nur `lettermap.py` selbst betroffen, das vom eigentlichen Laufzeit-Code gar nicht genutzt wurde. **Real verifiziert:** Migration + `QStandardPaths`-Auflösung mit echtem `QCoreApplication` (Org/App-Name wie in `ui/app.py`) getestet — löst korrekt nach `~/.config/MiSte/TME/letter_map.json` auf, migriert vorhandene Datei, Original bleibt erhalten; Fallback ohne PySide6 ebenfalls verifiziert.
+
+3. **Feature 5 (Bildübersetzung)** — unverändert, nicht Teil dieser Session.
+
+4. **UI-State-Bugs (Theme/Sprache)** — unverändert ✅ erledigt (siehe unten).
+
+5. **Lettermap/Emoji-Wort-OCR-Auto-Vorschlag** — unverändert, nicht Teil dieser Session.
+
+6. **[Bug] ChatGPT-Übersetzung schlägt still fehl** — Root Cause war anders als vermutet: Fehler wurden bereits sauber als `TranslationError` gefangen und geloggt, aber nur transient über `_notify()` in `status_label` angezeigt — von der nächsten Fortschrittsmeldung sofort überschrieben und am Lauf-Ende endgültig durch `"Fertig."` ersetzt. `ScheduleRunResult` hatte für `docx_error` ein Feld, für Übersetzungsfehler aber keins. Fix: neues Feld `translation_errors` (gedeckelt auf 20 Einträge + Hinweis auf `tme.log`), gesammelt bei Provider-Init-Fehlern, pro Nachricht fehlgeschlagenen Übersetzungen und `tr_result.warnings`; `ui/app.py::_on_worker_finished` zeigt sie jetzt dauerhaft im Abschluss-Dialog (inkl. `QMessageBox.warning`-Titel statt `.information`, analog zu `docx_error`).
+
+7. **[Bug] DOCX-Export nicht funktionsfähig** — Root Cause bestätigt: reine fehlende Abhängigkeit, nirgends dokumentiert oder installiert (`docs/DEPLOY.md` erwähnte LibreOffice/Pandoc bisher gar nicht). Fix: neuer Abschnitt in `DEPLOY.md`, plus Preflight-Check `has_docx_converter()` in `pipeline/docx_convert.py`, den `ui/app.py::run_schedule_file()` vor Lauf-Start aufruft (bei DOCX-Auswahl ohne gefundenes Tool: Warn-Dialog mit Ja/Nein statt erst nach dem kompletten Export zu scheitern). **Real verifiziert:** `convert_odt_to_docx()` end-to-end gegen eine echte, per LibreOffice erzeugte ODT-Datei getestet.
+
+8. **[Bug] Shell-Fenster poppen auf** — Root Cause bestätigt (Vermutung war richtig): `docx_convert.py` (soffice/pandoc) und `frame_compositing.py` (ffmpeg/ffprobe) riefen `subprocess.run()` ohne `creationflags=subprocess.CREATE_NO_WINDOW` auf. Neuer gemeinsamer Helper `pipeline/subprocess_utils.py::run_hidden()` (Windows-only Flag, No-Op auf Linux/macOS) wird jetzt an beiden Stellen verwendet. Zeitlich hängt das direkt mit Punkt 7 zusammen (DOCX-Schritt läuft direkt nach der Übersetzung, "während der Übersetzung" war vermutlich diese Wahrnehmung). **Nicht verifizierbar in dieser Session** (Windows-only Verhalten, kein Windows-Zugriff) — `NO_WINDOW_KWARGS` bleibt auf Linux bewusst leer (verifiziert), das Windows-Flag selbst basiert auf der `subprocess`-Dokumentation, nicht auf einem echten Lauf.
+
+**Nicht committet.** Michael: bitte Diff sichten, dann in einer echten Windows-Umgebung Build → Install → Export durchspielen (insbesondere Punkt 1, cairosvg/libcairo-Bundling) — erst danach committen.
+
+---
+
 ## Offene Punkte (nächste Schritte)
 
-1. **Custom-Emoji-Cache leer / 🔠-Platzhalter statt Emoji-Bild** — Root Cause gefunden: `ffmpeg` und `lottie_convert.py` fehlen komplett im gebauten Bundle (alle drei Plattformen: `build_win.ps1`, `build_linux.sh`, `build_mac.sh`), obwohl `docs/projekt-struktur.md` das Bundling explizit vorschreibt. Zusätzlich strukturelles Problem: `lottie_convert.py` liegt nur in `.venv\Scripts\`, landet nie auf PATH (auch nicht im Dev-Modus, da `run_ui.ps1` die venv-Python ohne Aktivierung aufruft). Fehler werden über verschachtelte `except Exception: pass`-Blöcke lautlos verschluckt.
-   **Prompt bereit**, noch nicht umgesetzt. Vorschlag aus Analyse: `--add-binary`/`--add-data` für ffmpeg + lottie in allen drei Build-Skripten ergänzen, stille Excepts um Log-Zeilen erweitern, toten Import bereinigen.
+1. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
-2. **Lettermap-Mapping (`data/letter_map.json`) auf Windows verschwunden** — Ursache bestätigt (Abgleich 2026-07-30): Datei ist im Dev-Repo-Checkout vollständig befüllt (Stand Dez. 2025), fehlt aber im installierten Windows-Build komplett. `LETTERMAP_FILE_DEFAULT = Path("data/letter_map.json")` (`lettermap.py:10`) ist CWD-relativ, `windows-install.ps1` kopiert die Datei nicht mit — bestätigt durch `data/missing_lettermap_docs.json` im Install-Verzeichnis, dessen fehlende doc_ids sich 1:1 mit dem Repo-Mapping decken (z.B. `5357372145800334358="A"`).
-   **Wichtiger Unterschied zu `config.yaml`:** `data/` ist gitignored (reine Nutzerdaten), es gibt kein Repo-Template zum Kopieren. Lösungsraum ist daher **Datenmigration** (Datei einmalig aus dem Dev-Checkout ins Install-Verzeichnis übertragen) **oder Pfad-Umstellung** auf einen installationsunabhängigen, persistenten Speicherort (`QStandardPaths`, analog zur bereits erledigten Theme/Sprache-Lösung, siehe Punkt 4 unten) — letzteres wäre die nachhaltigere Lösung, da sie auch künftige Neuinstallationen/Updates übersteht.
-   **Nächster Schritt:** Umsetzungs-Prompt für Pfad-Umstellung (bevorzugt) oder Migrations-Skript (pragmatischer Zwischenschritt) noch zu erstellen.
+2. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
 3. **Feature 5 (Bildübersetzung, OCR → Übersetzen → Re-Rendern)** — Architekturentscheidung getroffen: eigenständiges Tool, Subprocess/CLI-Grenze zu TME. Scope v1: horizontaler, nicht rotierter Text, naives Inpainting, kein Font-Matching, kein Vektor-Text-Pfad. Offene Entscheidung: OCR-Engine (Cloud-OCR default, Tesseract Fallback). Mögliche Wiederverwendung von Layout-/Rendering-Komponenten aus dem Projekt "Translate PDF" (github.com/MiSte-Git) — Prüfung durch Michael nicht abgeschlossen berichtet. Separates, breiteres Tool für PDF/PowerPoint-eingebettete Bilder (inkl. Vektor-Text-Pfad über TME's Provider-Abstraktion) ebenfalls grob gescoped, nicht begonnen.
 
@@ -55,11 +80,11 @@ Stack: Python, Telethon, PySide6, odfpy, PyInstaller. Ziel: Linux + Windows.
 
 5. **Lettermap/Emoji-Wort-OCR-Auto-Vorschlag** — frühere Analyse ergab: aktuell kein automatischer OCR-Vorschlag implementiert (siehe Punkt 2). Falls gewünscht, wäre ein Tesseract-basierter Vorschlagsschritt gegen die gecachten Emoji-PNGs denkbar, mit expliziter Einschränkung: unzuverlässig bei verzierten/künstlerischen Schriftstilen, eher Vorschlag als Automatik.
 
-6. **[Bug] ChatGPT-Übersetzung schlägt still fehl** — Dokument wird mit leerer Übersetzung erstellt, ohne Fehlermeldung oder Hinweis (z.B. bei fehlendem/ungültigem API-Key). Soll: bei fehlgeschlagener Übersetzung eine klare Meldung mit konkretem Behebungsvorschlag (API-Key prüfen, Guthaben, Netzwerk etc.) statt stillschweigendem Leerlauf.
+6. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
-7. **[Bug] DOCX-Export nicht funktionsfähig** — "Docx zum Docx erstellen" ist noch nicht installiert bzw. funktioniert nicht. Vermutlich fehlende Abhängigkeit (z.B. Pandoc, siehe `output.converter`/`pandoc_reference_docx` in `config.yaml`). Root Cause noch offen.
+7. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
-8. **[Bug] Shell-Fenster poppen während der Übersetzung auf, Desktop flackert** — vermutlich ein Subprocess-Aufruf (Übersetzungs-Pfad oder DOCX-Konvertierung) ohne Fenster-Unterdrückung unter Windows (fehlt z.B. `subprocess.CREATE_NO_WINDOW`-Flag oder `startupinfo` mit `SW_HIDE`). Möglicher Zusammenhang mit Punkt 7 (ggf. derselbe externe Prozess, z.B. Pandoc) — noch nicht bestätigt, nur Vermutung.
+8. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
 9. **[UI/UX] "Kanal (optional)"-Feld irreführend beschriftet** — beim Sammeln eines ganzen Kanals ist die Eingabe eines Kanal-Links faktisch erforderlich, das Feld heißt aber "optional". Label/Hilfetext sollte klarstellen, wann das Feld zwingend ist.
 

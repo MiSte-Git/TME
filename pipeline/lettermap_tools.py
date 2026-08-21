@@ -4,8 +4,8 @@ import csv, json, re
 from typing import Dict, Any
 
 from .assets import load_assets
+from .lettermap import lettermap_file_path
 
-LETTERMAP_FILE = Path("data/letter_map.json")
 ASSETS_FILE = Path("data/assets.json")
 EXPORT_DIR = Path("custom_emoji_export")
 
@@ -48,7 +48,9 @@ def suggest_lettermap_csv(out_csv: Path = Path("data/lettermap_suggest.csv")) ->
     return out_csv
 
 
-def build_lettermap_from_csv(in_csv: Path = Path("data/lettermap_suggest.csv"), out_json: Path = LETTERMAP_FILE) -> Path:
+def build_lettermap_from_csv(in_csv: Path = Path("data/lettermap_suggest.csv"), out_json: "Path | None" = None) -> Path:
+    if out_json is None:
+        out_json = lettermap_file_path()
     mapping: Dict[str, Any] = {}
     if in_csv.exists():
         with in_csv.open("r", newline="", encoding="utf-8") as f:

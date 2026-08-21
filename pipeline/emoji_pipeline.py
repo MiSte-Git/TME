@@ -66,7 +66,10 @@ def main() -> None:
 
     s6 = sub.add_parser("lettermap-build", help="letter_map.json aus bearbeiteter CSV erzeugen")
     s6.add_argument("--csv", default=Path("data/lettermap_suggest.csv"), type=Path)
-    s6.add_argument("--out", default=Path("data/letter_map.json"), type=Path)
+    # Kein Path(...)-Default hier: der eigentliche Zielort wird erst beim
+    # Aufruf über lettermap_file_path() aufgelöst (siehe pipeline/lettermap.py) -
+    # sonst würde argparse den alten, CWD-relativen Pfad fest einbrennen.
+    s6.add_argument("--out", default=None, type=Path)
 
     s7 = sub.add_parser("extract-plain", help="Plaintext (Emoji→Buchstabe) aus Links erzeugen → data/plain/")
     s7.add_argument("--links", required=True, type=Path)
@@ -129,7 +132,7 @@ def main() -> None:
         print(f"CSV-Vorschlag geschrieben: {p}")
     elif args.cmd == "lettermap-build":
         from pipeline.lettermap_tools import build_lettermap_from_csv
-        p = build_lettermap_from_csv(args.csv, args.out)
+        p = build_lettermap_from_csv(args.csv, args.out)  # args.out=None -> lettermap_file_path()
         print(f"letter_map.json geschrieben: {p}")
     elif args.cmd == "extract-plain":
         from pipeline.plaintext import extract_plain_from_links

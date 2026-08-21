@@ -18,6 +18,7 @@ from .assets import load_custom_emoji_alts, get_custom_emoji_cache
 from .runs import RunsRecord, build_runs_from_twe, ImageRun, EmojiRun, TextRun, LineBreak
 from .odt_writer import write_odt_for_records
 from .recompose import _text_to_runs as lettermap_text_to_runs
+from .lettermap import lettermap_file_path
 from .docx_convert import convert_odt_to_docx, DocxConversionError
 from .translation import TranslationCostTracker, TranslationError, get_provider, translate_runs
 from .no_translate_words import load_no_translate_words_set
@@ -437,7 +438,7 @@ async def run_by_ids(
     img_idx = 1
 
     # Letter map laden (optional)
-    letter_map_path = Path("data/letter_map.json")
+    letter_map_path = lettermap_file_path()
     letter_to_doc: Dict[str, str] = {}
     mapped_doc_ids: set[str] = set()
     if letter_map_path.exists():

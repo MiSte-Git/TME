@@ -5,6 +5,9 @@ from typing import Iterable
 from telethon import functions
 
 from .frame_compositing import mark_rendered, render_tgs_multiframe, render_webm_multiframe
+from .logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 
 async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Path = Path("cache/emoji")) -> int:
@@ -59,6 +62,10 @@ async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Pat
                     mark_rendered(cache_dir, d.id)
                     ok += 1
                     continue
+                logger.warning(
+                    "Custom-Emoji %s: WEBM-Rendering lieferte kein PNG (ffmpeg fehlt/nicht "
+                    "gefunden oder Datei ungültig) - Emoji bleibt als Platzhalter.", d.id,
+                )
             # WEBP/PNG direkt
             lower = tmp.suffix.lower()
             if mime.endswith('webp') or lower == '.webp':
@@ -79,8 +86,12 @@ async def ensure_pngs_for_doc_ids(client, doc_ids: Iterable[int], cache_dir: Pat
                     mark_rendered(cache_dir, d.id)
                     ok += 1
                     continue
+                logger.warning(
+                    "Custom-Emoji %s: TGS-Rendering lieferte kein PNG (lottie/cairosvg fehlen "
+                    "oder Datei ungültig) - Emoji bleibt als Platzhalter.", d.id,
+                )
         except Exception:
-            pass
+            logger.warning("Custom-Emoji %s: PNG-Erzeugung fehlgeschlagen.", d.id, exc_info=True)
         finally:
             try:
                 if raw_path.exists(): raw_path.unlink()
