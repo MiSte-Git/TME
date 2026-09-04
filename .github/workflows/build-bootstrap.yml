@@ -1,0 +1,168 @@
+# Baut die geführte Installer-Executable ("Bootstrapper") für Linux,
+# Windows und macOS und veröffentlicht sie bei einem Versions-Tag zusammen
+# mit einem reinen Quellcode-ZIP als GitHub Release.
+#
+# Warum es keinen separaten "baue die eigentliche App"-Job gibt: der
+# Bootstrapper (bootstrap/) friert die eigentliche App nicht zu einer
+# Executable ein - er legt eine Pro-Benutzer-venv an und installiert
+# requirements*.txt dort hinein (siehe bootstrap/installer.py), dann zeigt
+# ein Anwendungsmenü-Eintrag direkt auf das venv-eigene python -m ui.app
+# (bootstrap/desktop_integration.py). Das Einzige, was Stufe 2 von GitHub
+# braucht, ist der reine Quellcode, den der build-source-archive-Job unten
+# per einfachem `git archive` erzeugt - kein PyInstaller-Build dafür, auf
+# keiner Plattform. Analog zum bereits produktiven Vorbild in
+# PDF-Translator (siehe dessen gleichnamige Workflow-Datei); dieser
+# Bootstrapper-Weg ersetzt TMEs bestehenden PyInstaller-Vollbuild
+# (TME.spec/build_win.ps1/build_linux.sh/TME_mac.spec) NICHT, sondern
+# existiert als zweiter, paralleler Weg (04.09.2026, Michael: "Parallel
+# anbieten").
+#
+# Builds sind vorerst unsigniert - Windows SmartScreen bzw. macOS
+# Gatekeeper warnen deshalb beim allerersten Start, bis Code-Signing als
+# eigener Folgeschritt nachgezogen wird (siehe TME-Backlog.md).
+name: Build bootstrapper
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-bootstrap:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # icon_arg: PyInstaller bettet ein Executable-Icon nur unter
+          # Windows (.ico) und macOS (.icns) ein; Linux-Binaries haben
+          # keinen entsprechenden Slot, dort trägt der .desktop-Eintrag das
+          # Icon. assets/icon.ico bzw. .icns existieren in TME noch nicht
+          # (siehe TME-Backlog.md) - icon_arg bleibt deshalb vorerst leer,
+          # der Build läuft auch ohne eingebettetes Icon.
+          - os: ubuntu-latest
+            asset_name: tme-setup-linux
+            dist_name: tme-setup
+            icon_arg: ""
+          - os: windows-latest
+            asset_name: tme-setup-windows.exe
+            dist_name: tme-setup.exe
+            icon_arg: ""
+          - os: macos-latest
+            asset_name: tme-setup-macos
+            dist_name: tme-setup
+            icon_arg: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # actions/setup-python's Linux-Builds enthalten nicht zuverlässig
+      # Tk-Bindings; python.org's eigene Windows-/macOS-Installer (was
+      # setup-python auf diesen Runnern nutzt) bringen Tcl/Tk bereits mit -
+      # dieser Schritt ist deshalb Linux-only.
+      - name: Install Tk (nur Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xvfb
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      # Günstiger, plattformübergreifender Vorab-Check, bevor Zeit in einen
+      # vollen PyInstaller-Build gesteckt wird: fängt gewöhnliche
+      # Python-Importfehler in bootstrap/ (fehlendes Symbol, Tippfehler,
+      # Syntax) auf jedem Betriebssystem ab. Braucht kein Display, da nur
+      # das Modul importiert wird, kein Tk()-Root instanziiert wird.
+      - name: Import smoke check
+        run: python -c "import bootstrap.app"
+
+      - name: Build bootstrapper executable
+        run: >
+          pyinstaller --onefile --windowed --name tme-setup
+          ${{ matrix.icon_arg }} bootstrap/__main__.py
+
+      # Frozen-Binary-Start-Smoketest: startet die tatsächlich gebaute
+      # Executable, gibt ihr ein paar Sekunden, ihr erstes Fenster zu öffnen
+      # ohne abzustürzen, beendet sie dann - belegt, dass das PyInstaller-
+      # Bundle selbst (nicht nur der Quellcode) intakt ist. Nur unter Linux,
+      # da ein virtueller Framebuffer (Xvfb) dort trivial einzurichten ist;
+      # für Windows/macOS gibt es kein vergleichbares, zuverlässig
+      # verfügbares Äquivalent, dort verlässt sich der Build auf den
+      # Import-Smoketest oben plus manuelle Prüfung des heruntergeladenen
+      # Artefakts.
+      - name: Frozen-binary launch smoke test (nur Linux)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a dist/tme-setup &
+          pid=$!
+          sleep 3
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "Bootstrapper wurde innerhalb von 3s nach dem Start beendet - wird als Build-Fehler gewertet."
+            exit 1
+          fi
+          kill "$pid"
+
+      - name: Stage renamed artifact
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "dist/${{ matrix.dist_name }}" "out/${{ matrix.asset_name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: out/${{ matrix.asset_name }}
+
+  build-source-archive:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bricht das gesamte Release ab, BEVOR irgendetwas gebaut/
+      # veröffentlicht wird, falls der gepushte Tag und _version.py's
+      # __version__ nicht übereinstimmen - siehe _version.py's
+      # Modul-Docstring für die Begründung.
+      - name: Verify tag matches _version.py
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          file_version="$(python -c 'from _version import __version__; print(__version__)')"
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "::error::Tag v$tag_version stimmt nicht mit _version.py's __version__ ($file_version) überein - _version.py anpassen und neu taggen."
+            exit 1
+          fi
+
+      - name: Build app source archive
+        run: git archive --format=zip --output=tme-app-source.zip HEAD
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tme-app-source
+          path: tme-app-source.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-bootstrap, build-source-archive]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          # bootstrap/release_source.py::resolve_zip_asset_url() nimmt das
+          # erste gefundene .zip-Asset, genau wie ein Mensch, der von Hand
+          # die richtige Datei anhand des Namens herunterlädt - das setzt
+          # voraus, dass pro Release genau ein .zip-Asset existiert. Diesen
+          # Job nur ändern, wenn das weiterhin gilt.
+          fail_on_unmatched_files: true

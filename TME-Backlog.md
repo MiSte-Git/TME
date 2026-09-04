@@ -128,6 +128,34 @@ Analyse + Umsetzung im Arbeitsverzeichnis. Anders als bei Punkt 1–8 sind das r
 
 ---
 
+## Session 2026-09-04 — Geführte Installation (Bootstrapper), analog PDF-Translator
+
+**Auftrag (Michael):** "Kannst Du mal schauen ob wir für dieses Projekt die gleiche Deployment Strategie wie beim 'Translate PDF' Projekt einbauen können? So das der Laie über den Downloadlink zu den jeweiligen Installer des aktuellen Releases kommt?"
+
+**Vorbild geprüft:** PDF-Translator hat seit der letzten Prüfung (siehe Session 2026-08-21 oben) einen produktiven Zwei-Stufen-"Bootstrapper" bekommen: ein winziges, PySide6-freies `tkinter`-Programm (`bootstrap/`) führt durch Sprache/Modus, lädt den eigentlichen App-Code als GitHub-Release-ZIP herunter, legt eine Pro-Benutzer-venv an, installiert `requirements*.txt` per normalem `pip install` (keine Admin-/root-Rechte nötig) und legt einen Menüeintrag an, der direkt auf `python -m ui.app` in diesem venv zeigt — kein PyInstaller-Freeze der eigentlichen App. Gebaut/veröffentlicht über `.github/workflows/build-bootstrap.yml` (Matrix Linux/Windows/macOS, PyInstaller nur für den Bootstrapper selbst), ausgelöst durch einen Versions-Tag `vX.Y.Z`, der gegen `_version.py`s `__version__` geprüft wird (Release bricht sonst ab, bevor etwas veröffentlicht wird). Details siehe PDF-Translators README.md ("Architektur der geführten Installation").
+
+**Entscheidung (Michael, zwei Fragen beantwortet):**
+1. Bestehender PyInstaller-Vollbuild (`TME.spec`/`scripts/build_win.ps1`/`TME_mac.spec`/`build_linux.sh`) wird **nicht ersetzt** — "Parallel anbieten". Beide Wege bestehen nebeneinander, README.md dokumentiert jetzt beide.
+2. **Direkt umsetzen** statt erst nur einen Plan ins Backlog zu schreiben.
+
+**Umgesetzt (dieselbe Sitzung):** neues Paket `bootstrap/` (`__init__.py`, `__main__.py`, `paths.py`, `system_lang.py`, `wizard_text.py`, `release_source.py`, `credentials_step.py`, `installer.py`, `desktop_integration.py`, `controller.py`, `app.py`), neue `_version.py` (Start bei `0.1.0`), neuer Workflow `.github/workflows/build-bootstrap.yml`, README.md um Abschnitte "Für alle anderen (geführte Installation)", "Release-Prozess (geführte Installation)" und "Architektur der geführten Installation" ergänzt (bestehende Entwickler-/Vollbuild-Abschnitte unverändert).
+
+**TME-spezifische Anpassungen gegenüber dem PDF-Translator-Vorbild:**
+- Kein Online/Lokal-Modus mit GPU-Prüfung: TMEs Übersetzungs-Provider sind ohnehin alle Cloud-basiert. Stattdessen ein einfacherer Standard/Transkription-Modus (`InstallMode.STANDARD`/`WITH_STT`) für die bereits bestehende optionale Sprachnachrichten-Transkription (`requirements-stt.txt`, ~4-5 GB, siehe `pipeline/speech_to_text.py`). Kein `gpu_check.py`-Äquivalent — `get_torch_device()` erkennt eine nutzbare GPU zur Laufzeit selbst und fällt sonst auf CPU zurück, PyPIs Standard-Torch-Wheels brauchen dafür (anders als PDF-Translators LaMa) keinen speziellen CUDA-Wheel-Index. **Diese Vereinfachung ist nicht durch einen echten Lauf verifiziert.**
+- Eigener Zugangsdaten-Schritt für Telegram API-ID/API-Hash (+ optionales Telefon) statt eines GPU-Schritts, zusätzlich zur bereits vom Vorbild übernommenen Provider-Schlüssel-Checkliste (DeepL/Google/OpenAI — kein Grok bei TME). Nutzt TMEs bereits bestehendes Top-Level `credentials.py` wieder (dort bereits vorhanden: `save_telegram_credentials`, `save_provider_api_key`, `get_provider_api_key_source` — kein neuer Code auf App-Seite nötig).
+- Eigener Text-Katalog `bootstrap/wizard_text.py` (DE/EN) statt Import aus `ui/i18n_data.py`: TME nutzt Qt-natives `.qm`/`.ts` für seine eigentliche Mehrsprachigkeit, kein direkt importierbares Python-Dict wie beim Vorbild. Der Assistent selbst bleibt DE/EN; TMEs deutlich umfangreichere Qt-Übersetzungen sind davon unabhängig.
+- Icon: `assets/icon.ico`/`.icns`/`.png` existieren in TME noch nicht (anders als PDF-Translators `assets/icon.svg` + `tools/build_icon.py`). `desktop_integration.py` fällt deshalb unter Linux auf die bereits vorhandene `Telegram-LibreOffice.png` zurück, unter Windows/macOS gibt es vorerst kein eingebettetes Icon (`build-bootstrap.yml`s `icon_arg` bleibt leer). PyInstaller-Build und App selbst funktionieren auch ohne, nur kosmetisch unvollständig.
+
+**Nicht umgesetzt / offene Folgeschritte:**
+- **Kein echter Build/Install/Start-Zyklus durchgeführt** — nur `py_compile` (alle neuen `.py`-Dateien) und YAML-Parsing der Workflow-Datei geprüft, kein echter `pyinstaller`-Lauf, kein echter `pip install` in eine venv, kein echter Start von `python -m ui.app` aus dem venv heraus. Vor dem ersten echten Release-Tag unbedingt einmal komplett lokal durchspielen (`python -m bootstrap` bzw. `python -m bootstrap.app`).
+- Kein Selbst-Update in der laufenden App (anders als PDF-Translators `ui/workers.py`-Integration) — `bootstrap/release_source.py` bietet dieselbe GitHub-API-Grundlage bereits an, eine Anbindung in `ui/app.py` wurde bewusst nicht blind an der 91-KB-Datei vorgenommen, ohne sie testen zu können.
+- Sprachmarkierungsdatei (`bootstrap/paths.py::language_marker_file()`) wird geschrieben, aber von `ui/app.py` noch nicht gelesen — kleiner, risikoarmer Folgeschritt.
+- `assets/icon.ico`/`.icns`/`.png` fehlen noch (siehe oben) — ließen sich aus der bestehenden `Telegram-LibreOffice.png` erzeugen, analog zu PDF-Translators `tools/build_icon.py`.
+- Kein Code-Signing (wie beim Vorbild bewusst zurückgestellt) — SmartScreen/Gatekeeper-Warnung beim ersten Start bleibt bestehen.
+- ffmpeg/LibreOffice/Pandoc bleiben separat zu installierende Systemwerkzeuge, wie schon im Entwickler-Weg (siehe docs/DEPLOY.md) — der Bootstrapper bündelt nur Python-Pakete.
+
+---
+
 ## Key Learnings & Prinzipien
 
 - **Analyse vor Änderung:** Standardmuster "nur Analyse, nichts ändern/committen" vor jedem Fix.
