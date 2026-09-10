@@ -59,6 +59,9 @@ logger = get_logger(__name__)
 from ui.lettermap_tab import LettermapTab
 from ui.schedule_editor_tab import ScheduleEditorTab
 from ui.no_translate_words_tab import NoTranslateWordsTab
+from ui.topic_copy_tab import TopicCopyTab
+from ui.topic_rollback_tab import TopicRollbackTab
+from ui.message_boxes import install_copyable_error_messages
 
 TRANSLATIONS_DIR = UI_DIR / "translations"
 FLAGS_DIR = UI_DIR / "assets" / "flags"
@@ -1412,11 +1415,17 @@ class MainWindow(QMainWindow):
         self.lettermap_tab = LettermapTab()
         self.schedule_tab.set_lettermap_tab(self.lettermap_tab)
         self.no_translate_words_tab = NoTranslateWordsTab()
+        self.topic_copy_tab = TopicCopyTab()
+        self.topic_rollback_tab = TopicRollbackTab()
         # Reorder: Schedule, Schedule-Editor, Lettermap (Experimentell), Ausnahmeliste
         self.tabs.addTab(self.schedule_tab, self.tr("Telegram-Export"))
         self.tabs.addTab(self.editor_tab, self.tr("Schedule-Editor"))
         self.tabs.addTab(self.lettermap_tab, self.tr("Lettermap (Experimentell)"))
         self.tabs.addTab(self.no_translate_words_tab, self.tr("Nicht übersetzen"))
+        self.tabs.addTab(self.topic_copy_tab, self.tr("Topic kopieren"))
+        self.tabs.addTab(
+            self.topic_rollback_tab, self.tr("Rückgängig / Entfernen")
+        )
         # Wrap central with a top language bar
         from PySide6.QtWidgets import QWidget as _QW, QVBoxLayout as _QVL
         central = _QW()
@@ -1435,6 +1444,15 @@ class MainWindow(QMainWindow):
         if not self._first_run_hint_checked:
             self._first_run_hint_checked = True
             self.schedule_tab.maybe_show_first_run_hint()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        if (
+            not self.topic_copy_tab.request_safe_close()
+            or not self.topic_rollback_tab.request_safe_close()
+        ):
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _init_lang_bar(self, parent_layout) -> None:
         from PySide6.QtWidgets import QWidget, QHBoxLayout, QToolButton
@@ -1606,6 +1624,8 @@ class MainWindow(QMainWindow):
             self.tabs.setTabText(2, self.tr("Lettermap (Experimentell)"))
         if self.tabs.count() >= 4:
             self.tabs.setTabText(3, self.tr("Nicht übersetzen"))
+        if self.tabs.count() >= 5:
+            self.tabs.setTabText(4, self.tr("Topic kopieren"))
         # Menüs
         self.view_menu.setTitle(self.tr("Ansicht"))
         if hasattr(self, "settings_menu"):
@@ -1832,6 +1852,7 @@ def main() -> None:
         logger.info("Build-Version: dev (kein Stempel, git HEAD=%s)", dev_hash or "unbekannt")
 
     app = QApplication(sys.argv)
+    install_copyable_error_messages(app)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)
 

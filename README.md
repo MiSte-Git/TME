@@ -302,6 +302,35 @@ einen echten Build/Install/Start-Zyklus auf einem der drei Betriebssysteme
 verifiziert. Siehe TME-Backlog.md für den vollständigen Stand und offene
 Punkte.
 
+## Topic-Nachrichten kopieren
+
+Das Kopieren und ein späteres Rückgängigmachen sind auf zwei Tabs verteilt:
+
+Quell- und Zielauswahl merken sich jeweils die letzten zehn erfolgreich
+geprüften Topics und zeigen neben dem Link auch den von Telegram gelesenen
+Topic-Namen an.
+
+1. Quelle laden, Bot-Gruppen auswählen und Nachrichten chronologisch in das
+   Ziel weiterleiten. `/`-Anfragen werden über `@BotName` oder eine direkte
+   Bot-Antwort zugeordnet. Beim Abwählen eines Bots entfallen seine Antworten
+   und die eindeutig zugeordneten Anfragen. Eine zweite Liste zeigt jede zum
+   Kopieren vorgesehene Nachricht; dort kann die Bot-Auswahl noch einzeln
+   angepasst werden. Nicht eindeutig zugeordnete `/`-Anfragen erscheinen
+   zusätzlich in einer eigenen, mit der Gesamtliste synchronisierten Prüfliste.
+   Sie sind zunächst ausgewählt, weil sie von Menschen stammen, können dort
+   aber einzeln oder gesammelt abgewählt werden.
+2. Der Tab **Rückgängig / Entfernen** gleicht jede protokollierte Ziel-ID
+   erneut mit Telegram ab. Sichere Kopien, manuell zu prüfende Fälle,
+   fehlende Nachrichten, falsche Topics, nicht kopierbare Medien und bereits
+   entfernte Kopien werden getrennt angezeigt. Bot-Anfragen und -Antworten
+   können gemeinsam ausgewählt werden. Gelöscht werden nur ausdrücklich neu
+   markierte Ziel-IDs in protokollierten 100er-Blöcken; jeder bestätigte Block
+   wird gespeichert und kann nach einem Abbruch sicher fortgesetzt werden.
+
+Ein Topic selbst wird niemals gelöscht. Die App verwendet ausschließlich
+explizite Nachrichten-IDs und nie Telegrams Funktion zum Löschen einer gesamten
+Topic-Historie. Die Kopiernachweise liegen unter `data/topic_copy_runs/`.
+
 ## Entwicklung
 - Syntax-Check: `python3 -m compileall -q . -x "[\\/](\.venv|build|dist)[\\/]"`
   (Ausschluss nötig, sonst scannt compileall bei lokalem `.venv` im Repo-Root
