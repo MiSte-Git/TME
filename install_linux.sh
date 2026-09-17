@@ -118,8 +118,8 @@ fi
 
 # Fenster-/Menu-Icon mit an den Zielort kopieren, damit der Desktop-Eintrag
 # auch funktioniert, wenn das Repo-Checkout spaeter geloescht wird.
-if [ -f "$REPO_ROOT/Telegram-Nachrichten Herunterladen.png" ]; then
-  cp "$REPO_ROOT/Telegram-Nachrichten Herunterladen.png" "$INSTALL_DIR/Telegram-Nachrichten Herunterladen.png"
+if [ -f "$REPO_ROOT/Telegram-LibreOffice.png" ]; then
+  cp "$REPO_ROOT/Telegram-LibreOffice.png" "$INSTALL_DIR/Telegram-LibreOffice.png"
 fi
 
 echo "Installiert nach: $INSTALL_DIR/TME (Version: ${DIST_VERSION:-unbekannt})"

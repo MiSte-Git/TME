@@ -249,19 +249,19 @@ def generate_desktop_entry(repo_root: Path, entry: Path, binary_path: Optional[P
         exec_cmd = f'"{binary_path}"'
         try_exec = str(binary_path)
         work_dir = binary_path.parent
-        icon_path = binary_path.parent / "Telegram-Nachrichten Herunterladen.png"
+        icon_path = binary_path.parent / "Telegram-LibreOffice.png"
         try:
             icon_exists = icon_path.exists()
         except OSError:
             icon_exists = False
         if not icon_exists:
-            icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+            icon_path = repo_root / "Telegram-LibreOffice.png"
     else:
         python_exec = _find_python_exec(repo_root)
         exec_cmd = f'{python_exec} "{entry}"'
         try_exec = python_exec
         work_dir = repo_root
-        icon_path = repo_root / "Telegram-Nachrichten Herunterladen.png"
+        icon_path = repo_root / "Telegram-LibreOffice.png"
 
     name_lines = "\n".join(f"Name[{lang}]={text}" for lang, text in _DESKTOP_NAME_TRANSLATIONS.items())
     comment_lines = "\n".join(f"Comment[{lang}]={text}" for lang, text in _DESKTOP_COMMENT_TRANSLATIONS.items())

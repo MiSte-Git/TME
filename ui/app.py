@@ -1396,7 +1396,7 @@ class ScheduleTab(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Telegram → ODT mit Emoji & Übersetzung")
+        self.setWindowTitle("Telegram Messages Export (TME)")
         # Verhindert, dass das Fenster kleiner als sinnvoll nutzbar wird, ohne eine
         # größere Mindestgröße als nötig zu erzwingen (siehe auch die QGroupBox-
         # Gruppierung in ScheduleTab, die die eigentliche Ursache der übergroßen
@@ -1615,7 +1615,7 @@ class MainWindow(QMainWindow):
 
     def retranslate(self) -> None:
         # Window title
-        self.setWindowTitle(self.tr("Telegram → ODT mit Emoji & Übersetzung"))
+        self.setWindowTitle(self.tr("Telegram Messages Export (TME)"))
         # Tabs
         self.tabs.setTabText(0, self.tr("Telegram-Export"))
         if self.tabs.count() >= 2:
