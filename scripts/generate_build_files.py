@@ -204,31 +204,32 @@ def _run_update_desktop_database() -> None:
 # Zeile, unabhängig von der in der App gewählten Sprache (dort separat
 # per QTranslator umgeschaltet, siehe ui/app.py::_apply_language). Ohne
 # passende Locale bleibt der unlokalisierte Name=/Comment= (Deutsch) der
-# Fallback. Name[xx] absichtlich übersetzt statt als Eigenname belassen -
-# "Telegram → ODT mit Emoji & Übersetzung" ist ein beschreibender Titel,
-# kein Markenname (übernimmt exakt die vorhandenen Übersetzungen des
-# Fenstertitels aus den .ts-Dateien).
+# Fallback. Name[xx] bewusst NICHT übersetzt, sondern überall identisch
+# "Telegram Messages Export (TME)" - seit der Umbenennung ein Markenname
+# analog zum (ebenfalls nicht mehr übersetzten) Fenstertitel in ui/app.py,
+# kein beschreibender Titel mehr. Nur Comment[xx] bleibt eine echte
+# Übersetzung der Kurzbeschreibung.
 _DESKTOP_NAME_TRANSLATIONS = {
-    "en": "Telegram → ODT with emoji & translation",
-    "fr": "Telegram → ODT avec emoji et traduction",
-    "it": "Telegram → ODT con emoji e traduzione",
-    "ru": "Telegram → ODT с эмодзи и переводом",
-    "pl": "Telegram → ODT z emoji i tłumaczeniem",
-    "es": "Telegram → ODT con emoji y traducción",
-    "hr": "Telegram → ODT s emojijima i prijevodom",
-    "nl": "Telegram → ODT met emoji & vertaling",
-    "fi": "Telegram → ODT emojeilla ja käännöksellä",
+    "en": 'Telegram Messages Export (TME)',
+    "fr": 'Telegram Messages Export (TME)',
+    "it": 'Telegram Messages Export (TME)',
+    "ru": 'Telegram Messages Export (TME)',
+    "pl": 'Telegram Messages Export (TME)',
+    "es": 'Telegram Messages Export (TME)',
+    "hr": 'Telegram Messages Export (TME)',
+    "nl": 'Telegram Messages Export (TME)',
+    "fi": 'Telegram Messages Export (TME)',
 }
 _DESKTOP_COMMENT_TRANSLATIONS = {
-    "en": "Generate ODT from Telegram schedules, incl. emoji handling and translation",
-    "fr": "Génère un ODT à partir de plannings Telegram, y compris la gestion des emoji et la traduction",
-    "it": "Genera ODT dai programmi Telegram, inclusa la gestione degli emoji e la traduzione",
-    "ru": "Создание ODT из расписаний Telegram, включая обработку эмодзи и перевод",
-    "pl": "Generuje plik ODT na podstawie harmonogramów Telegram, w tym obsługę emoji i tłumaczenie",
-    "es": "Genera ODT a partir de programaciones de Telegram, incl. gestión de emoji y traducción",
-    "hr": "Generira ODT iz Telegram rasporeda, uključujući rukovanje emojijima i prijevod",
-    "nl": "Genereert ODT vanuit Telegram-schema's, incl. emoji-verwerking en vertaling",
-    "fi": "Luo ODT-tiedoston Telegram-aikatauluista, sis. emojien käsittelyn ja käännöksen",
+    "en": 'Export Telegram messages to Word/LibreOffice, incl. translation',
+    "fr": 'Exporte les messages Telegram vers Word/LibreOffice, traduction incluse',
+    "it": 'Esporta i messaggi di Telegram in Word/LibreOffice, traduzione inclusa',
+    "ru": 'Экспорт сообщений Telegram в Word/LibreOffice, включая перевод',
+    "pl": 'Eksportuje wiadomości z Telegrama do Word/LibreOffice, wraz z tłumaczeniem',
+    "es": 'Exporta mensajes de Telegram a Word/LibreOffice, incl. traducción',
+    "hr": 'Izvozi Telegram poruke u Word/LibreOffice, uključujući prijevod',
+    "nl": 'Exporteert Telegram-berichten naar Word/LibreOffice, incl. vertaling',
+    "fi": 'Vie Telegram-viestit Word/LibreOffice-muotoon, käännös mukaan lukien',
 }
 
 
@@ -268,9 +269,9 @@ def generate_desktop_entry(repo_root: Path, entry: Path, binary_path: Optional[P
     return f"""[Desktop Entry]
 Type=Application
 Version=1.0
-Name=Telegram → ODT mit Emoji & Übersetzung
+Name=Telegram Messages Export (TME)
 {name_lines}
-Comment=Erzeuge ODT aus Telegram-Schedules, inkl. Emoji-Handling und Übersetzung
+Comment=Telegram-Nachrichten nach Word/LibreOffice exportieren, inkl. Übersetzung
 {comment_lines}
 Exec={exec_cmd}
 Path={work_dir}

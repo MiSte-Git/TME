@@ -117,7 +117,7 @@ def _linux_desktop_entry_content(
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={display_name}\n"
-        "Comment=Telegram-Nachrichten als ODT exportieren\n"
+        "Comment=Telegram-Nachrichten nach Word/LibreOffice exportieren, inkl. Übersetzung\n"
         f'Exec="{venv_python}" -m ui.app\n'
         f"Path={app_source_dir}\n"
         f"{icon_line}\n"
