@@ -25,6 +25,46 @@ else:
 UI_DIR = ROOT / "ui"
 
 from credentials import get_telegram_credentials, save_telegram_credentials, get_provider_api_key_source
+from _version import __version__
+
+_BUILD_STAMP_CACHE: "str | None" = None
+
+
+def _build_stamp() -> str:
+    """Build-Kennung fuer About-Box/Log: Inhalt von BUILD_VERSION.txt (gefrorener
+    Vollbuild, siehe build_linux.sh/build_win.ps1), sonst git-Kurz-Hash im
+    Dev-Fall, sonst leer (z.B. Bootstrapper-Installation ohne Stempel/Git)."""
+    global _BUILD_STAMP_CACHE
+    if _BUILD_STAMP_CACHE is not None:
+        return _BUILD_STAMP_CACHE
+    stamp = ""
+    try:
+        # build_win.ps1 bettet BUILD_VERSION.txt ein, build_linux.sh die Datei
+        # ohne Endung (BUILD_VERSION) - beide Namen pruefen. Inhalt jeweils
+        # "commit=<hash>[-dirty]" und "built=<zeitstempel>".
+        version_file = next(
+            (f for f in (ROOT / "BUILD_VERSION.txt", ROOT / "BUILD_VERSION") if f.is_file()),
+            None,
+        )
+        if version_file is not None:
+            fields = {}
+            for line in version_file.read_text(encoding="utf-8").splitlines():
+                key, sep, value = line.partition("=")
+                if sep:
+                    fields[key.strip()] = value.strip()
+            commit = fields.get("commit", "")
+            built = fields.get("built", "")
+            stamp = f"{commit} ({built})" if commit and built else commit or built
+        else:
+            dev_hash = subprocess.run(
+                ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+            stamp = f"dev ({dev_hash})" if dev_hash else ""
+    except Exception:
+        stamp = ""
+    _BUILD_STAMP_CACHE = stamp
+    return stamp
 
 # provider_combo-Wert (ui/app.py) -> Provider-Id in credentials.py
 _TRANSLATION_PROVIDER_TO_CREDENTIALS_KEY = {"deepl": "deepl", "google": "google", "chatgpt": "openai"}
@@ -1396,7 +1436,7 @@ class ScheduleTab(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Telegram Messages Export (TME)")
+        self.setWindowTitle(self._window_title())
         # Verhindert, dass das Fenster kleiner als sinnvoll nutzbar wird, ohne eine
         # größere Mindestgröße als nötig zu erzwingen (siehe auch die QGroupBox-
         # Gruppierung in ScheduleTab, die die eigentliche Ursache der übergroßen
@@ -1608,6 +1648,37 @@ class MainWindow(QMainWindow):
         )
         QMessageBox.about(self, title, html)
 
+    def _window_title(self) -> str:
+        return self.tr("Telegram Messages Export (TME)") + f" v{__version__}"
+
+    def _show_about(self) -> None:
+        import platform
+        try:
+            import PySide6
+            from PySide6.QtCore import qVersion
+            qt_info = f"PySide6 {PySide6.__version__} / Qt {qVersion()}"
+        except Exception:
+            qt_info = "PySide6"
+        stamp = _build_stamp()
+        title = self.tr("Über TME")
+        rows = [
+            f"<h3>Telegram Messages Export (TME)</h3>",
+            "<p>" + self.tr("Version {version}").format(version=__version__) + "</p>",
+        ]
+        if stamp:
+            rows.append("<p>" + self.tr("Build: {build}").format(build=stamp) + "</p>")
+        rows += [
+            "<p>" + self.tr(
+                "Exportiert Telegram-Nachrichten nach Datum oder Schedule als "
+                "Dokument, optional mit Übersetzung, und kopiert Nachrichten "
+                "zwischen Topics."
+            ) + "</p>",
+            "<p>" + self.tr("Lizenz: GNU General Public License v3.0 oder später (GPL-3.0-or-later)") + "</p>",
+            "<p><a href='https://github.com/MiSte-Git/TME'>github.com/MiSte-Git/TME</a></p>",
+            f"<p><small>Python {platform.python_version()} · {qt_info} · {platform.system()}</small></p>",
+        ]
+        QMessageBox.about(self, title, "".join(rows))
+
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
             self.retranslate()
@@ -1615,7 +1686,7 @@ class MainWindow(QMainWindow):
 
     def retranslate(self) -> None:
         # Window title
-        self.setWindowTitle(self.tr("Telegram Messages Export (TME)"))
+        self.setWindowTitle(self._window_title())
         # Tabs
         self.tabs.setTabText(0, self.tr("Telegram-Export"))
         if self.tabs.count() >= 2:
@@ -1626,6 +1697,8 @@ class MainWindow(QMainWindow):
             self.tabs.setTabText(3, self.tr("Nicht übersetzen"))
         if self.tabs.count() >= 5:
             self.tabs.setTabText(4, self.tr("Topic kopieren"))
+        if self.tabs.count() >= 6:
+            self.tabs.setTabText(5, self.tr("Rückgängig / Entfernen"))
         # Menüs
         self.view_menu.setTitle(self.tr("Ansicht"))
         if hasattr(self, "settings_menu"):
@@ -1644,6 +1717,8 @@ class MainWindow(QMainWindow):
                 self.action_deploy.setText(self.tr("Deployment-Anleitung öffnen"))
             if hasattr(self, "action_spec"):
                 self.action_spec.setText(self.tr("PyInstaller-Spezifikation öffnen"))
+            if hasattr(self, "action_about"):
+                self.action_about.setText(self.tr("Über TME…"))
         lang_menu_obj = getattr(self, "lang_menu", None)
         if lang_menu_obj is not None:
             lang_menu_obj.setTitle(self.tr("Sprache"))
@@ -1701,6 +1776,11 @@ class MainWindow(QMainWindow):
         self.help_menu.addAction(self.action_readme)
         self.help_menu.addAction(self.action_deploy)
         self.help_menu.addAction(self.action_spec)
+        self.help_menu.addSeparator()
+        self.action_about = QAction(self.tr("Über TME…"), self)
+        self.action_about.setMenuRole(QAction.MenuRole.AboutRole)
+        self.action_about.triggered.connect(self._show_about)
+        self.help_menu.addAction(self.action_about)
         # Sprache: Flaggenleiste statt Menü (siehe _init_lang_bar)
 
 
@@ -1841,20 +1921,13 @@ def main() -> None:
     # tatsaechlich laeuft. ROOT zeigt im gefrorenen Fall auf sys._MEIPASS (wohin
     # --add-data den Stempel legt), im Dev-Fall auf den Repo-Root - daher der
     # Git-Fallback dort statt einer Datei.
-    version_file = ROOT / "BUILD_VERSION.txt"
-    if version_file.exists():
-        logger.info("Build-Version: %s", version_file.read_text(encoding="utf-8").splitlines()[0])
-    else:
-        dev_hash = subprocess.run(
-            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True,
-        ).stdout.strip()
-        logger.info("Build-Version: dev (kein Stempel, git HEAD=%s)", dev_hash or "unbekannt")
+    logger.info("TME-Version: %s, Build: %s", __version__, _build_stamp() or "unbekannt")
 
     app = QApplication(sys.argv)
     install_copyable_error_messages(app)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(__version__)
 
     # Use a modern, consistent style across platforms
     try:

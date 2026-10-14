@@ -1,24 +1,24 @@
 # Übersetzungen (Qt / PySide6)
 
-- Quelle: UI-Strings sind mit `self.tr("…")` markiert (Kontext = Klassenname).
-- Sprachdateien:
-  - app_de.ts → Deutsch (Ausgangssprache)
-  - app_en.ts → Englisch
-- Build (benötigt Qt-Tools `lrelease`):
+- Quelle: UI-Strings sind mit `self.tr("…")` markiert (Kontext = Klassenname), Ausgangssprache ist Deutsch.
+- Sprachen (je `app_<lang>.ts` + kompilierte `app_<lang>.qm`): de, en, fr, it, ru, pl, es, hr, nl, fi.
+- Laufzeit: `ui/app.py` lädt `ui/translations/app_<lang>.qm` gemäß `data/ui_lang.json` (`{"lang": "<code>"}`).
+- Umschalten: über die Flaggenleiste oben im Hauptfenster, live ohne Neustart.
+
+## Neue oder geänderte Texte übernehmen
 
 ```bash
-# Im Projektroot oder im Ordner ui/
-cd ui/translations
-# Automatisches Finden von lrelease (Qt6/Qt5):
-./build_qm.sh
+# 1. .ts-Dateien aus dem Quellcode aktualisieren (im Projektroot)
+pyside6-lupdate ui/*.py -ts ui/translations/app_*.ts
 
-# Alternativ manuell (je nach Distribution):
-/usr/lib/qt6/bin/lrelease app_de.ts -qm app_de.qm
-/usr/lib/qt6/bin/lrelease app_en.ts -qm app_en.qm
-# oder
-lrelease-qt6 app_de.ts -qm app_de.qm
-lrelease-qt6 app_en.ts -qm app_en.qm
+# 2. Neue Einträge (type="unfinished") übersetzen, z.B. mit pyside6-linguist
+
+# 3. .qm-Dateien bauen (findet lrelease / pyside6-lrelease automatisch)
+cd ui/translations && ./build_qm.sh
 ```
 
-- Laufzeit: `ui/app.py` lädt `ui/translations/app_<lang>.qm` gemäß `data/ui_lang.json` (`{"lang": "de"|"en"}`).
-- Umschalten im Menü: Sprache → Deutsch/Englisch erfolgt live (ohne Neustart).
+Prüfen, ob noch etwas offen ist:
+
+```bash
+grep -c 'type="unfinished"' ui/translations/app_*.ts
+```
