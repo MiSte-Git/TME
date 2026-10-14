@@ -139,6 +139,38 @@ def _theme_state_file() -> Path:
 def _lang_state_file() -> Path:
     return _config_dir() / "ui_lang.json"
 
+def _experimental_state_file() -> Path:
+    return _config_dir() / "ui_experimental.json"
+
+
+def _load_topic_tools_enabled() -> bool:
+    """Topic kopieren / Rueckgaengig sind experimentell und standardmaessig aus
+    (noch nicht vollstaendig getestet, koennen Nachrichten loeschen)."""
+    try:
+        p = _experimental_state_file()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return bool(data.get("topic_tools", False))
+    except Exception:
+        pass
+    return False
+
+
+def _save_topic_tools_enabled(enabled: bool) -> None:
+    try:
+        p = _experimental_state_file()
+        data = {}
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        data["topic_tools"] = bool(enabled)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
 class ScheduleWorker(QObject):
     finished = Signal(object)
     error = Signal(str)
@@ -1462,9 +1494,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.editor_tab, self.tr("Schedule-Editor"))
         self.tabs.addTab(self.lettermap_tab, self.tr("Lettermap (Experimentell)"))
         self.tabs.addTab(self.no_translate_words_tab, self.tr("Nicht übersetzen"))
-        self.tabs.addTab(self.topic_copy_tab, self.tr("Topic kopieren"))
+        self.tabs.addTab(self.topic_copy_tab, self.tr("Topic kopieren (Experimentell)"))
         self.tabs.addTab(
-            self.topic_rollback_tab, self.tr("Rückgängig / Entfernen")
+            self.topic_rollback_tab, self.tr("Rückgängig / Entfernen (Experimentell)")
         )
         # Wrap central with a top language bar
         from PySide6.QtWidgets import QWidget as _QW, QVBoxLayout as _QVL
@@ -1648,6 +1680,80 @@ class MainWindow(QMainWindow):
         )
         QMessageBox.about(self, title, html)
 
+    # --- Experimentelle Topic-Funktionen (Topic kopieren / Rueckgaengig) ---
+    # Standardmaessig deaktiviert: noch nicht vollstaendig getestet und der
+    # Rueckgaengig-Tab loescht Nachrichten. Die Tabs bleiben sichtbar (damit
+    # die Funktion auffindbar ist), sind aber ausgegraut, bis sie unter
+    # Einstellungen bewusst eingeschaltet werden. Persistiert in
+    # ui_experimental.json im App-Konfigurationsverzeichnis.
+    _TOPIC_TAB_INDEXES = (4, 5)
+
+    def _topic_tools_action_text(self) -> str:
+        return self.tr("Experimentelle Topic-Funktionen aktivieren (nicht vollständig getestet)")
+
+    def _topic_tools_busy(self) -> bool:
+        for tab in (getattr(self, "topic_copy_tab", None), getattr(self, "topic_rollback_tab", None)):
+            if tab is not None and getattr(tab, "thread", None) is not None:
+                return True
+        return False
+
+    def _update_topic_tab_tooltips(self) -> None:
+        enabled = getattr(self, "_topic_tools_enabled", False)
+        tip = (
+            self.tr("Experimentell, noch nicht vollständig getestet.")
+            if enabled else
+            self.tr(
+                "Deaktiviert: experimentell, noch nicht vollständig getestet. "
+                "Aktivieren unter Einstellungen → Experimentelle Topic-Funktionen."
+            )
+        )
+        for i in self._TOPIC_TAB_INDEXES:
+            if i < self.tabs.count():
+                self.tabs.setTabToolTip(i, tip)
+
+    def _apply_topic_tools_enabled(self, enabled: bool) -> None:
+        self._topic_tools_enabled = bool(enabled)
+        # Vor dem Deaktivieren selbst auf den ersten Tab wechseln - sonst springt
+        # Qt auf den naechstgelegenen aktiven Tab (zufaellig wirkend).
+        if not self._topic_tools_enabled and self.tabs.currentIndex() in self._TOPIC_TAB_INDEXES:
+            self.tabs.setCurrentIndex(0)
+        for i in self._TOPIC_TAB_INDEXES:
+            if i < self.tabs.count():
+                self.tabs.setTabEnabled(i, self._topic_tools_enabled)
+        self._update_topic_tab_tooltips()
+
+    def _on_topic_tools_toggled(self, checked: bool) -> None:
+        if checked:
+            answer = QMessageBox.warning(
+                self,
+                self.tr("Experimentelle Funktion"),
+                self.tr(
+                    "Topic kopieren und Rückgängig / Entfernen sind noch nicht "
+                    "vollständig getestet. Der Rückgängig-Tab löscht Nachrichten "
+                    "endgültig. Bitte zuerst mit einem Test-Topic ausprobieren.\n\n"
+                    "Trotzdem aktivieren?"
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.action_topic_tools.blockSignals(True)
+                self.action_topic_tools.setChecked(False)
+                self.action_topic_tools.blockSignals(False)
+                return
+        elif self._topic_tools_busy():
+            QMessageBox.information(
+                self,
+                self.tr("Läuft"),
+                self.tr("Ein Topic-Vorgang läuft noch. Bitte erst abschließen oder abbrechen."),
+            )
+            self.action_topic_tools.blockSignals(True)
+            self.action_topic_tools.setChecked(True)
+            self.action_topic_tools.blockSignals(False)
+            return
+        _save_topic_tools_enabled(checked)
+        self._apply_topic_tools_enabled(checked)
+
     def _window_title(self) -> str:
         return self.tr("Telegram Messages Export (TME)") + f" v{__version__}"
 
@@ -1696,9 +1802,10 @@ class MainWindow(QMainWindow):
         if self.tabs.count() >= 4:
             self.tabs.setTabText(3, self.tr("Nicht übersetzen"))
         if self.tabs.count() >= 5:
-            self.tabs.setTabText(4, self.tr("Topic kopieren"))
+            self.tabs.setTabText(4, self.tr("Topic kopieren (Experimentell)"))
         if self.tabs.count() >= 6:
-            self.tabs.setTabText(5, self.tr("Rückgängig / Entfernen"))
+            self.tabs.setTabText(5, self.tr("Rückgängig / Entfernen (Experimentell)"))
+        self._update_topic_tab_tooltips()
         # Menüs
         self.view_menu.setTitle(self.tr("Ansicht"))
         if hasattr(self, "settings_menu"):
@@ -1707,6 +1814,8 @@ class MainWindow(QMainWindow):
                 self.action_api_keys.setText(self.tr("API-Keys verwalten…"))
             if hasattr(self, "action_deepl_reset_day"):
                 self.action_deepl_reset_day.setText(self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)…"))
+            if hasattr(self, "action_topic_tools"):
+                self.action_topic_tools.setText(self._topic_tools_action_text())
         if hasattr(self, "help_menu"):
             self.help_menu.setTitle(self.tr("Hilfe"))
             if hasattr(self, "action_api_help"):
@@ -1762,6 +1871,12 @@ class MainWindow(QMainWindow):
         self.action_deepl_reset_day = QAction(self.tr("DeepL-Freikontingent: Reset-Tag (Fallback)…"), self)
         self.action_deepl_reset_day.triggered.connect(self._on_set_deepl_reset_day)
         self.settings_menu.addAction(self.action_deepl_reset_day)
+        self.settings_menu.addSeparator()
+        self.action_topic_tools = QAction(self._topic_tools_action_text(), self, checkable=True)
+        self.action_topic_tools.setChecked(_load_topic_tools_enabled())
+        self.action_topic_tools.toggled.connect(self._on_topic_tools_toggled)
+        self.settings_menu.addAction(self.action_topic_tools)
+        self._apply_topic_tools_enabled(self.action_topic_tools.isChecked())
         # Hilfe / Doku (ganz rechts)
         self.help_menu = menubar.addMenu(self.tr("Hilfe"))
         self.action_api_help = QAction(self.tr("Hinweis: Telegram API-Schlüssel"), self)
@@ -1876,6 +1991,19 @@ def _load_language_preference() -> str:
             data = json.loads(p.read_text(encoding="utf-8"))
             l = str(data.get("lang", "de")).lower()
             return l if l in _SUPPORTED_LANGS else "de"
+    except Exception:
+        pass
+    # Erster Start nach der gefuehrten Installation: die im Installer gewaehlte
+    # Sprache uebernehmen (bootstrap/paths.py::language_marker_file(), JSON
+    # {"language": "<code>"}). Nur solange noch keine eigene UI-Sprache
+    # gespeichert ist - eine spaetere Wahl ueber die Flaggenleiste gewinnt.
+    try:
+        from bootstrap.paths import language_marker_file
+        marker = language_marker_file()
+        if marker.exists():
+            l = str(json.loads(marker.read_text(encoding="utf-8")).get("language", "")).lower()
+            if l in _SUPPORTED_LANGS:
+                return l
     except Exception:
         pass
     # Default: system locale → choose best match by prefix

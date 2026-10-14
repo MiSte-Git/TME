@@ -48,9 +48,9 @@ class BootstrapController:
         return template.format(**values) if values else template
 
     def write_language_marker(self) -> Path:
-        """Schreibt die JSON-Markierungsdatei für einen künftigen ersten
-        App-Start (siehe paths.language_marker_file()-Docstring - ui/app.py
-        liest sie aktuell noch nicht)."""
+        """Schreibt die JSON-Markierungsdatei, die ui/app.py beim ersten
+        App-Start als Sprachvorgabe übernimmt (siehe
+        paths.language_marker_file()-Docstring)."""
         marker = paths.language_marker_file()
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps({"language": self.language}))

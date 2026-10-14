@@ -112,19 +112,19 @@ Analyse + Umsetzung im Arbeitsverzeichnis. Anders als bei Punkt 1–8 sind das r
 
 8. Siehe Session 2026-08-21 oben — Fix umgesetzt, Verifikation in echter Windows-Umgebung noch offen.
 
-9. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
+9. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt, real gegen echte Qt-Widgets verifiziert und committet (`076c868`).
 
-10. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
+10. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt, real gegen echte Qt-Widgets verifiziert und committet (`076c868`).
 
-11. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
+11. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt, real gegen echte Qt-Widgets verifiziert und committet (`076c868`).
 
-12. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
+12. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt, real gegen echte Qt-Widgets verifiziert und committet (`076c868`).
 
-13. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
+13. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt, real gegen echte Qt-Widgets verifiziert und committet (`076c868`).
 
-14. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt und real gegen echte Qt-Widgets verifiziert, Commit noch offen.
+14. Siehe Session 2026-08-21 (Teil 2) oben — Fix umgesetzt, real gegen echte Qt-Widgets verifiziert und committet (`076c868`).
 
-*Rückmeldungen vom 2026-07-30. Punkte 1, 2, 6, 7, 8, 9–14 mittlerweile analysiert und gefixt (siehe Sessions 2026-08-21 oben), noch nicht committet. Offen bleiben nur Punkt 3 (Feature 5, Architekturentscheidung getroffen, Umsetzung nicht begonnen) und Punkt 5 (OCR-Auto-Vorschlag, nicht begonnen).*
+*Rückmeldungen vom 2026-07-30. Punkte 1, 2, 6, 7, 8, 9–14 mittlerweile analysiert, gefixt und committet (siehe Sessions 2026-08-21 oben); 1, 2, 6, 7, 8 noch ohne Verifikation unter Windows. Offen bleiben nur Punkt 3 (Feature 5, Architekturentscheidung getroffen, Umsetzung nicht begonnen) und Punkt 5 (OCR-Auto-Vorschlag, nicht begonnen).*
 
 ---
 
@@ -149,10 +149,30 @@ Analyse + Umsetzung im Arbeitsverzeichnis. Anders als bei Punkt 1–8 sind das r
 **Nicht umgesetzt / offene Folgeschritte:**
 - **Kein echter Build/Install/Start-Zyklus durchgeführt** — nur `py_compile` (alle neuen `.py`-Dateien) und YAML-Parsing der Workflow-Datei geprüft, kein echter `pyinstaller`-Lauf, kein echter `pip install` in eine venv, kein echter Start von `python -m ui.app` aus dem venv heraus. Vor dem ersten echten Release-Tag unbedingt einmal komplett lokal durchspielen (`python -m bootstrap` bzw. `python -m bootstrap.app`).
 - Kein Selbst-Update in der laufenden App (anders als PDF-Translators `ui/workers.py`-Integration) — `bootstrap/release_source.py` bietet dieselbe GitHub-API-Grundlage bereits an, eine Anbindung in `ui/app.py` wurde bewusst nicht blind an der 91-KB-Datei vorgenommen, ohne sie testen zu können.
-- Sprachmarkierungsdatei (`bootstrap/paths.py::language_marker_file()`) wird geschrieben, aber von `ui/app.py` noch nicht gelesen — kleiner, risikoarmer Folgeschritt.
-- `assets/icon.ico`/`.icns`/`.png` fehlen noch (siehe oben) — ließen sich aus der bestehenden `Telegram-LibreOffice.png` erzeugen, analog zu PDF-Translators `tools/build_icon.py`.
+- ~~Sprachmarkierungsdatei wird von `ui/app.py` noch nicht gelesen~~ — ✅ erledigt 2026-10-14 (siehe unten).
+- ~~`assets/icon.ico`/`.icns`/`.png` fehlen noch~~ — ✅ erledigt 2026-10-14 (siehe unten).
 - Kein Code-Signing (wie beim Vorbild bewusst zurückgestellt) — SmartScreen/Gatekeeper-Warnung beim ersten Start bleibt bestehen.
 - ffmpeg/LibreOffice/Pandoc bleiben separat zu installierende Systemwerkzeuge, wie schon im Entwickler-Weg (siehe docs/DEPLOY.md) — der Bootstrapper bündelt nur Python-Pakete.
+
+---
+
+## Session 2026-10-14 — About, Version, Mehrsprachigkeit, Experimentell-Kennzeichnung (Claude, per Cowork)
+
+**Erledigt:**
+- **About-Dialog** (Hilfe → Über TME…): Version aus `_version.py`, Build-Stempel, Kurzbeschreibung, Lizenz, GitHub-Link, Python-/Qt-Version. Fenstertitel zeigt `v<Version>`, `QApplication.setApplicationVersion()` gesetzt.
+- **Build-Stempel-Bug:** `build_linux.sh` bettet den Stempel als `BUILD_VERSION` (ohne `.txt`) ein, `ui/app.py` suchte nur `BUILD_VERSION.txt` - im Linux-Vollbuild wurde der Stempel nie gefunden. `_build_stamp()` liest jetzt beide Namen und parst `commit=`/`built=`.
+- **Übersetzungen vollständig:** `.ts` per `pyside6-lupdate` neu erzeugt (vorher fehlten TopicCopyTab/TopicRollbackTab komplett, ~180 Texte je Sprache), alle 10 Sprachen ohne `unfinished`. Übersetzungen von Claude - Review durch Muttersprachler (v.a. hr/fi) sinnvoll.
+- **Live-Sprachwechsel überall:** neues `ui/live_i18n.py` (`LiveRetranslateMixin`): merkt sich jeden `self.tr()`-Text samt `.format()`-Argumenten und übersetzt bei `LanguageChange` alle Texte der Kind-Widgets neu - auch dynamische Status-/Zählertexte, ohne jeden Zustand einzeln nachzubauen. Genutzt von TopicCopyTab/TopicRollbackTab. ScheduleEditorTab.retranslate() um fehlende Labels, Buttons, Hinweistext und Spalten-Tooltips ergänzt, MainWindow um Tab 6. Automatisch geprüft (Offscreen, alle 9 Zielsprachen): nach dem Umschalten bleibt kein übersetzbarer deutscher Text stehen (Ausnahme: modale Willkommensmeldung, während der ohnehin nicht umgeschaltet werden kann).
+- **Topic kopieren / Rückgängig als experimentell markiert:** Tabs heißen „… (Experimentell)“, sind standardmäßig deaktiviert (ausgegraut, Tooltip mit Hinweis) und werden über Einstellungen → „Experimentelle Topic-Funktionen aktivieren (nicht vollständig getestet)“ mit Bestätigungsdialog freigeschaltet (persistiert in `ui_experimental.json`). Abschalten während eines laufenden Vorgangs wird verhindert. In beiden Tabs zusätzlich ein Warnhinweis oben.
+- **Installer-Sprache:** `_load_language_preference()` übernimmt beim ersten Start die im Installer gewählte Sprache (`bootstrap/paths.py::language_marker_file()`), solange noch keine eigene UI-Sprache gespeichert ist.
+- **Icons:** `tools/build_icon.py` erzeugt `assets/icon.png`/`.ico`/`.icns` und ein korrektes Mehrgrößen-`ui/assets/app.ico` (vorher nur eine 960px-Größe) aus `Telegram-LibreOffice.png` (das trotz Endung ein WebP ist). `build-bootstrap.yml` bettet das Icon jetzt unter Windows/macOS ein, `TME_mac.spec` ebenfalls.
+
+**Vor Tag v1.0.0 noch offen (nur auf echter Hardware prüfbar):**
+- Bootstrapper-Installation einmal komplett durchspielen (Download → venv → pip → Menüeintrag → App-Start), inkl. Icon im Menüeintrag und Übernahme der Installer-Sprache.
+- Windows-Verifikation der Fixes 1, 2, 6, 7, 8 (v.a. cairosvg/libcairo-Bundling).
+- Topic kopieren / Rückgängig bleibt experimentell, bis ein Praxistest an echten Topics erfolgt ist; danach Kennzeichnung entfernen.
+
+**Nebenbefund (nicht geändert):** In `TopicCopyTab` ist die alte integrierte Löschoberfläche (`delete_box`) nie einem Layout zugeordnet und wird nach `__init__` vom Garbage Collector gelöscht - inaktiver Code, kann bei Gelegenheit entfernt werden.
 
 ---
 

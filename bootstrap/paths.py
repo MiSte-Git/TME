@@ -77,12 +77,10 @@ def app_source_dir() -> Path:
 def language_marker_file() -> Path:
     """JSON-Datei mit der während der Installation gewählten Sprache.
 
-    Analog zum bereits produktiven Vorbild in PDF-Translator geschrieben,
-    damit ein künftiger erster App-Start diese Sprache übernehmen könnte -
-    ui/app.py liest diese Datei aktuell noch NICHT (siehe TME-Backlog.md,
-    offener Folgeschritt); die Datei wird trotzdem bereits geschrieben, damit
-    diese Anbindung später ohne Änderung am Bootstrapper nachgezogen werden
-    kann. Bewusst eine einfache JSON-Datei statt eines direkten Zugriffs auf
+    Analog zum bereits produktiven Vorbild in PDF-Translator geschrieben.
+    ui/app.py::_load_language_preference() liest sie beim ersten App-Start,
+    solange noch keine eigene UI-Sprache (ui_lang.json) gespeichert ist -
+    eine spätere Wahl über die Flaggenleiste hat immer Vorrang. Bewusst eine einfache JSON-Datei statt eines direkten Zugriffs auf
     QSettings' natives Speicherformat (das je Plattform unterschiedlich ist -
     INI-Datei vs. Windows-Registry), was dieses dependency-freie Paket (siehe
     Modul-Docstring von bootstrap/__init__.py; kein PySide6-Import erlaubt)

@@ -91,7 +91,7 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
-    # Note: For platform-specific icons, set icon arg via CLI or adapt here.
+    icon=str(project_root / "assets" / "icon.icns") if (project_root / "assets" / "icon.icns").exists() else None,
 )
 
 coll = COLLECT(

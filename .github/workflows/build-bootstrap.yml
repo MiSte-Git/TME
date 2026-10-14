@@ -37,9 +37,8 @@ jobs:
           # icon_arg: PyInstaller bettet ein Executable-Icon nur unter
           # Windows (.ico) und macOS (.icns) ein; Linux-Binaries haben
           # keinen entsprechenden Slot, dort trägt der .desktop-Eintrag das
-          # Icon. assets/icon.ico bzw. .icns existieren in TME noch nicht
-          # (siehe TME-Backlog.md) - icon_arg bleibt deshalb vorerst leer,
-          # der Build läuft auch ohne eingebettetes Icon.
+          # Icon. assets/icon.ico/.icns werden mit tools/build_icon.py aus
+          # Telegram-LibreOffice.png erzeugt und sind eingecheckt.
           - os: ubuntu-latest
             asset_name: tme-setup-linux
             dist_name: tme-setup
@@ -47,11 +46,11 @@ jobs:
           - os: windows-latest
             asset_name: tme-setup-windows.exe
             dist_name: tme-setup.exe
-            icon_arg: ""
+            icon_arg: "--icon assets/icon.ico"
           - os: macos-latest
             asset_name: tme-setup-macos
             dist_name: tme-setup
-            icon_arg: ""
+            icon_arg: "--icon assets/icon.icns"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

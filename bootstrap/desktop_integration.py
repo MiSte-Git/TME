@@ -23,14 +23,12 @@ bestehen:
 
     python -m bootstrap.desktop_integration --dev
 
-Icon: assets/icon.{png,ico,icns} im App-Code, falls vorhanden (noch nicht
-angelegt, siehe TME-Backlog.md); fällt mangels dessen unter Linux auf die
-bereits vorhandene Telegram-LibreOffice.png im Repo-Root zurück (das
-freedesktop.org-Format akzeptiert beliebige Bildformate für Icon=), unter
-Windows/macOS auf kein Icon (Standard-Icon des Interpreters bzw. keines im
-Bundle) - vollwertige .ico-/.icns-Varianten aus Telegram-LibreOffice.png zu
-erzeugen ist ein offener Folgeschritt (siehe TME-Backlog.md), analog zu
-PDF-Translators tools/build_icon.py.
+Icon: assets/icon.{png,ico,icns} im App-Code (erzeugt mit
+tools/build_icon.py aus Telegram-LibreOffice.png, analog zu PDF-Translators
+tools/build_icon.py). Fehlt die Datei (z.B. ältere Release-ZIPs), fällt
+Linux auf Telegram-LibreOffice.png im Repo-Root zurück (das
+freedesktop.org-Format akzeptiert beliebige Bildformate für Icon=),
+Windows/macOS auf kein Icon.
 """
 from __future__ import annotations
 
@@ -57,7 +55,7 @@ _ICON_FILE_BY_PLATFORM = {
     "Darwin": "icon.icns",
     "Linux": "icon.png",
 }
-# Fallback, solange assets/icon.* noch nicht existiert - nur unter Linux
+# Fallback, falls assets/icon.* fehlt (ältere Release-ZIPs) - nur unter Linux
 # genutzt (siehe Modul-Docstring).
 _LEGACY_LINUX_ICON = "Telegram-LibreOffice.png"
 

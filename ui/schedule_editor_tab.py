@@ -56,9 +56,11 @@ class ScheduleEditorTab(QWidget):
         doc_bar = QHBoxLayout(); doc_bar.setSpacing(8)
         self.title_edit = QLineEdit(); self.title_edit.setPlaceholderText(self.tr("Dokumenttitel (optional)"))
         self.default_channel_edit = QLineEdit(); self.default_channel_edit.setPlaceholderText(self.tr("Default-Channel (@name oder Link, optional)"))
-        doc_bar.addWidget(QLabel(self.tr("Dokumenttitel")))
+        self.lbl_doc_title = QLabel(self.tr("Dokumenttitel"))
+        doc_bar.addWidget(self.lbl_doc_title)
         doc_bar.addWidget(self.title_edit, 2)
-        doc_bar.addWidget(QLabel(self.tr("Default-Channel")))
+        self.lbl_default_channel = QLabel(self.tr("Default-Channel"))
+        doc_bar.addWidget(self.lbl_default_channel)
         doc_bar.addWidget(self.default_channel_edit, 2)
         lay.addLayout(doc_bar)
 
@@ -105,19 +107,8 @@ class ScheduleEditorTab(QWidget):
         hh.resizeSection(5, 320)  # Links
         hh.resizeSection(6, 130)  # Nach Datum holen
         hh.resizeSection(7, 220)  # Kanal
-        # Tooltips für Spaltentitel
-        hh.setToolTip(self.tr("Schedule-Spalten"))
         hh.setSectionsClickable(True)
-        model = hh.model()
-        if model is not None:
-            model.setHeaderData(0, Qt.Orientation.Horizontal, self.tr("Datum im Format YYYY-MM-DD"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(1, Qt.Orientation.Horizontal, self.tr("Startzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(2, Qt.Orientation.Horizontal, self.tr("Endzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(3, Qt.Orientation.Horizontal, self.tr("Titel des Abschnitts"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(4, Qt.Orientation.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(5, Qt.Orientation.Horizontal, self.tr("Telegram-Links oder @Benutzernamen; mehrere mit ; trennen"), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(6, Qt.Orientation.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden. Wenn abgewählt, werden stattdessen die Links dieser Zeile verwendet (Von/Bis werden dann ignoriert)."), Qt.ItemDataRole.ToolTipRole)
-            model.setHeaderData(7, Qt.Orientation.Horizontal, self.tr("Kanal für diesen Abschnitt. Erforderlich, wenn 'Nach Datum holen' aktiv ist und kein Default-Channel gesetzt ist - sonst wird der Lauf fehlschlagen. Ohne 'Nach Datum holen' wird diese Spalte nicht benötigt (Links gelten dann)."), Qt.ItemDataRole.ToolTipRole)
+        self._apply_header_tooltips()
         self.table.itemChanged.connect(self._on_table_item_changed)
         lay.addWidget(self.table)
 
@@ -125,7 +116,8 @@ class ScheduleEditorTab(QWidget):
         sec_bar = QHBoxLayout(); sec_bar.setSpacing(8)
         self.btn_add = QPushButton(self.tr("Abschnitt hinzufügen")); self.btn_add.clicked.connect(self._add_row)
         self.btn_remove = QPushButton(self.tr("Ausgewählten Abschnitt entfernen")); self.btn_remove.clicked.connect(self._remove_row)
-        sec_bar.addWidget(QLabel(self.tr("Einfügen an Position:")))
+        self.lbl_add_position = QLabel(self.tr("Einfügen an Position:"))
+        sec_bar.addWidget(self.lbl_add_position)
         self.add_position = QComboBox(); self._set_add_position_items()
         sec_bar.addWidget(self.add_position)
         sec_bar.addWidget(self.btn_add)
@@ -155,17 +147,36 @@ class ScheduleEditorTab(QWidget):
         lay.addLayout(run_bar)
 
         # Info
-        info = QLabel(self.tr(
-            "Hinweis: Datum im Format YYYY-MM-DD. Bei aktiviertem 'Nach Datum holen' muss ein Kanal "
-            "bekannt sein - entweder in der Spalte 'Kanal' dieser Zeile oder als Default-Channel oben "
-            "für alle Abschnitte. Ist 'Nach Datum holen' abgewählt, werden stattdessen die angegebenen "
-            "Links verwendet und Von/Bis sowie Kanal spielen keine Rolle."
-        ))
+        self.info_label = info = QLabel(self._info_text())
         info.setWordWrap(True)
         lay.addWidget(info)
 
         lay.addStretch(1)
         self._new_doc()
+
+    def _info_text(self) -> str:
+        return self.tr(
+            "Hinweis: Datum im Format YYYY-MM-DD. Bei aktiviertem 'Nach Datum holen' muss ein Kanal "
+            "bekannt sein - entweder in der Spalte 'Kanal' dieser Zeile oder als Default-Channel oben "
+            "für alle Abschnitte. Ist 'Nach Datum holen' abgewählt, werden stattdessen die angegebenen "
+            "Links verwendet und Von/Bis sowie Kanal spielen keine Rolle."
+        )
+
+    def _apply_header_tooltips(self) -> None:
+        """Tooltips der Spaltentitel - eigene Methode, damit retranslate()
+        sie beim Live-Sprachwechsel neu setzen kann."""
+        hh = self.table.horizontalHeader()
+        hh.setToolTip(self.tr("Schedule-Spalten"))
+        model = hh.model()
+        if model is not None:
+            model.setHeaderData(0, Qt.Orientation.Horizontal, self.tr("Datum im Format YYYY-MM-DD"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(1, Qt.Orientation.Horizontal, self.tr("Startzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(2, Qt.Orientation.Horizontal, self.tr("Endzeit im Format HH:MM oder HH:MM:SS"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(3, Qt.Orientation.Horizontal, self.tr("Titel des Abschnitts"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(4, Qt.Orientation.Horizontal, self.tr("Untertitel oder Beschreibung (optional)"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(5, Qt.Orientation.Horizontal, self.tr("Telegram-Links oder @Benutzernamen; mehrere mit ; trennen"), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(6, Qt.Orientation.Horizontal, self.tr("Ob Nachrichten nach Datum aus dem Kanal geladen werden. Wenn abgewählt, werden stattdessen die Links dieser Zeile verwendet (Von/Bis werden dann ignoriert)."), Qt.ItemDataRole.ToolTipRole)
+            model.setHeaderData(7, Qt.Orientation.Horizontal, self.tr("Kanal für diesen Abschnitt. Erforderlich, wenn 'Nach Datum holen' aktiv ist und kein Default-Channel gesetzt ist - sonst wird der Lauf fehlschlagen. Ohne 'Nach Datum holen' wird diese Spalte nicht benötigt (Links gelten dann)."), Qt.ItemDataRole.ToolTipRole)
 
     def _set_add_position_items(self) -> None:
         self.add_position.clear()
@@ -196,6 +207,13 @@ class ScheduleEditorTab(QWidget):
             self.tr("Nach Datum holen"),
             self.tr("Kanal (siehe Hinweis)"),
         ])
+        self._apply_header_tooltips()
+        self.lbl_doc_title.setText(self.tr("Dokumenttitel"))
+        self.lbl_default_channel.setText(self.tr("Default-Channel"))
+        self.lbl_add_position.setText(self.tr("Einfügen an Position:"))
+        self.btn_add.setText(self.tr("Abschnitt hinzufügen"))
+        self.btn_remove.setText(self.tr("Ausgewählten Abschnitt entfernen"))
+        self.info_label.setText(self._info_text())
         self.btn_run.setText(self.tr("Speichern && Starten"))
         if hasattr(self, "add_position"):
             current_data = self.add_position.currentData()

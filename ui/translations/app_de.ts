@@ -352,162 +352,210 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Lettermap</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1701" />
-            <location filename="../app.py" line="1738" />
+            <location filename="../app.py" line="1808" />
+            <location filename="../app.py" line="1847" />
             <source>Ansicht</source>
             <translation>Ansicht</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1707" />
-            <location filename="../app.py" line="1760" />
+            <location filename="../app.py" line="1814" />
+            <location filename="../app.py" line="1869" />
             <source>DeepL-Freikontingent: Reset-Tag (Fallback)…</source>
             <translation>DeepL-Freikontingent: Reset-Tag (Fallback)…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1709" />
-            <location filename="../app.py" line="1764" />
+            <location filename="../app.py" line="1818" />
+            <location filename="../app.py" line="1879" />
             <source>Hilfe</source>
             <translation>Hilfe</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1713" />
-            <location filename="../app.py" line="1766" />
+            <location filename="../app.py" line="1822" />
+            <location filename="../app.py" line="1881" />
             <source>README öffnen</source>
             <translation>README öffnen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1715" />
-            <location filename="../app.py" line="1767" />
+            <location filename="../app.py" line="1824" />
+            <location filename="../app.py" line="1882" />
             <source>Deployment-Anleitung öffnen</source>
             <translation>Deployment-Anleitung öffnen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1717" />
-            <location filename="../app.py" line="1768" />
+            <location filename="../app.py" line="1826" />
+            <location filename="../app.py" line="1883" />
             <source>PyInstaller-Spezifikation öffnen</source>
             <translation>PyInstaller-Spezifikation öffnen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1636" />
-            <location filename="../app.py" line="1711" />
-            <location filename="../app.py" line="1765" />
+            <location filename="../app.py" line="1668" />
+            <location filename="../app.py" line="1820" />
+            <location filename="../app.py" line="1880" />
             <source>Hinweis: Telegram API-Schlüssel</source>
             <translation>Hinweis: Telegram API-Schlüssel</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1464" />
-            <location filename="../app.py" line="1697" />
+            <location filename="../app.py" line="1496" />
+            <location filename="../app.py" line="1801" />
             <source>Nicht übersetzen</source>
             <translation>Nicht übersetzen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1465" />
-            <location filename="../app.py" line="1699" />
             <source>Topic kopieren</source>
-            <translation>Topic kopieren</translation>
+            <translation type="vanished">Topic kopieren</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1467" />
             <source>Rückgängig / Entfernen</source>
-            <translation>Rückgängig / Entfernen</translation>
+            <translation type="vanished">Rückgängig / Entfernen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1568" />
+            <location filename="../app.py" line="1497" />
+            <location filename="../app.py" line="1803" />
+            <source>Topic kopieren (Experimentell)</source>
+            <translation>Topic kopieren (Experimentell)</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1499" />
+            <location filename="../app.py" line="1805" />
+            <source>Rückgängig / Entfernen (Experimentell)</source>
+            <translation>Rückgängig / Entfernen (Experimentell)</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1600" />
             <source>Datei nicht gefunden: </source>
             <translation>Datei nicht gefunden: </translation>
         </message>
         <message>
-            <location filename="../app.py" line="1568" />
+            <location filename="../app.py" line="1600" />
             <source>Hinweis</source>
             <translation>Hinweis</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1570" />
+            <location filename="../app.py" line="1602" />
             <source>Fehler</source>
             <translation>Fehler</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1617" />
+            <location filename="../app.py" line="1649" />
             <source>DeepL-Freikontingent: Reset-Tag (Fallback)</source>
             <translation>DeepL-Freikontingent: Reset-Tag (Fallback)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1619" />
+            <location filename="../app.py" line="1651" />
             <source>Tag des Monats, an dem dein DeepL-Nutzungszeitraum beginnt (nur als Fallback genutzt, wenn der Live-Abgleich mit DeepL nicht erreichbar ist - siehe DeepL-Kontoseite für das genaue Datum). 0 = Fallback deaktivieren.</source>
             <translation>Tag des Monats, an dem dein DeepL-Nutzungszeitraum beginnt (nur als Fallback genutzt, wenn der Live-Abgleich mit DeepL nicht erreichbar ist - siehe DeepL-Kontoseite für das genaue Datum). 0 = Fallback deaktivieren.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1637" />
+            <location filename="../app.py" line="1669" />
             <source>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</source>
             <translation>&lt;h3&gt;Telegram API-Schlüssel&lt;/h3&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1638" />
+            <location filename="../app.py" line="1670" />
             <source>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</source>
             <translation>&lt;p&gt;Die App benötigt API ID und API Hash von Telegram. So erhältst du sie:&lt;/p&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1639" />
+            <location filename="../app.py" line="1671" />
             <source>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</source>
             <translation>&lt;li&gt;Öffne &lt;a href='https://my.telegram.org'&gt;my.telegram.org&lt;/a&gt; und melde dich an.&lt;/li&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1640" />
+            <location filename="../app.py" line="1672" />
             <source>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</source>
             <translation>&lt;li&gt;Gehe zu &lt;b&gt;API development tools&lt;/b&gt; und erstelle eine Anwendung.&lt;/li&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1641" />
+            <location filename="../app.py" line="1673" />
             <source>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</source>
             <translation>&lt;li&gt;Kopiere &lt;b&gt;API ID&lt;/b&gt; und &lt;b&gt;API Hash&lt;/b&gt;.&lt;/li&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1642" />
+            <location filename="../app.py" line="1674" />
             <source>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</source>
             <translation>&lt;p&gt;Ablage (ohne Repo-Leak):&lt;/p&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1643" />
+            <location filename="../app.py" line="1675" />
             <source>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</source>
             <translation>&lt;li&gt;Empfohlen: &lt;code&gt;{path}&lt;/code&gt; (wird beim ersten Start automatisch angelegt)&lt;/li&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1644" />
+            <location filename="../app.py" line="1676" />
             <source>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</source>
             <translation>&lt;li&gt;Oder als Umgebungsvariablen: &lt;code&gt;TELEGRAM_API_ID&lt;/code&gt; und &lt;code&gt;TELEGRAM_API_HASH&lt;/code&gt;&lt;/li&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1645" />
+            <location filename="../app.py" line="1677" />
             <source>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</source>
             <translation>&lt;li&gt;Mehr Details: siehe Deployment-Anleitung im Hilfe-Menü.&lt;/li&gt;</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1652" />
+            <location filename="../app.py" line="1692" />
+            <source>Experimentelle Topic-Funktionen aktivieren (nicht vollständig getestet)</source>
+            <translation>Experimentelle Topic-Funktionen aktivieren (nicht vollständig getestet)</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1703" />
+            <source>Experimentell, noch nicht vollständig getestet.</source>
+            <translation>Experimentell, noch nicht vollständig getestet.</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1706" />
+            <source>Deaktiviert: experimentell, noch nicht vollständig getestet. Aktivieren unter Einstellungen → Experimentelle Topic-Funktionen.</source>
+            <translation>Deaktiviert: experimentell, noch nicht vollständig getestet. Aktivieren unter Einstellungen → Experimentelle Topic-Funktionen.</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1727" />
+            <source>Experimentelle Funktion</source>
+            <translation>Experimentelle Funktion</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1729" />
+            <source>Topic kopieren und Rückgängig / Entfernen sind noch nicht vollständig getestet. Der Rückgängig-Tab löscht Nachrichten endgültig. Bitte zuerst mit einem Test-Topic ausprobieren.
+
+Trotzdem aktivieren?</source>
+            <translation>Topic kopieren und Rückgängig / Entfernen sind noch nicht vollständig getestet. Der Rückgängig-Tab löscht Nachrichten endgültig. Bitte zuerst mit einem Test-Topic ausprobieren.
+
+Trotzdem aktivieren?</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1745" />
+            <source>Läuft</source>
+            <translation>Läuft</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1746" />
+            <source>Ein Topic-Vorgang läuft noch. Bitte erst abschließen oder abbrechen.</source>
+            <translation>Ein Topic-Vorgang läuft noch. Bitte erst abschließen oder abbrechen.</translation>
+        </message>
+        <message>
+            <location filename="../app.py" line="1756" />
             <source>Telegram Messages Export (TME)</source>
             <translation>Telegram Messages Export (TME)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1663" />
+            <location filename="../app.py" line="1767" />
             <source>Über TME</source>
             <translation>Über TME</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1666" />
+            <location filename="../app.py" line="1770" />
             <source>Version {version}</source>
             <translation>Version {version}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1669" />
+            <location filename="../app.py" line="1773" />
             <source>Build: {build}</source>
             <translation>Build: {build}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1672" />
+            <location filename="../app.py" line="1776" />
             <source>Exportiert Telegram-Nachrichten nach Datum oder Schedule als Dokument, optional mit Übersetzung, und kopiert Nachrichten zwischen Topics.</source>
             <translation>Exportiert Telegram-Nachrichten nach Datum oder Schedule als Dokument, optional mit Übersetzung, und kopiert Nachrichten zwischen Topics.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1676" />
+            <location filename="../app.py" line="1780" />
             <source>Lizenz: GNU General Public License v3.0 oder später (GPL-3.0-or-later)</source>
             <translation>Lizenz: GNU General Public License v3.0 oder später (GPL-3.0-or-later)</translation>
         </message>
@@ -516,37 +564,37 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Telegram → ODT mit Emoji &amp; Übersetzung</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1703" />
-            <location filename="../app.py" line="1756" />
+            <location filename="../app.py" line="1810" />
+            <location filename="../app.py" line="1865" />
             <source>Einstellungen</source>
             <translation>Einstellungen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1705" />
-            <location filename="../app.py" line="1757" />
+            <location filename="../app.py" line="1812" />
+            <location filename="../app.py" line="1866" />
             <source>API-Keys verwalten…</source>
             <translation>API-Keys verwalten…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1719" />
-            <location filename="../app.py" line="1778" />
+            <location filename="../app.py" line="1828" />
+            <location filename="../app.py" line="1893" />
             <source>Über TME…</source>
             <translation>Über TME…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1723" />
-            <location filename="../app.py" line="1742" />
+            <location filename="../app.py" line="1832" />
+            <location filename="../app.py" line="1851" />
             <source>Hell</source>
             <translation>Hell</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1724" />
-            <location filename="../app.py" line="1743" />
+            <location filename="../app.py" line="1833" />
+            <location filename="../app.py" line="1852" />
             <source>Dunkel</source>
             <translation>Dunkel</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1722" />
+            <location filename="../app.py" line="1831" />
             <source>Sprache</source>
             <translation>Sprache</translation>
         </message>
@@ -555,20 +603,20 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Bitte Anwendung neu starten, um die Sprache zu übernehmen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1462" />
-            <location filename="../app.py" line="1693" />
+            <location filename="../app.py" line="1494" />
+            <location filename="../app.py" line="1797" />
             <source>Schedule-Editor</source>
             <translation>Schedule-Editor</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1461" />
-            <location filename="../app.py" line="1691" />
+            <location filename="../app.py" line="1493" />
+            <location filename="../app.py" line="1795" />
             <source>Telegram-Export</source>
             <translation>Telegram-Export</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1463" />
-            <location filename="../app.py" line="1695" />
+            <location filename="../app.py" line="1495" />
+            <location filename="../app.py" line="1799" />
             <source>Lettermap (Experimentell)</source>
             <translation>Lettermap (Experimentell)</translation>
         </message>
@@ -825,7 +873,7 @@ Dieses Fenster schließt sich automatisch…</translation>
         <name>ScheduleEditorTab</name>
         <message>
             <location filename="../schedule_editor_tab.py" line="44" />
-            <location filename="../schedule_editor_tab.py" line="183" />
+            <location filename="../schedule_editor_tab.py" line="194" />
             <source>Neu</source>
             <translation>Neu</translation>
         </message>
@@ -839,19 +887,19 @@ Dieses Fenster schließt sich automatisch…</translation>
         </message>
         <message>
             <location filename="../schedule_editor_tab.py" line="47" />
-            <location filename="../schedule_editor_tab.py" line="186" />
+            <location filename="../schedule_editor_tab.py" line="197" />
             <source>Speichern unter…</source>
             <translation>Speichern unter…</translation>
         </message>
         <message>
             <location filename="../schedule_editor_tab.py" line="57" />
-            <location filename="../schedule_editor_tab.py" line="187" />
+            <location filename="../schedule_editor_tab.py" line="198" />
             <source>Dokumenttitel (optional)</source>
             <translation>Dokumenttitel (optional)</translation>
         </message>
         <message>
             <location filename="../schedule_editor_tab.py" line="58" />
-            <location filename="../schedule_editor_tab.py" line="188" />
+            <location filename="../schedule_editor_tab.py" line="199" />
             <source>Default-Channel (@name oder Link, optional)</source>
             <translation>Default-Channel (@name oder Link, optional)</translation>
         </message>
@@ -860,14 +908,14 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Datum (YYYY-MM-DD)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="87" />
-            <location filename="../schedule_editor_tab.py" line="193" />
+            <location filename="../schedule_editor_tab.py" line="89" />
+            <location filename="../schedule_editor_tab.py" line="204" />
             <source>Titel</source>
             <translation>Titel</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="88" />
-            <location filename="../schedule_editor_tab.py" line="194" />
+            <location filename="../schedule_editor_tab.py" line="90" />
+            <location filename="../schedule_editor_tab.py" line="205" />
             <source>Untertitel (optional)</source>
             <translation>Untertitel (optional)</translation>
         </message>
@@ -876,8 +924,8 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Links (mit ; trennen)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="90" />
-            <location filename="../schedule_editor_tab.py" line="196" />
+            <location filename="../schedule_editor_tab.py" line="92" />
+            <location filename="../schedule_editor_tab.py" line="207" />
             <source>Nach Datum holen</source>
             <translation>Nach Datum holen</translation>
         </message>
@@ -886,12 +934,14 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Kanal (optional)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="126" />
+            <location filename="../schedule_editor_tab.py" line="117" />
+            <location filename="../schedule_editor_tab.py" line="214" />
             <source>Abschnitt hinzufügen</source>
             <translation>Abschnitt hinzufügen</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="127" />
+            <location filename="../schedule_editor_tab.py" line="118" />
+            <location filename="../schedule_editor_tab.py" line="215" />
             <source>Ausgewählten Abschnitt entfernen</source>
             <translation>Ausgewählten Abschnitt entfernen</translation>
         </message>
@@ -916,22 +966,22 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Hinweis: Datum im Format YYYY-MM-DD. Entweder Links angeben (dann 'Nach Datum holen' abwählen) oder einen Default-Channel setzen, um nach Datum zu laden.</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="172" />
+            <location filename="../schedule_editor_tab.py" line="183" />
             <source>unterhalb der Auswahl</source>
             <translation>unterhalb der Auswahl</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="173" />
+            <location filename="../schedule_editor_tab.py" line="184" />
             <source>oberhalb der Auswahl</source>
             <translation>oberhalb der Auswahl</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="174" />
+            <location filename="../schedule_editor_tab.py" line="185" />
             <source>am Anfang</source>
             <translation>am Anfang</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="175" />
+            <location filename="../schedule_editor_tab.py" line="186" />
             <source>am Ende</source>
             <translation>am Ende</translation>
         </message>
@@ -940,73 +990,73 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Schedule → ODT erzeugen</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="220" />
+            <location filename="../schedule_editor_tab.py" line="238" />
             <source>Schedule laden</source>
             <translation>Schedule laden</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="222" />
+            <location filename="../schedule_editor_tab.py" line="240" />
             <source>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</source>
             <translation>Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="229" />
+            <location filename="../schedule_editor_tab.py" line="247" />
             <source>Nur JSON-Schedules werden unterstützt. Bitte die Datei zuerst nach JSON konvertieren.</source>
             <translation>Nur JSON-Schedules werden unterstützt. Bitte die Datei zuerst nach JSON konvertieren.</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="235" />
-            <location filename="../schedule_editor_tab.py" line="346" />
-            <location filename="../schedule_editor_tab.py" line="376" />
-            <location filename="../schedule_editor_tab.py" line="503" />
+            <location filename="../schedule_editor_tab.py" line="253" />
+            <location filename="../schedule_editor_tab.py" line="364" />
+            <location filename="../schedule_editor_tab.py" line="394" />
+            <location filename="../schedule_editor_tab.py" line="521" />
             <source>Fehler</source>
             <translation>Fehler</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="316" />
+            <location filename="../schedule_editor_tab.py" line="334" />
             <source>Zeile {row}: 'Nach Datum holen' ist aktiv, aber es ist weder ein Kanal für diesen Abschnitt (Spalte 'Kanal') noch ein Default-Channel gesetzt.</source>
             <translation>Zeile {row}: 'Nach Datum holen' ist aktiv, aber es ist weder ein Kanal für diesen Abschnitt (Spalte 'Kanal') noch ein Default-Channel gesetzt.</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="321" />
+            <location filename="../schedule_editor_tab.py" line="339" />
             <source>Zeile {row}: 'Nach Datum holen' ist abgewählt, aber es sind keine Links angegeben. Dieser Abschnitt würde keine Nachrichten enthalten.</source>
             <translation>Zeile {row}: 'Nach Datum holen' ist abgewählt, aber es sind keine Links angegeben. Dieser Abschnitt würde keine Nachrichten enthalten.</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="344" />
-            <location filename="../schedule_editor_tab.py" line="374" />
+            <location filename="../schedule_editor_tab.py" line="362" />
+            <location filename="../schedule_editor_tab.py" line="392" />
             <source>Schedule gespeichert: {p}</source>
             <translation>Schedule gespeichert: {p}</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="344" />
-            <location filename="../schedule_editor_tab.py" line="374" />
+            <location filename="../schedule_editor_tab.py" line="362" />
+            <location filename="../schedule_editor_tab.py" line="392" />
             <source>Gespeichert</source>
             <translation>Gespeichert</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="362" />
+            <location filename="../schedule_editor_tab.py" line="380" />
             <source>Schedule speichern</source>
             <translation>Schedule speichern</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="304" />
+            <location filename="../schedule_editor_tab.py" line="322" />
             <source>Ungültiges Datum in Zeile {row}: {err}</source>
             <translation>Ungültiges Datum in Zeile {row}: {err}</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="119" />
+            <location filename="../schedule_editor_tab.py" line="178" />
             <source>Ob Nachrichten nach Datum aus dem Kanal geladen werden. Wenn abgewählt, werden stattdessen die Links dieser Zeile verwendet (Von/Bis werden dann ignoriert).</source>
             <translation>Ob Nachrichten nach Datum aus dem Kanal geladen werden. Wenn abgewählt, werden stattdessen die Links dieser Zeile verwendet (Von/Bis werden dann ignoriert).</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="120" />
+            <location filename="../schedule_editor_tab.py" line="179" />
             <source>Kanal für diesen Abschnitt. Erforderlich, wenn 'Nach Datum holen' aktiv ist und kein Default-Channel gesetzt ist - sonst wird der Lauf fehlschlagen. Ohne 'Nach Datum holen' wird diese Spalte nicht benötigt (Links gelten dann).</source>
             <translation>Kanal für diesen Abschnitt. Erforderlich, wenn 'Nach Datum holen' aktiv ist und kein Default-Channel gesetzt ist - sonst wird der Lauf fehlschlagen. Ohne 'Nach Datum holen' wird diese Spalte nicht benötigt (Links gelten dann).</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="152" />
-            <location filename="../schedule_editor_tab.py" line="199" />
+            <location filename="../schedule_editor_tab.py" line="144" />
+            <location filename="../schedule_editor_tab.py" line="217" />
             <source>Speichern &amp;&amp; Starten</source>
             <translation>Speichern &amp;&amp; Starten</translation>
         </message>
@@ -1016,100 +1066,102 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation>Hinweis: Datum im Format YYYY-MM-DD. Bei aktiviertem 'Nach Datum holen' muss ein Kanal bekannt sein - entweder in der Spalte 'Kanal' dieser Zeile oder als Default-Channel oben für alle Abschnitte. Ist 'Nach Datum holen' abgewählt, werden stattdessen die angegebenen Links verwendet und Von/Bis sowie Kanal spielen keine Rolle.</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="306" />
+            <location filename="../schedule_editor_tab.py" line="324" />
             <source>Titel fehlt in Zeile {row}</source>
             <translation>Titel fehlt in Zeile {row}</translation>
         </message>
         <message>
             <location filename="../schedule_editor_tab.py" line="45" />
-            <location filename="../schedule_editor_tab.py" line="184" />
+            <location filename="../schedule_editor_tab.py" line="195" />
             <source>Telegram-Export laden</source>
             <translation>Telegram-Export laden</translation>
         </message>
         <message>
             <location filename="../schedule_editor_tab.py" line="46" />
-            <location filename="../schedule_editor_tab.py" line="185" />
+            <location filename="../schedule_editor_tab.py" line="196" />
             <source>Telegram-Export speichern</source>
             <translation>Telegram-Export speichern</translation>
         </message>
         <message>
             <location filename="../schedule_editor_tab.py" line="59" />
+            <location filename="../schedule_editor_tab.py" line="211" />
             <source>Dokumenttitel</source>
             <translation>Dokumenttitel</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="61" />
+            <location filename="../schedule_editor_tab.py" line="62" />
+            <location filename="../schedule_editor_tab.py" line="212" />
             <source>Default-Channel</source>
             <translation>Default-Channel</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="84" />
-            <location filename="../schedule_editor_tab.py" line="190" />
+            <location filename="../schedule_editor_tab.py" line="86" />
+            <location filename="../schedule_editor_tab.py" line="201" />
             <source>Datum
 (YYYY-MM-DD)</source>
             <translation>Datum
 (YYYY-MM-DD)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="85" />
-            <location filename="../schedule_editor_tab.py" line="191" />
+            <location filename="../schedule_editor_tab.py" line="87" />
+            <location filename="../schedule_editor_tab.py" line="202" />
             <source>Von
 (HH:MM[:SS])</source>
             <translation>Von
 (HH:MM[:SS])</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="86" />
-            <location filename="../schedule_editor_tab.py" line="192" />
+            <location filename="../schedule_editor_tab.py" line="88" />
+            <location filename="../schedule_editor_tab.py" line="203" />
             <source>Bis
 (HH:MM[:SS])</source>
             <translation>Bis
 (HH:MM[:SS])</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="89" />
-            <location filename="../schedule_editor_tab.py" line="195" />
+            <location filename="../schedule_editor_tab.py" line="91" />
+            <location filename="../schedule_editor_tab.py" line="206" />
             <source>Links / @Benutzernamen (mit ; trennen)</source>
             <translation>Links / @Benutzernamen (mit ; trennen)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="91" />
-            <location filename="../schedule_editor_tab.py" line="197" />
+            <location filename="../schedule_editor_tab.py" line="93" />
+            <location filename="../schedule_editor_tab.py" line="208" />
             <source>Kanal (siehe Hinweis)</source>
             <translation>Kanal (siehe Hinweis)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="109" />
+            <location filename="../schedule_editor_tab.py" line="169" />
             <source>Schedule-Spalten</source>
             <translation>Schedule-Spalten</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="113" />
+            <location filename="../schedule_editor_tab.py" line="172" />
             <source>Datum im Format YYYY-MM-DD</source>
             <translation>Datum im Format YYYY-MM-DD</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="114" />
+            <location filename="../schedule_editor_tab.py" line="173" />
             <source>Startzeit im Format HH:MM oder HH:MM:SS</source>
             <translation>Startzeit im Format HH:MM oder HH:MM:SS</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="115" />
+            <location filename="../schedule_editor_tab.py" line="174" />
             <source>Endzeit im Format HH:MM oder HH:MM:SS</source>
             <translation>Endzeit im Format HH:MM oder HH:MM:SS</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="116" />
+            <location filename="../schedule_editor_tab.py" line="175" />
             <source>Titel des Abschnitts</source>
             <translation>Titel des Abschnitts</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="117" />
+            <location filename="../schedule_editor_tab.py" line="176" />
             <source>Untertitel oder Beschreibung (optional)</source>
             <translation>Untertitel oder Beschreibung (optional)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="118" />
+            <location filename="../schedule_editor_tab.py" line="177" />
             <source>Telegram-Links oder @Benutzernamen; mehrere mit ; trennen</source>
             <translation>Telegram-Links oder @Benutzernamen; mehrere mit ; trennen</translation>
         </message>
@@ -1122,7 +1174,8 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Spezifischer Kanal für diesen Abschnitt (optional)</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="128" />
+            <location filename="../schedule_editor_tab.py" line="119" />
+            <location filename="../schedule_editor_tab.py" line="213" />
             <source>Einfügen an Position:</source>
             <translation>Einfügen an Position:</translation>
         </message>
@@ -1131,7 +1184,7 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Telegram-Export → ODT erzeugen</translation>
         </message>
         <message>
-            <location filename="../schedule_editor_tab.py" line="364" />
+            <location filename="../schedule_editor_tab.py" line="382" />
             <source>JSON (*.json)</source>
             <translation>JSON (*.json)</translation>
         </message>
@@ -1139,8 +1192,8 @@ Dieses Fenster schließt sich automatisch…</translation>
     <context>
         <name>ScheduleTab</name>
         <message>
-            <location filename="../app.py" line="292" />
-            <location filename="../app.py" line="582" />
+            <location filename="../app.py" line="324" />
+            <location filename="../app.py" line="614" />
             <source>Datei wählen…</source>
             <translation>Datei wählen…</translation>
         </message>
@@ -1149,32 +1202,32 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Schedule:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="335" />
-            <location filename="../app.py" line="584" />
+            <location filename="../app.py" line="367" />
+            <location filename="../app.py" line="616" />
             <source>Übersetzen</source>
             <translation>Übersetzen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="352" />
-            <location filename="../app.py" line="585" />
+            <location filename="../app.py" line="384" />
+            <location filename="../app.py" line="617" />
             <source>Modus:</source>
             <translation>Modus:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="353" />
-            <location filename="../app.py" line="587" />
+            <location filename="../app.py" line="385" />
+            <location filename="../app.py" line="619" />
             <source>Sprache:</source>
             <translation>Sprache:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="347" />
-            <location filename="../app.py" line="588" />
+            <location filename="../app.py" line="379" />
+            <location filename="../app.py" line="620" />
             <source>Bilder einbetten</source>
             <translation>Bilder einbetten</translation>
         </message>
         <message>
-            <location filename="../app.py" line="348" />
-            <location filename="../app.py" line="589" />
+            <location filename="../app.py" line="380" />
+            <location filename="../app.py" line="621" />
             <source>Custom Emojis einbetten</source>
             <translation>Custom Emojis einbetten</translation>
         </message>
@@ -1183,8 +1236,8 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Schedule → ODT erzeugen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="349" />
-            <location filename="../app.py" line="590" />
+            <location filename="../app.py" line="381" />
+            <location filename="../app.py" line="622" />
             <source>Lettermapping aktivieren</source>
             <translation>Lettermapping aktivieren</translation>
         </message>
@@ -1197,47 +1250,47 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Schedule (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="522" />
-            <location filename="../app.py" line="532" />
-            <location filename="../app.py" line="771" />
-            <location filename="../app.py" line="775" />
-            <location filename="../app.py" line="1114" />
+            <location filename="../app.py" line="554" />
+            <location filename="../app.py" line="564" />
+            <location filename="../app.py" line="803" />
+            <location filename="../app.py" line="807" />
+            <location filename="../app.py" line="1146" />
             <source>Fehler</source>
             <translation>Fehler</translation>
         </message>
         <message>
-            <location filename="../app.py" line="775" />
+            <location filename="../app.py" line="807" />
             <source>Bitte eine gültige Schedule-Datei wählen.</source>
             <translation>Bitte eine gültige Schedule-Datei wählen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="778" />
-            <location filename="../app.py" line="787" />
+            <location filename="../app.py" line="810" />
+            <location filename="../app.py" line="819" />
             <source>Läuft</source>
             <translation>Läuft</translation>
         </message>
         <message>
-            <location filename="../app.py" line="778" />
+            <location filename="../app.py" line="810" />
             <source>Ein Durchlauf ist bereits aktiv. Bitte warten.</source>
             <translation>Ein Durchlauf ist bereits aktiv. Bitte warten.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="839" />
+            <location filename="../app.py" line="871" />
             <source>Starte…</source>
             <translation>Starte…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="895" />
+            <location filename="../app.py" line="927" />
             <source>Breche ab…</source>
             <translation>Breche ab…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="906" />
+            <location filename="../app.py" line="938" />
             <source>Bitte Lettermap im Tab anpassen und anschließend 'Fortsetzen' klicken.</source>
             <translation>Bitte Lettermap im Tab anpassen und anschließend 'Fortsetzen' klicken.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="915" />
+            <location filename="../app.py" line="947" />
             <source>Prüfe Mapping…</source>
             <translation>Prüfe Mapping…</translation>
         </message>
@@ -1250,28 +1303,28 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">ODT erzeugt: {main}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1010" />
-            <location filename="../app.py" line="1017" />
+            <location filename="../app.py" line="1042" />
+            <location filename="../app.py" line="1049" />
             <source>ODT erzeugt: {path}</source>
             <translation>ODT erzeugt: {path}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1019" />
+            <location filename="../app.py" line="1051" />
             <source>Übersetzungs-ODT erzeugt: {path}</source>
             <translation>Übersetzungs-ODT erzeugt: {path}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1021" />
+            <location filename="../app.py" line="1053" />
             <source>DOCX erzeugt: {path}</source>
             <translation>DOCX erzeugt: {path}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1023" />
+            <location filename="../app.py" line="1055" />
             <source>Übersetzungs-DOCX erzeugt: {path}</source>
             <translation>Übersetzungs-DOCX erzeugt: {path}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1025" />
+            <location filename="../app.py" line="1057" />
             <source>Warnung: DOCX-Konvertierung fehlgeschlagen: {err}</source>
             <translation>Warnung: DOCX-Konvertierung fehlgeschlagen: {err}</translation>
         </message>
@@ -1280,22 +1333,22 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Übersetzungskosten (Schätzung):</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1035" />
+            <location filename="../app.py" line="1067" />
             <source>Fertig.</source>
             <translation>Fertig.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1063" />
+            <location filename="../app.py" line="1095" />
             <source>Letzter Run: {summary}</source>
             <translation>Letzter Run: {summary}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1059" />
+            <location filename="../app.py" line="1091" />
             <source>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
             <translation>{provider}: {n} Nachricht(en), {chars} Zeichen, geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1052" />
+            <location filename="../app.py" line="1084" />
             <source>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</source>
             <translation>{provider}: {n} Nachricht(en), {tokens_in}+{tokens_out} Tokens (ein/aus), geschätzte Kosten: ~${cost} (Schätzung, keine Live-Preisabfrage)</translation>
         </message>
@@ -1304,170 +1357,170 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Ordner öffnen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1097" />
+            <location filename="../app.py" line="1129" />
             <source>Fertig</source>
             <translation>Fertig</translation>
         </message>
         <message>
-            <location filename="../app.py" line="294" />
-            <location filename="../app.py" line="583" />
+            <location filename="../app.py" line="326" />
+            <location filename="../app.py" line="615" />
             <source>Telegram-Export:</source>
             <translation>Telegram-Export:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="337" />
-            <location filename="../app.py" line="593" />
+            <location filename="../app.py" line="369" />
+            <location filename="../app.py" line="625" />
             <source>Übersetzungs-Provider:</source>
             <translation>Übersetzungs-Provider:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="340" />
-            <location filename="../app.py" line="598" />
+            <location filename="../app.py" line="372" />
+            <location filename="../app.py" line="630" />
             <source>Telegram (kostenlos)</source>
             <translation>Telegram (kostenlos)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="350" />
-            <location filename="../app.py" line="591" />
+            <location filename="../app.py" line="382" />
+            <location filename="../app.py" line="623" />
             <source>Kanäle chronologisch mischen</source>
             <translation>Kanäle chronologisch mischen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="351" />
-            <location filename="../app.py" line="592" />
+            <location filename="../app.py" line="383" />
+            <location filename="../app.py" line="624" />
             <source>Inkrementelles Update (Store)</source>
             <translation>Inkrementelles Update (Store)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="354" />
-            <location filename="../app.py" line="586" />
+            <location filename="../app.py" line="386" />
+            <location filename="../app.py" line="618" />
             <source>Quellsprache:</source>
             <translation>Quellsprache:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="356" />
-            <location filename="../app.py" line="603" />
+            <location filename="../app.py" line="388" />
+            <location filename="../app.py" line="635" />
             <source>Ausgabeformat:</source>
             <translation>Ausgabeformat:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="358" />
-            <location filename="../app.py" line="605" />
+            <location filename="../app.py" line="390" />
+            <location filename="../app.py" line="637" />
             <source>Nur ODT</source>
             <translation>Nur ODT</translation>
         </message>
         <message>
-            <location filename="../app.py" line="359" />
-            <location filename="../app.py" line="606" />
+            <location filename="../app.py" line="391" />
+            <location filename="../app.py" line="638" />
             <source>Nur DOCX</source>
             <translation>Nur DOCX</translation>
         </message>
         <message>
-            <location filename="../app.py" line="360" />
-            <location filename="../app.py" line="607" />
+            <location filename="../app.py" line="392" />
+            <location filename="../app.py" line="639" />
             <source>ODT + DOCX</source>
             <translation>ODT + DOCX</translation>
         </message>
         <message>
-            <location filename="../app.py" line="361" />
-            <location filename="../app.py" line="612" />
+            <location filename="../app.py" line="393" />
+            <location filename="../app.py" line="644" />
             <source>Layout:</source>
             <translation>Layout:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="363" />
-            <location filename="../app.py" line="614" />
+            <location filename="../app.py" line="395" />
+            <location filename="../app.py" line="646" />
             <source>Linear</source>
             <translation>Linear</translation>
         </message>
         <message>
-            <location filename="../app.py" line="364" />
-            <location filename="../app.py" line="615" />
+            <location filename="../app.py" line="396" />
+            <location filename="../app.py" line="647" />
             <source>Übersetzung neben Original</source>
             <translation>Übersetzung neben Original</translation>
         </message>
         <message>
-            <location filename="../app.py" line="370" />
-            <location filename="../app.py" line="594" />
+            <location filename="../app.py" line="402" />
+            <location filename="../app.py" line="626" />
             <source>Übersetzung</source>
             <translation>Übersetzung</translation>
         </message>
         <message>
-            <location filename="../app.py" line="382" />
-            <location filename="../app.py" line="595" />
+            <location filename="../app.py" line="414" />
+            <location filename="../app.py" line="627" />
             <source>Ausgabe</source>
             <translation>Ausgabe</translation>
         </message>
         <message>
-            <location filename="../app.py" line="388" />
-            <location filename="../app.py" line="596" />
+            <location filename="../app.py" line="420" />
+            <location filename="../app.py" line="628" />
             <source>Inhalt</source>
             <translation>Inhalt</translation>
         </message>
         <message>
-            <location filename="../app.py" line="406" />
-            <location filename="../app.py" line="620" />
+            <location filename="../app.py" line="438" />
+            <location filename="../app.py" line="652" />
             <source>Starten</source>
             <translation>Starten</translation>
         </message>
         <message>
-            <location filename="../app.py" line="409" />
-            <location filename="../app.py" line="621" />
+            <location filename="../app.py" line="441" />
+            <location filename="../app.py" line="653" />
             <source>Abbrechen</source>
             <translation>Abbrechen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="413" />
-            <location filename="../app.py" line="622" />
+            <location filename="../app.py" line="445" />
+            <location filename="../app.py" line="654" />
             <source>Jetzt einloggen…</source>
             <translation>Jetzt einloggen…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="457" />
-            <location filename="../app.py" line="624" />
+            <location filename="../app.py" line="489" />
+            <location filename="../app.py" line="656" />
             <source>Fortsetzen</source>
             <translation>Fortsetzen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="463" />
-            <location filename="../app.py" line="623" />
+            <location filename="../app.py" line="495" />
+            <location filename="../app.py" line="655" />
             <source>Ausgabeordner öffnen</source>
             <translation>Ausgabeordner öffnen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="511" />
-            <location filename="../app.py" line="514" />
-            <location filename="../app.py" line="540" />
+            <location filename="../app.py" line="543" />
+            <location filename="../app.py" line="546" />
+            <location filename="../app.py" line="572" />
             <source>Telegram API</source>
             <translation>Telegram API</translation>
         </message>
         <message>
-            <location filename="../app.py" line="511" />
+            <location filename="../app.py" line="543" />
             <source>API ID (my.telegram.org):</source>
             <translation>API ID (my.telegram.org):</translation>
         </message>
         <message>
-            <location filename="../app.py" line="514" />
+            <location filename="../app.py" line="546" />
             <source>API Hash (my.telegram.org):</source>
             <translation>API Hash (my.telegram.org):</translation>
         </message>
         <message>
-            <location filename="../app.py" line="522" />
+            <location filename="../app.py" line="554" />
             <source>ID oder Hash nicht gesetzt</source>
             <translation>ID oder Hash nicht gesetzt</translation>
         </message>
         <message>
-            <location filename="../app.py" line="541" />
+            <location filename="../app.py" line="573" />
             <source>Telegram API-Zugangsdaten fehlen. Jetzt eintragen und lokal speichern?</source>
             <translation>Telegram API-Zugangsdaten fehlen. Jetzt eintragen und lokal speichern?</translation>
         </message>
         <message>
-            <location filename="../app.py" line="561" />
+            <location filename="../app.py" line="593" />
             <source>API-Key fehlt</source>
             <translation>API-Key fehlt</translation>
         </message>
         <message>
-            <location filename="../app.py" line="563" />
+            <location filename="../app.py" line="595" />
             <source>Für den gewählten Übersetzungs-Provider ist kein API-Key hinterlegt (weder Umgebungsvariable, OS-Keyring noch credentials.json). Jetzt API-Keys verwalten?</source>
             <translation>Für den gewählten Übersetzungs-Provider ist kein API-Key hinterlegt (weder Umgebungsvariable, OS-Keyring noch credentials.json). Jetzt API-Keys verwalten?</translation>
         </message>
@@ -1476,107 +1529,107 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Telegram-Export → ODT erzeugen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="636" />
+            <location filename="../app.py" line="668" />
             <source>Telegram-Export auswählen</source>
             <translation>Telegram-Export auswählen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="638" />
+            <location filename="../app.py" line="670" />
             <source>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</source>
             <translation>Telegram-Export (*.json *.txt);;JSON (*.json);;Text (*.txt)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="668" />
+            <location filename="../app.py" line="700" />
             <source>Vorschau wird berechnet…</source>
             <translation>Vorschau wird berechnet…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="698" />
+            <location filename="../app.py" line="730" />
             <source>Vorschau: ~{chars} Zeichen aus {n} Nachricht(en) zu übersetzen</source>
             <translation>Vorschau: ~{chars} Zeichen aus {n} Nachricht(en) zu übersetzen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="715" />
+            <location filename="../app.py" line="747" />
             <source>– geschätzte Kosten: ~${cost:.4f} (grobe Schätzung, basierend auf ca. 4 Zeichen pro Token - tatsächliche Tokenisierung kann abweichen)</source>
             <translation>– geschätzte Kosten: ~${cost:.4f} (grobe Schätzung, basierend auf ca. 4 Zeichen pro Token - tatsächliche Tokenisierung kann abweichen)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="719" />
+            <location filename="../app.py" line="751" />
             <source>– geschätzte Kosten: ~${cost:.4f}</source>
             <translation>– geschätzte Kosten: ~${cost:.4f}</translation>
         </message>
         <message>
-            <location filename="../app.py" line="729" />
+            <location filename="../app.py" line="761" />
             <source>Vorschau nicht verfügbar (Telegram-Login prüfen).</source>
             <translation>Vorschau nicht verfügbar (Telegram-Login prüfen).</translation>
         </message>
         <message>
-            <location filename="../app.py" line="752" />
+            <location filename="../app.py" line="784" />
             <source>DeepL-Freikontingent diesen Zeitraum: ~{used} von {limit} Zeichen verbraucht ({remaining} übrig).</source>
             <translation>DeepL-Freikontingent diesen Zeitraum: ~{used} von {limit} Zeichen verbraucht ({remaining} übrig).</translation>
         </message>
         <message>
-            <location filename="../app.py" line="757" />
+            <location filename="../app.py" line="789" />
             <source>⚠ Dieser Lauf würde das Freikontingent um ~{over} Zeichen überschreiten und zusätzliche Kosten verursachen.</source>
             <translation>⚠ Dieser Lauf würde das Freikontingent um ~{over} Zeichen überschreiten und zusätzliche Kosten verursachen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="771" />
+            <location filename="../app.py" line="803" />
             <source>Bitte zuerst eine Schedule-Datei auswählen.</source>
             <translation>Bitte zuerst eine Schedule-Datei auswählen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="788" />
+            <location filename="../app.py" line="820" />
             <source>Zeichen-Vorschau wird gerade berechnet. Bitte kurz warten und erneut versuchen.</source>
             <translation>Zeichen-Vorschau wird gerade berechnet. Bitte kurz warten und erneut versuchen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="809" />
+            <location filename="../app.py" line="841" />
             <source>DOCX-Konvertierung nicht verfügbar</source>
             <translation>DOCX-Konvertierung nicht verfügbar</translation>
         </message>
         <message>
-            <location filename="../app.py" line="811" />
+            <location filename="../app.py" line="843" />
             <source>Weder LibreOffice (soffice) noch Pandoc wurden gefunden. DOCX-Export wird fehlschlagen (siehe docs/DEPLOY.md). Trotzdem nur mit ODT fortfahren?</source>
             <translation>Weder LibreOffice (soffice) noch Pandoc wurden gefunden. DOCX-Export wird fehlschlagen (siehe docs/DEPLOY.md). Trotzdem nur mit ODT fortfahren?</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1032" />
+            <location filename="../app.py" line="1064" />
             <source>Warnung(en) bei der Übersetzung:</source>
             <translation>Warnung(en) bei der Übersetzung:</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1097" />
+            <location filename="../app.py" line="1129" />
             <source>Fertig (mit Warnung)</source>
             <translation>Fertig (mit Warnung)</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1113" />
+            <location filename="../app.py" line="1145" />
             <source>Fehler: </source>
             <translation>Fehler: </translation>
         </message>
         <message>
-            <location filename="../app.py" line="1130" />
+            <location filename="../app.py" line="1162" />
             <source>Lauf abgebrochen.</source>
             <translation>Lauf abgebrochen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1131" />
+            <location filename="../app.py" line="1163" />
             <source>Abgebrochen</source>
             <translation>Abgebrochen</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1131" />
+            <location filename="../app.py" line="1163" />
             <source>Der Lauf wurde abgebrochen.</source>
             <translation>Der Lauf wurde abgebrochen.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1185" />
+            <location filename="../app.py" line="1217" />
             <source>Login erfolgreich - Lauf wird fortgesetzt…</source>
             <translation>Login erfolgreich - Lauf wird fortgesetzt…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1189" />
+            <location filename="../app.py" line="1221" />
             <source>Login erfolgreich.</source>
             <translation>Login erfolgreich.</translation>
         </message>
@@ -1585,22 +1638,22 @@ Dieses Fenster schließt sich automatisch…</translation>
             <translation type="vanished">Login erfolgreich - du kannst den Lauf jetzt erneut starten.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1213" />
+            <location filename="../app.py" line="1245" />
             <source>Willkommen bei TME</source>
             <translation>Willkommen bei TME</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1216" />
+            <location filename="../app.py" line="1248" />
             <source>Für die Nutzung werden Telegram API-Zugangsdaten (ID/Hash) sowie mindestens ein Übersetzungs-Provider-Key benötigt, falls du übersetzen möchtest. Diese können jederzeit über „Jetzt einloggen…“ bzw. das Menü „Einstellungen → API-Keys verwalten…“ hinterlegt werden.</source>
             <translation>Für die Nutzung werden Telegram API-Zugangsdaten (ID/Hash) sowie mindestens ein Übersetzungs-Provider-Key benötigt, falls du übersetzen möchtest. Diese können jederzeit über „Jetzt einloggen…“ bzw. das Menü „Einstellungen → API-Keys verwalten…“ hinterlegt werden.</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1221" />
+            <location filename="../app.py" line="1253" />
             <source>Jetzt einrichten</source>
             <translation>Jetzt einrichten</translation>
         </message>
         <message>
-            <location filename="../app.py" line="1222" />
+            <location filename="../app.py" line="1254" />
             <source>Später</source>
             <translation>Später</translation>
         </message>
@@ -1608,12 +1661,12 @@ Dieses Fenster schließt sich automatisch…</translation>
     <context>
         <name>ScheduleWorker</name>
         <message>
-            <location filename="../app.py" line="197" />
+            <location filename="../app.py" line="229" />
             <source>Fortsetze nach Mapping…</source>
             <translation>Fortsetze nach Mapping…</translation>
         </message>
         <message>
-            <location filename="../app.py" line="235" />
+            <location filename="../app.py" line="267" />
             <source>Warnung: run_schedule unterstützt keinen Fortsetzen-Callback – fahre ohne UI-Verknüpfung fort.</source>
             <translation>Warnung: run_schedule unterstützt keinen Fortsetzen-Callback – fahre ohne UI-Verknüpfung fort.</translation>
         </message>
@@ -1621,485 +1674,490 @@ Dieses Fenster schließt sich automatisch…</translation>
     <context>
         <name>TopicCopyTab</name>
         <message>
-            <location filename="../topic_copy_tab.py" line="164" />
+            <location filename="../topic_copy_tab.py" line="168" />
+            <source>Experimentell: Diese Funktion ist noch nicht vollständig getestet und kann Nachrichten löschen. Bitte zuerst mit einem Test-Topic ausprobieren.</source>
+            <translation>Experimentell: Diese Funktion ist noch nicht vollständig getestet und kann Nachrichten löschen. Bitte zuerst mit einem Test-Topic ausprobieren.</translation>
+        </message>
+        <message>
+            <location filename="../topic_copy_tab.py" line="179" />
             <source>Hier werden ausgewählte Nachrichten kopiert. Die abschließende Prüfung und ein mögliches Rückgängigmachen erfolgen im eigenen Tab. Ein Topic selbst wird niemals gelöscht.</source>
             <translation>Hier werden ausgewählte Nachrichten kopiert. Die abschließende Prüfung und ein mögliches Rückgängigmachen erfolgen im eigenen Tab. Ein Topic selbst wird niemals gelöscht.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="171" />
+            <location filename="../topic_copy_tab.py" line="186" />
             <source>1. Auswählen und kopieren</source>
             <translation>1. Auswählen und kopieren</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="182" />
+            <location filename="../topic_copy_tab.py" line="197" />
             <source>Quell-Topic-Link:</source>
             <translation>Quell-Topic-Link:</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="183" />
+            <location filename="../topic_copy_tab.py" line="198" />
             <source>Ziel-Topic-Link:</source>
             <translation>Ziel-Topic-Link:</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="185" />
+            <location filename="../topic_copy_tab.py" line="200" />
             <source>Nachrichten und Bots laden</source>
             <translation>Nachrichten und Bots laden</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="193" />
+            <location filename="../topic_copy_tab.py" line="208" />
             <source>Bereit zum Laden.</source>
             <translation>Bereit zum Laden.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="197" />
+            <location filename="../topic_copy_tab.py" line="212" />
             <source>Bots (Anfragen und Antworten gemeinsam)</source>
             <translation>Bots (Anfragen und Antworten gemeinsam)</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="202" />
+            <location filename="../topic_copy_tab.py" line="217" />
             <source>Haken gesetzt: Anfragen und Antworten dieses Bots werden kopiert.</source>
             <translation>Haken gesetzt: Anfragen und Antworten dieses Bots werden kopiert.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="206" />
+            <location filename="../topic_copy_tab.py" line="221" />
             <source>0 von 0 Bots ausgewählt.</source>
             <translation>0 von 0 Bots ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="209" />
+            <location filename="../topic_copy_tab.py" line="224" />
             <source>Nicht eindeutig zugeordnete /-Anfragen</source>
             <translation>Nicht eindeutig zugeordnete /-Anfragen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="214" />
+            <location filename="../topic_copy_tab.py" line="229" />
             <source>Diese Anfragen beginnen mit '/', konnten aber keinem Bot sicher zugeordnet werden. Der Haken steuert dieselbe Nachricht wie in der vollständigen Liste darunter.</source>
             <translation>Diese Anfragen beginnen mit '/', konnten aber keinem Bot sicher zugeordnet werden. Der Haken steuert dieselbe Nachricht wie in der vollständigen Liste darunter.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="221" />
+            <location filename="../topic_copy_tab.py" line="236" />
             <source>Alle auswählen</source>
             <translation>Alle auswählen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="225" />
+            <location filename="../topic_copy_tab.py" line="240" />
             <source>Keine auswählen</source>
             <translation>Keine auswählen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="234" />
+            <location filename="../topic_copy_tab.py" line="249" />
             <source>0 von 0 unklaren Anfragen ausgewählt.</source>
             <translation>0 von 0 unklaren Anfragen ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="238" />
+            <location filename="../topic_copy_tab.py" line="253" />
             <source>Nachrichten, die kopiert werden</source>
             <translation>Nachrichten, die kopiert werden</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="244" />
+            <location filename="../topic_copy_tab.py" line="259" />
             <source>Nur Nachrichten mit gesetztem Haken werden kopiert. Die Bot-Auswahl oben kann zusammengehörige Anfragen und Antworten gesammelt umschalten.</source>
             <translation>Nur Nachrichten mit gesetztem Haken werden kopiert. Die Bot-Auswahl oben kann zusammengehörige Anfragen und Antworten gesammelt umschalten.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="249" />
-            <location filename="../topic_copy_tab.py" line="337" />
+            <location filename="../topic_copy_tab.py" line="264" />
+            <location filename="../topic_copy_tab.py" line="352" />
             <source>0 von 0 Nachrichten ausgewählt.</source>
             <translation>0 von 0 Nachrichten ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="251" />
+            <location filename="../topic_copy_tab.py" line="266" />
             <source>Noch keine Nachrichten geladen.</source>
             <translation>Noch keine Nachrichten geladen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="254" />
+            <location filename="../topic_copy_tab.py" line="269" />
             <source>Ohne Benachrichtigungen kopieren</source>
             <translation>Ohne Benachrichtigungen kopieren</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="257" />
+            <location filename="../topic_copy_tab.py" line="272" />
             <source>Die Nachrichten erscheinen vollständig im Ziel-Topic, lösen dort aber keine Pushmeldung und keinen Hinweiston für Mitglieder aus. Bei vielen Nachrichten sollte diese Option aktiviert bleiben.</source>
             <translation>Die Nachrichten erscheinen vollständig im Ziel-Topic, lösen dort aber keine Pushmeldung und keinen Hinweiston für Mitglieder aus. Bei vielen Nachrichten sollte diese Option aktiviert bleiben.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="262" />
-            <location filename="../topic_copy_tab.py" line="659" />
-            <location filename="../topic_copy_tab.py" line="684" />
-            <location filename="../topic_copy_tab.py" line="800" />
+            <location filename="../topic_copy_tab.py" line="277" />
+            <location filename="../topic_copy_tab.py" line="674" />
+            <location filename="../topic_copy_tab.py" line="699" />
+            <location filename="../topic_copy_tab.py" line="815" />
             <source>Auswahl kopieren</source>
             <translation>Auswahl kopieren</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="272" />
+            <location filename="../topic_copy_tab.py" line="287" />
             <source>0 bestätigt, 0 noch offen.</source>
             <translation>0 bestätigt, 0 noch offen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="275" />
+            <location filename="../topic_copy_tab.py" line="290" />
             <source>Bereit zum Kopieren.</source>
             <translation>Bereit zum Kopieren.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="289" />
+            <location filename="../topic_copy_tab.py" line="304" />
             <source>Fehler kopieren</source>
             <translation>Fehler kopieren</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="296" />
+            <location filename="../topic_copy_tab.py" line="311" />
             <source>2. Bereich neu prüfen und Nachrichten zum Löschen auswählen</source>
             <translation>2. Bereich neu prüfen und Nachrichten zum Löschen auswählen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="301" />
-            <location filename="../topic_copy_tab.py" line="497" />
+            <location filename="../topic_copy_tab.py" line="316" />
+            <location filename="../topic_copy_tab.py" line="512" />
             <source>Quell-Topic</source>
             <translation>Quell-Topic</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="302" />
-            <location filename="../topic_copy_tab.py" line="499" />
+            <location filename="../topic_copy_tab.py" line="317" />
+            <location filename="../topic_copy_tab.py" line="514" />
             <source>Ziel-Topic</source>
             <translation>Ziel-Topic</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="306" />
+            <location filename="../topic_copy_tab.py" line="321" />
             <source>Anzeigen und löschen in:</source>
             <translation>Anzeigen und löschen in:</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="309" />
+            <location filename="../topic_copy_tab.py" line="324" />
             <source>Falls Nachrichten in beiden Topics gelöscht werden sollen: zuerst in der Quelle löschen und danach im Ziel. Für eine sichere Löschung in der Quelle muss die Zielkopie noch vorhanden sein.</source>
             <translation>Falls Nachrichten in beiden Topics gelöscht werden sollen: zuerst in der Quelle löschen und danach im Ziel. Für eine sichere Löschung in der Quelle muss die Zielkopie noch vorhanden sein.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="316" />
+            <location filename="../topic_copy_tab.py" line="331" />
             <source>Ausgewählten Bereich neu laden und prüfen</source>
             <translation>Ausgewählten Bereich neu laden und prüfen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="319" />
+            <location filename="../topic_copy_tab.py" line="334" />
             <source>Lädt den gewählten Bereich erneut. In der Liste erscheinen nur Nachrichten aus dem ausgewählten Quell- oder Ziel-Topic.</source>
             <translation>Lädt den gewählten Bereich erneut. In der Liste erscheinen nur Nachrichten aus dem ausgewählten Quell- oder Ziel-Topic.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="330" />
+            <location filename="../topic_copy_tab.py" line="345" />
             <source>Bereit zum Prüfen.</source>
             <translation>Bereit zum Prüfen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="340" />
+            <location filename="../topic_copy_tab.py" line="355" />
             <source>Alle markieren</source>
             <translation>Alle markieren</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="342" />
+            <location filename="../topic_copy_tab.py" line="357" />
             <source>Keine markieren</source>
             <translation>Keine markieren</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="348" />
+            <location filename="../topic_copy_tab.py" line="363" />
             <source>Markierte Nachrichten löschen</source>
             <translation>Markierte Nachrichten löschen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="392" />
             <location filename="../topic_copy_tab.py" line="407" />
+            <location filename="../topic_copy_tab.py" line="422" />
             <source>Ungültiger Link</source>
             <translation>Ungültiger Link</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="397" />
+            <location filename="../topic_copy_tab.py" line="412" />
             <source>Nachrichten werden gelesen…</source>
             <translation>Nachrichten werden gelesen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="422" />
+            <location filename="../topic_copy_tab.py" line="437" />
             <source>Keine Nachrichten ausgewählt</source>
             <translation>Keine Nachrichten ausgewählt</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="423" />
+            <location filename="../topic_copy_tab.py" line="438" />
             <source>Bitte mindestens eine Nachricht zum Kopieren markieren.</source>
             <translation>Bitte mindestens eine Nachricht zum Kopieren markieren.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="428" />
+            <location filename="../topic_copy_tab.py" line="443" />
             <source>Unterbrochenen Lauf fortsetzen?</source>
             <translation>Unterbrochenen Lauf fortsetzen?</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="430" />
+            <location filename="../topic_copy_tab.py" line="445" />
             <source>Die aktuell sichtbare Auswahl ersetzt die frühere Auswahl. Bestätigte Kopien werden übersprungen und abgewählte Nachrichten nicht weiter kopiert. Fortsetzen?</source>
             <translation>Die aktuell sichtbare Auswahl ersetzt die frühere Auswahl. Bestätigte Kopien werden übersprungen und abgewählte Nachrichten nicht weiter kopiert. Fortsetzen?</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="443" />
+            <location filename="../topic_copy_tab.py" line="458" />
             <source>Fortsetzen nicht möglich</source>
             <translation>Fortsetzen nicht möglich</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="448" />
+            <location filename="../topic_copy_tab.py" line="463" />
             <source>Vorhandene Kopien werden abgeglichen…</source>
             <translation>Vorhandene Kopien werden abgeglichen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="451" />
+            <location filename="../topic_copy_tab.py" line="466" />
             <source>Auswahl kopieren?</source>
             <translation>Auswahl kopieren?</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="453" />
+            <location filename="../topic_copy_tab.py" line="468" />
             <source>Die ausgewählten Nachrichten werden weitergeleitet. Im Anschluss wird noch nichts gelöscht. Jetzt kopieren?</source>
             <translation>Die ausgewählten Nachrichten werden weitergeleitet. Im Anschluss wird noch nichts gelöscht. Jetzt kopieren?</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="462" />
+            <location filename="../topic_copy_tab.py" line="477" />
             <source>Nachrichten werden kopiert…</source>
             <translation>Nachrichten werden kopiert…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="469" />
+            <location filename="../topic_copy_tab.py" line="484" />
             <source>Zielkopien werden geprüft und Quellnachrichten neu geladen…</source>
             <translation>Zielkopien werden geprüft und Quellnachrichten neu geladen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="471" />
+            <location filename="../topic_copy_tab.py" line="486" />
             <source>Nachrichten im Ziel-Topic werden neu geladen…</source>
             <translation>Nachrichten im Ziel-Topic werden neu geladen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="484" />
+            <location filename="../topic_copy_tab.py" line="499" />
             <source>Keine Auswahl</source>
             <translation>Keine Auswahl</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="485" />
+            <location filename="../topic_copy_tab.py" line="500" />
             <source>Bitte mindestens eine nachgewiesene Nachricht markieren.</source>
             <translation>Bitte mindestens eine nachgewiesene Nachricht markieren.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="489" />
+            <location filename="../topic_copy_tab.py" line="504" />
             <source>Nachrichten endgültig löschen?</source>
             <translation>Nachrichten endgültig löschen?</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="491" />
+            <location filename="../topic_copy_tab.py" line="506" />
             <source>{count} markierte Nachrichten werden aus dem {location} gelöscht. Das Topic selbst bleibt bestehen. Dieser Schritt kann nicht rückgängig gemacht werden. Wirklich löschen?</source>
             <translation>{count} markierte Nachrichten werden aus dem {location} gelöscht. Das Topic selbst bleibt bestehen. Dieser Schritt kann nicht rückgängig gemacht werden. Wirklich löschen?</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="509" />
+            <location filename="../topic_copy_tab.py" line="524" />
             <source>Sicherheitsprüfung wird wiederholt…</source>
             <translation>Sicherheitsprüfung wird wiederholt…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="523" />
+            <location filename="../topic_copy_tab.py" line="538" />
             <source>Bots werden geladen…</source>
             <translation>Bots werden geladen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="525" />
+            <location filename="../topic_copy_tab.py" line="540" />
             <source>Anfragen werden geladen…</source>
             <translation>Anfragen werden geladen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="527" />
+            <location filename="../topic_copy_tab.py" line="542" />
             <source>Nachrichten werden geladen…</source>
             <translation>Nachrichten werden geladen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="537" />
+            <location filename="../topic_copy_tab.py" line="552" />
             <source>Nachrichten werden geprüft…</source>
             <translation>Nachrichten werden geprüft…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="565" />
+            <location filename="../topic_copy_tab.py" line="580" />
             <source>Kopieren abbrechen</source>
             <translation>Kopieren abbrechen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="596" />
+            <location filename="../topic_copy_tab.py" line="611" />
             <source>Abbruch angefordert…</source>
             <translation>Abbruch angefordert…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="598" />
+            <location filename="../topic_copy_tab.py" line="613" />
             <source>Abbruch angefordert… Der aktuelle Telegram-Block wird noch abgeschlossen.</source>
             <translation>Abbruch angefordert… Der aktuelle Telegram-Block wird noch abgeschlossen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="608" />
+            <location filename="../topic_copy_tab.py" line="623" />
             <source>App wird beendet…</source>
             <translation>App wird beendet…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="610" />
+            <location filename="../topic_copy_tab.py" line="625" />
             <source>App wird beendet… Die laufende Telegram-Anfrage wird noch kontrolliert abgeschlossen.</source>
             <translation>App wird beendet… Die laufende Telegram-Anfrage wird noch kontrolliert abgeschlossen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="626" />
+            <location filename="../topic_copy_tab.py" line="641" />
             <source>{done} Nachrichten gelesen…</source>
             <translation>{done} Nachrichten gelesen…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="632" />
+            <location filename="../topic_copy_tab.py" line="647" />
             <source>{done} bestätigt, {remaining} noch offen ({done} von {total}).</source>
             <translation>{done} bestätigt, {remaining} noch offen ({done} von {total}).</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="639" />
+            <location filename="../topic_copy_tab.py" line="654" />
             <source>{done} von {total} Nachrichten verarbeitet…</source>
             <translation>{done} von {total} Nachrichten verarbeitet…</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="674" />
+            <location filename="../topic_copy_tab.py" line="689" />
             <source>{count} Nachrichten kopiert. Nun im Ziel kontrollieren und danach Schritt 2 starten.</source>
             <translation>{count} Nachrichten kopiert. Nun im Ziel kontrollieren und danach Schritt 2 starten.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="678" />
+            <location filename="../topic_copy_tab.py" line="693" />
             <source>Kopieren abgeschlossen</source>
             <translation>Kopieren abgeschlossen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="688" />
+            <location filename="../topic_copy_tab.py" line="703" />
             <source>Fortsetzung abgeschlossen: {confirmed} Nachrichten sind bestätigt, {uncopyable} nicht unterstützte Mediennachricht(en) wurden nicht ins Ziel kopiert. Die App hat keine Quellnachrichten gelöscht.</source>
             <translation>Fortsetzung abgeschlossen: {confirmed} Nachrichten sind bestätigt, {uncopyable} nicht unterstützte Mediennachricht(en) wurden nicht ins Ziel kopiert. Die App hat keine Quellnachrichten gelöscht.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="698" />
+            <location filename="../topic_copy_tab.py" line="713" />
             <source>Fortsetzung abgeschlossen: alle {total} Nachrichten sind bestätigt.</source>
             <translation>Fortsetzung abgeschlossen: alle {total} Nachrichten sind bestätigt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="703" />
+            <location filename="../topic_copy_tab.py" line="718" />
             <source>Fortsetzung beendet: {done} von {total} bestätigt, {remaining} noch offen.</source>
             <translation>Fortsetzung beendet: {done} von {total} bestätigt, {remaining} noch offen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="710" />
+            <location filename="../topic_copy_tab.py" line="725" />
             <source>Fortsetzung</source>
             <translation>Fortsetzung</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="716" />
+            <location filename="../topic_copy_tab.py" line="731" />
             <source>{count} Nachrichten gelöscht.</source>
             <translation>{count} Nachrichten gelöscht.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="718" />
+            <location filename="../topic_copy_tab.py" line="733" />
             <source>Löschen abgeschlossen</source>
             <translation>Löschen abgeschlossen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="736" />
+            <location filename="../topic_copy_tab.py" line="751" />
             <source>{bot}: {requests} Anfrage(n), {responses} Antwort(en)</source>
             <translation>{bot}: {requests} Anfrage(n), {responses} Antwort(en)</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="746" />
+            <location filename="../topic_copy_tab.py" line="761" />
             <source>Keine Bots gefunden.</source>
             <translation>Keine Bots gefunden.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="764" />
+            <location filename="../topic_copy_tab.py" line="779" />
             <source>Keine unklaren /-Anfragen gefunden.</source>
             <translation>Keine unklaren /-Anfragen gefunden.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="767" />
+            <location filename="../topic_copy_tab.py" line="782" />
             <source>[Mediennachricht]</source>
             <translation>[Mediennachricht]</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="771" />
-            <location filename="../topic_copy_tab.py" line="932" />
-            <location filename="../topic_copy_tab.py" line="942" />
+            <location filename="../topic_copy_tab.py" line="786" />
+            <location filename="../topic_copy_tab.py" line="947" />
+            <location filename="../topic_copy_tab.py" line="957" />
             <source>[Original: {original} | Kopiert: {copied}]</source>
             <translation>[Original: {original} | Kopiert: {copied}]</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="791" />
+            <location filename="../topic_copy_tab.py" line="806" />
             <source>{messages} Nachrichten, {bots} Bot(s), {unclear} nicht eindeutig zugeordnete /-Anfrage(n). Unklare Anfragen bleiben normale Nachrichten.</source>
             <translation>{messages} Nachrichten, {bots} Bot(s), {unclear} nicht eindeutig zugeordnete /-Anfrage(n). Unklare Anfragen bleiben normale Nachrichten.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="798" />
-            <location filename="../topic_copy_tab.py" line="1003" />
+            <location filename="../topic_copy_tab.py" line="813" />
+            <location filename="../topic_copy_tab.py" line="1018" />
             <source>Aktuelle Auswahl sicher fortsetzen</source>
             <translation>Aktuelle Auswahl sicher fortsetzen</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="806" />
+            <location filename="../topic_copy_tab.py" line="821" />
             <source>{count} Nachrichten und Bots geladen.</source>
             <translation>{count} Nachrichten und Bots geladen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="847" />
+            <location filename="../topic_copy_tab.py" line="862" />
             <source>{selected} von {total} Bots ausgewählt.</source>
             <translation>{selected} von {total} Bots ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="885" />
+            <location filename="../topic_copy_tab.py" line="900" />
             <source>{selected} von {total} unklaren Anfragen ausgewählt.</source>
             <translation>{selected} von {total} unklaren Anfragen ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="916" />
-            <location filename="../topic_copy_tab.py" line="994" />
+            <location filename="../topic_copy_tab.py" line="931" />
+            <location filename="../topic_copy_tab.py" line="1009" />
             <source>{selected} von {total} Nachrichten ausgewählt.</source>
             <translation>{selected} von {total} Nachrichten ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="919" />
+            <location filename="../topic_copy_tab.py" line="934" />
             <source>{selected} von {total} Nachrichten zum Kopieren ausgewählt.</source>
             <translation>{selected} von {total} Nachrichten zum Kopieren ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="946" />
+            <location filename="../topic_copy_tab.py" line="961" />
             <source>[MÖGLICHE DOPPELKOPIE] {details}</source>
             <translation>[MÖGLICHE DOPPELKOPIE] {details}</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="960" />
+            <location filename="../topic_copy_tab.py" line="975" />
             <source>{count} Zielkopien nachgewiesen. Angezeigt werden nur die zugehörigen Quellnachrichten; bitte die zu löschenden neu auswählen.</source>
             <translation>{count} Zielkopien nachgewiesen. Angezeigt werden nur die zugehörigen Quellnachrichten; bitte die zu löschenden neu auswählen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="965" />
+            <location filename="../topic_copy_tab.py" line="980" />
             <source>{count} Nachrichten im Ziel-Topic nachgewiesen; bitte die dort zu löschenden Nachrichten neu auswählen.</source>
             <translation>{count} Nachrichten im Ziel-Topic nachgewiesen; bitte die dort zu löschenden Nachrichten neu auswählen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="978" />
+            <location filename="../topic_copy_tab.py" line="993" />
             <source>Ansicht geändert. Bitte die Nachrichten für diesen Bereich neu laden.</source>
             <translation>Ansicht geändert. Bitte die Nachrichten für diesen Bereich neu laden.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="1009" />
+            <location filename="../topic_copy_tab.py" line="1024" />
             <source>Telegram ist momentan ausgelastet. Das Kopieren wurde sicher angehalten; nur von Telegram bestätigte Kopien stehen im Fortschritt. Bitte später über denselben Kopierknopf fortsetzen.</source>
             <translation>Telegram ist momentan ausgelastet. Das Kopieren wurde sicher angehalten; nur von Telegram bestätigte Kopien stehen im Fortschritt. Bitte später über denselben Kopierknopf fortsetzen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="1013" />
+            <location filename="../topic_copy_tab.py" line="1028" />
             <source>Fehler: {message}</source>
             <translation>Fehler: {message}</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="1027" />
-            <location filename="../topic_copy_tab.py" line="1029" />
-            <location filename="../topic_copy_tab.py" line="1031" />
+            <location filename="../topic_copy_tab.py" line="1042" />
+            <location filename="../topic_copy_tab.py" line="1044" />
+            <location filename="../topic_copy_tab.py" line="1046" />
             <source>Laden fehlgeschlagen.</source>
             <translation>Laden fehlgeschlagen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="1037" />
+            <location filename="../topic_copy_tab.py" line="1052" />
             <source>Prüfung fehlgeschlagen.</source>
             <translation>Prüfung fehlgeschlagen.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="1040" />
+            <location filename="../topic_copy_tab.py" line="1055" />
             <source>{message}
 
 Details wurden in data/tme.log gespeichert.</source>
@@ -2108,7 +2166,7 @@ Details wurden in data/tme.log gespeichert.</source>
 Details wurden in data/tme.log gespeichert.</translation>
         </message>
         <message>
-            <location filename="../topic_copy_tab.py" line="1048" />
+            <location filename="../topic_copy_tab.py" line="1063" />
             <source>Fehler</source>
             <translation>Fehler</translation>
         </message>
@@ -2116,186 +2174,191 @@ Details wurden in data/tme.log gespeichert.</translation>
     <context>
         <name>TopicRollbackTab</name>
         <message>
-            <location filename="../topic_rollback_tab.py" line="110" />
+            <location filename="../topic_rollback_tab.py" line="113" />
+            <source>Experimentell: Diese Funktion ist noch nicht vollständig getestet und kann Nachrichten löschen. Bitte zuerst mit einem Test-Topic ausprobieren.</source>
+            <translation>Experimentell: Diese Funktion ist noch nicht vollständig getestet und kann Nachrichten löschen. Bitte zuerst mit einem Test-Topic ausprobieren.</translation>
+        </message>
+        <message>
+            <location filename="../topic_rollback_tab.py" line="125" />
             <source>Dieser Tab entfernt ausschließlich einzeln protokollierte Kopien aus dem Ziel-Topic. Zwischenzeitlich normal geschriebene Nachrichten und das Topic selbst bleiben unangetastet.</source>
             <translation>Dieser Tab entfernt ausschließlich einzeln protokollierte Kopien aus dem Ziel-Topic. Zwischenzeitlich normal geschriebene Nachrichten und das Topic selbst bleiben unangetastet.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="120" />
+            <location filename="../topic_rollback_tab.py" line="135" />
             <source>Zielkopien prüfen und rückgängig machen</source>
             <translation>Zielkopien prüfen und rückgängig machen</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="125" />
+            <location filename="../topic_rollback_tab.py" line="140" />
             <source>Vollständige Abschlussprüfung starten</source>
             <translation>Vollständige Abschlussprüfung starten</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="134" />
-            <location filename="../topic_rollback_tab.py" line="319" />
+            <location filename="../topic_rollback_tab.py" line="149" />
+            <location filename="../topic_rollback_tab.py" line="334" />
             <source>Prüfung abbrechen</source>
             <translation>Prüfung abbrechen</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="142" />
+            <location filename="../topic_rollback_tab.py" line="157" />
             <source>0 verarbeitet.</source>
             <translation>0 verarbeitet.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="144" />
+            <location filename="../topic_rollback_tab.py" line="159" />
             <source>Noch keine Abschlussprüfung ausgeführt.</source>
             <translation>Noch keine Abschlussprüfung ausgeführt.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="148" />
+            <location filename="../topic_rollback_tab.py" line="163" />
             <source>Bot-Anfragen und -Antworten gemeinsam auswählen</source>
             <translation>Bot-Anfragen und -Antworten gemeinsam auswählen</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="165" />
-            <location filename="../topic_rollback_tab.py" line="448" />
+            <location filename="../topic_rollback_tab.py" line="180" />
+            <location filename="../topic_rollback_tab.py" line="463" />
             <source>Sicher kopiert</source>
             <translation>Sicher kopiert</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="166" />
-            <location filename="../topic_rollback_tab.py" line="449" />
+            <location filename="../topic_rollback_tab.py" line="181" />
+            <location filename="../topic_rollback_tab.py" line="464" />
             <source>Manuell prüfen</source>
             <translation>Manuell prüfen</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="167" />
-            <location filename="../topic_rollback_tab.py" line="450" />
+            <location filename="../topic_rollback_tab.py" line="182" />
+            <location filename="../topic_rollback_tab.py" line="465" />
             <source>Fehlend</source>
             <translation>Fehlend</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="168" />
-            <location filename="../topic_rollback_tab.py" line="451" />
+            <location filename="../topic_rollback_tab.py" line="183" />
+            <location filename="../topic_rollback_tab.py" line="466" />
             <source>Falsches Topic</source>
             <translation>Falsches Topic</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="169" />
-            <location filename="../topic_rollback_tab.py" line="452" />
+            <location filename="../topic_rollback_tab.py" line="184" />
+            <location filename="../topic_rollback_tab.py" line="467" />
             <source>Nicht kopierbar</source>
             <translation>Nicht kopierbar</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="170" />
-            <location filename="../topic_rollback_tab.py" line="453" />
+            <location filename="../topic_rollback_tab.py" line="185" />
+            <location filename="../topic_rollback_tab.py" line="468" />
             <source>Bereits entfernt</source>
             <translation>Bereits entfernt</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="174" />
+            <location filename="../topic_rollback_tab.py" line="189" />
             <source>Alle sicheren markieren</source>
             <translation>Alle sicheren markieren</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="175" />
+            <location filename="../topic_rollback_tab.py" line="190" />
             <source>Auswahl aufheben</source>
             <translation>Auswahl aufheben</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="182" />
+            <location filename="../topic_rollback_tab.py" line="197" />
             <source>0 Zielnachrichten ausgewählt.</source>
             <translation>0 Zielnachrichten ausgewählt.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="184" />
+            <location filename="../topic_rollback_tab.py" line="199" />
             <source>Ausgewählte Zielkopien entfernen</source>
             <translation>Ausgewählte Zielkopien entfernen</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="209" />
+            <location filename="../topic_rollback_tab.py" line="224" />
             <source>Kein abgeschlossener Kopierlauf gefunden.</source>
             <translation>Kein abgeschlossener Kopierlauf gefunden.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="212" />
+            <location filename="../topic_rollback_tab.py" line="227" />
             <source>Kopierprotokoll: {name}</source>
             <translation>Kopierprotokoll: {name}</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="219" />
+            <location filename="../topic_rollback_tab.py" line="234" />
             <source>Unterbrochenes Entfernen sicher fortsetzen ({count} offen)</source>
             <translation>Unterbrochenes Entfernen sicher fortsetzen ({count} offen)</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="228" />
-            <location filename="../topic_rollback_tab.py" line="331" />
-            <location filename="../topic_rollback_tab.py" line="359" />
+            <location filename="../topic_rollback_tab.py" line="243" />
+            <location filename="../topic_rollback_tab.py" line="346" />
+            <location filename="../topic_rollback_tab.py" line="374" />
             <source>{done} von {total} entfernt, {remaining} noch offen.</source>
             <translation>{done} von {total} entfernt, {remaining} noch offen.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="261" />
+            <location filename="../topic_rollback_tab.py" line="276" />
             <source>Entfernen fortsetzen?</source>
             <translation>Entfernen fortsetzen?</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="263" />
+            <location filename="../topic_rollback_tab.py" line="278" />
             <source>{count} bereits ausgewählte Zielkopien sind noch offen. Jeder Block wird vor dem Löschen erneut geprüft. Fortsetzen?</source>
             <translation>{count} bereits ausgewählte Zielkopien sind noch offen. Jeder Block wird vor dem Löschen erneut geprüft. Fortsetzen?</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="287" />
+            <location filename="../topic_rollback_tab.py" line="302" />
             <source>Zielkopien endgültig entfernen?</source>
             <translation>Zielkopien endgültig entfernen?</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="289" />
+            <location filename="../topic_rollback_tab.py" line="304" />
             <source>{count} einzeln nachgewiesene Zielnachrichten werden gelöscht. Normale Nachrichten und das Topic bleiben erhalten. Dieser Schritt kann nicht rückgängig gemacht werden. Fortfahren?</source>
             <translation>{count} einzeln nachgewiesene Zielnachrichten werden gelöscht. Normale Nachrichten und das Topic bleiben erhalten. Dieser Schritt kann nicht rückgängig gemacht werden. Fortfahren?</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="318" />
+            <location filename="../topic_rollback_tab.py" line="333" />
             <source>Löschen abbrechen</source>
             <translation>Löschen abbrechen</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="339" />
+            <location filename="../topic_rollback_tab.py" line="354" />
             <source>Abschlussprüfung wird gestartet…</source>
             <translation>Abschlussprüfung wird gestartet…</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="341" />
+            <location filename="../topic_rollback_tab.py" line="356" />
             <source>Zielkopien werden vollständig geprüft…</source>
             <translation>Zielkopien werden vollständig geprüft…</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="342" />
+            <location filename="../topic_rollback_tab.py" line="357" />
             <source>Rückgängig-Lauf wird vorbereitet…</source>
             <translation>Rückgängig-Lauf wird vorbereitet…</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="350" />
+            <location filename="../topic_rollback_tab.py" line="365" />
             <source>Abbruch angefordert…</source>
             <translation>Abbruch angefordert…</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="369" />
+            <location filename="../topic_rollback_tab.py" line="384" />
             <source>{done} von {total} Zielnachrichten geprüft.</source>
             <translation>{done} von {total} Zielnachrichten geprüft.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="377" />
+            <location filename="../topic_rollback_tab.py" line="392" />
             <source>{count} Zielkopien wurden nachweislich entfernt. Bitte die Abschlussprüfung erneut starten.</source>
             <translation>{count} Zielkopien wurden nachweislich entfernt. Bitte die Abschlussprüfung erneut starten.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="386" />
+            <location filename="../topic_rollback_tab.py" line="401" />
             <source>Fehler: {message}</source>
             <translation>Fehler: {message}</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="388" />
+            <location filename="../topic_rollback_tab.py" line="403" />
             <source>Rückgängig-Fehler</source>
             <translation>Rückgängig-Fehler</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="389" />
+            <location filename="../topic_rollback_tab.py" line="404" />
             <source>{message}
 
 Details wurden in data/tme.log gespeichert.</source>
@@ -2304,22 +2367,22 @@ Details wurden in data/tme.log gespeichert.</source>
 Details wurden in data/tme.log gespeichert.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="458" />
+            <location filename="../topic_rollback_tab.py" line="473" />
             <source>Abschlussprüfung: {safe} sicher, {ambiguous} manuell zu prüfen, {missing} fehlend, {wrong} falsches Topic, {uncopyable} nicht kopierbar, {deleted} bereits entfernt.</source>
             <translation>Abschlussprüfung: {safe} sicher, {ambiguous} manuell zu prüfen, {missing} fehlend, {wrong} falsches Topic, {uncopyable} nicht kopierbar, {deleted} bereits entfernt.</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="468" />
+            <location filename="../topic_rollback_tab.py" line="483" />
             <source>[Mediennachricht]</source>
             <translation>[Mediennachricht]</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="469" />
+            <location filename="../topic_rollback_tab.py" line="484" />
             <source>[Original: {original} | Kopiert: {copied}]</source>
             <translation>[Original: {original} | Kopiert: {copied}]</translation>
         </message>
         <message>
-            <location filename="../topic_rollback_tab.py" line="545" />
+            <location filename="../topic_rollback_tab.py" line="560" />
             <source>{count} Zielnachrichten ausgewählt.</source>
             <translation>{count} Zielnachrichten ausgewählt.</translation>
         </message>

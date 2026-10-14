@@ -22,6 +22,7 @@ from pipeline.topic_copy import (
 )
 from pipeline.logging_setup import get_logger
 from ui.message_boxes import show_copyable_error
+from ui.live_i18n import LiveRetranslateMixin
 
 LOCAL_TIMEZONE = ZoneInfo("Europe/Zurich")
 logger = get_logger(__name__)
@@ -136,7 +137,7 @@ class TopicWorker(QObject):
             self.error.emit(str(exc))
 
 
-class TopicCopyTab(QWidget):
+class TopicCopyTab(LiveRetranslateMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.preview: TopicPreview | None = None
@@ -160,6 +161,20 @@ class TopicCopyTab(QWidget):
         layout = QVBoxLayout(body)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        # Experimentell-Kennzeichnung (siehe MainWindow._apply_topic_tools_enabled):
+        # die Topic-Funktionen sind standardmaessig deaktiviert und muessen unter
+        # Einstellungen bewusst eingeschaltet werden.
+        experimental = QLabel(self.tr(
+            "Experimentell: Diese Funktion ist noch nicht vollständig getestet "
+            "und kann Nachrichten löschen. Bitte zuerst mit einem Test-Topic "
+            "ausprobieren."
+        ))
+        experimental.setWordWrap(True)
+        experimental.setStyleSheet(
+            "color: #7a4f00; background: #fff4d6; border: 1px solid #e0b450; "
+            "border-radius: 4px; padding: 8px;"
+        )
+        layout.addWidget(experimental)
         info = QLabel(self.tr(
             "Hier werden ausgewählte Nachrichten kopiert. Die abschließende "
             "Prüfung und ein mögliches Rückgängigmachen erfolgen im eigenen "

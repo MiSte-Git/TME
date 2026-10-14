@@ -20,6 +20,7 @@ from pipeline.topic_copy import (
     rollback_target_messages,
 )
 from ui.message_boxes import show_copyable_error
+from ui.live_i18n import LiveRetranslateMixin
 
 logger = get_logger(__name__)
 LOCAL_TIMEZONE = ZoneInfo("Europe/Zurich")
@@ -83,7 +84,7 @@ class RollbackWorker(QObject):
             self.error.emit(str(exc))
 
 
-class TopicRollbackTab(QWidget):
+class TopicRollbackTab(LiveRetranslateMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.run_file = latest_complete_run()
@@ -105,6 +106,20 @@ class TopicRollbackTab(QWidget):
         layout = QVBoxLayout(body)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        # Experimentell-Kennzeichnung (siehe MainWindow._apply_topic_tools_enabled):
+        # die Topic-Funktionen sind standardmaessig deaktiviert und muessen unter
+        # Einstellungen bewusst eingeschaltet werden.
+        experimental = QLabel(self.tr(
+            "Experimentell: Diese Funktion ist noch nicht vollständig getestet "
+            "und kann Nachrichten löschen. Bitte zuerst mit einem Test-Topic "
+            "ausprobieren."
+        ))
+        experimental.setWordWrap(True)
+        experimental.setStyleSheet(
+            "color: #7a4f00; background: #fff4d6; border: 1px solid #e0b450; "
+            "border-radius: 4px; padding: 8px;"
+        )
+        layout.addWidget(experimental)
 
         info = QLabel(self.tr(
             "Dieser Tab entfernt ausschließlich einzeln protokollierte Kopien "
